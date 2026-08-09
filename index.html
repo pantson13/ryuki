@@ -14,7 +14,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="./style.css?v=12" />
+    <link rel="stylesheet" href="./style.css?v=13" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -150,6 +150,14 @@
             </span>
           </label>
           <label>
+            高度（%）
+            <span class="stepper">
+              <button type="button" data-bg3-height-step="-1">−</button>
+              <input id="bg3Height" type="number" inputmode="numeric" min="20" max="300" step="1" value="100" />
+              <button type="button" data-bg3-height-step="1">＋</button>
+            </span>
+          </label>
+          <label>
             显现时长（秒）
             <span class="stepper">
               <button type="button" data-bg3-duration-step="-0.1">−</button>
@@ -157,7 +165,7 @@
               <button type="button" data-bg3-duration-step="0.1">＋</button>
             </span>
           </label>
-          <p class="fieldset-tip">bg3 位于腰带后方；Y 正数向下。显现采用匀速从上向下展开。</p>
+          <p class="fieldset-tip">宽度和高度可分别调整；X、Y 用来对准腰带接缝。bg3 位于腰带后方，Y 正数向下。</p>
         </fieldset>
 
         <fieldset>
@@ -204,6 +212,6 @@
       </section>
     </main>
 
-    <script src="./script.js?v=12"></script>
+    <script src="./script.js?v=13"></script>
   </body>
 </html>

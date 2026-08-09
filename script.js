@@ -13,6 +13,7 @@ const moveDurationInput = document.querySelector("#moveDuration");
 const bg3XInput = document.querySelector("#bg3X");
 const bg3YInput = document.querySelector("#bg3Y");
 const bg3WidthInput = document.querySelector("#bg3Width");
+const bg3HeightInput = document.querySelector("#bg3Height");
 const bg3DurationInput = document.querySelector("#bg3Duration");
 const waterNoise = document.querySelector("#waterNoise");
 const waterDisplacement = document.querySelector("#waterDisplacement");
@@ -24,7 +25,7 @@ const SOURCE_BELT_WIDTH = 1115;
 const DEFAULT_OFFSETS = { up: { x: -20, y: 0 }, down: { x: -25, y: 0 } };
 const DEFAULT_SEQUENCE_DURATION = 5;
 const DEFAULT_MOVE = { x: 0, y: -500, duration: 1.2 };
-const DEFAULT_BG3 = { x: 0, y: 160, width: 104, duration: 1.5 };
+const DEFAULT_BG3 = { x: 0, y: 160, width: 104, height: 100, duration: 1.5 };
 const WATER_PHASE_RATIO = 0.2;
 const MOVE_START_RATIO = 0.74;
 const BACKGROUND_FADE_DURATION = 0.55;
@@ -100,11 +101,15 @@ function loadBg3() {
     const x = Number(saved?.x);
     const y = Number(saved?.y);
     const width = Number(saved?.width);
+    const height = Number(saved?.height);
     const duration = Number(saved?.duration);
     if (Number.isFinite(x)) defaults.x = Math.round(x);
     if (Number.isFinite(y)) defaults.y = Math.round(y);
     if (Number.isFinite(width) && width >= 20 && width <= 200) {
       defaults.width = Math.round(width);
+    }
+    if (Number.isFinite(height) && height >= 20 && height <= 300) {
+      defaults.height = Math.round(height);
     }
     if (Number.isFinite(duration) && duration >= 0.2 && duration <= 10) {
       defaults.duration = Math.round(duration * 10) / 10;
@@ -140,6 +145,7 @@ function applyOffsets() {
   scene.style.setProperty("--bg3-x", `${bg3.x * scale}px`);
   scene.style.setProperty("--bg3-y", `${bg3.y * scale}px`);
   scene.style.setProperty("--bg3-width", `${bg3.width}%`);
+  scene.style.setProperty("--bg3-height-scale", String(bg3.height / 100));
   scene.style.setProperty("--bg3-duration", `${bg3.duration}s`);
   sequenceDurationInput.value = sequenceDuration;
   moveXInput.value = move.x;
@@ -148,6 +154,7 @@ function applyOffsets() {
   bg3XInput.value = bg3.x;
   bg3YInput.value = bg3.y;
   bg3WidthInput.value = bg3.width;
+  bg3HeightInput.value = bg3.height;
   bg3DurationInput.value = bg3.duration;
 }
 
@@ -218,6 +225,15 @@ function setBg3Width(value) {
   if (!Number.isFinite(nextValue)) return;
 
   bg3.width = Math.min(200, Math.max(20, Math.round(nextValue)));
+  applyOffsets();
+  saveBg3();
+}
+
+function setBg3Height(value) {
+  const nextValue = Number(value);
+  if (!Number.isFinite(nextValue)) return;
+
+  bg3.height = Math.min(300, Math.max(20, Math.round(nextValue)));
   applyOffsets();
   saveBg3();
 }
@@ -385,6 +401,16 @@ bg3WidthInput.addEventListener("input", (event) => {
 document.querySelectorAll("[data-bg3-width-step]").forEach((button) => {
   button.addEventListener("click", () => {
     setBg3Width(bg3.width + Number(button.dataset.bg3WidthStep));
+  });
+});
+
+bg3HeightInput.addEventListener("input", (event) => {
+  setBg3Height(event.currentTarget.value);
+});
+
+document.querySelectorAll("[data-bg3-height-step]").forEach((button) => {
+  button.addEventListener("click", () => {
+    setBg3Height(bg3.height + Number(button.dataset.bg3HeightStep));
   });
 });
 

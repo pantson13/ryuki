@@ -31,6 +31,7 @@ body {
   --bg3-x: 0px;
   --bg3-y: 160px;
   --bg3-width: 104%;
+  --bg3-height-scale: 1;
   --bg3-duration: 1.5s;
   position: relative;
   width: 100%;
@@ -90,7 +91,8 @@ body {
   width: var(--bg3-width);
   opacity: 0;
   clip-path: inset(0 0 100% 0);
-  transform: translateX(-50%);
+  transform: translateX(-50%) scaleY(var(--bg3-height-scale));
+  transform-origin: 50% 0;
   will-change: clip-path, opacity;
 }
 
