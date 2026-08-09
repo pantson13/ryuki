@@ -26,11 +26,12 @@ body {
 }
 
 .scene {
+  --belt-width: 1115px;
   --final-x: 0px;
   --final-y: -500px;
   --bg3-x: 0px;
-  --bg3-y: 160px;
-  --bg3-width: 104%;
+  --bg3-y: -320px;
+  --bg3-width: 99%;
   --bg3-height-scale: 1;
   --bg3-duration: 1.5s;
   position: relative;
@@ -78,7 +79,7 @@ body {
   z-index: 2;
   top: 50%;
   left: 50%;
-  width: min(94vw, 1115px);
+  width: var(--belt-width);
   height: 0;
   transform: translate(-50%, -50%) translate3d(var(--final-x), var(--final-y), 0);
   pointer-events: none;
@@ -139,7 +140,7 @@ body {
   --move-duration: 1.2s;
   position: relative;
   display: block;
-  width: min(94vw, 1115px);
+  width: var(--belt-width);
   margin: 0;
   padding: 0;
   border: 0;

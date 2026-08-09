@@ -1,10 +1,10 @@
-const CACHE_NAME = "ryuki-pwa-v14";
+const CACHE_NAME = "ryuki-pwa-v15";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=13",
-  "./script.js?v=13",
+  "./style.css?v=15",
+  "./script.js?v=15",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

@@ -21,12 +21,14 @@ const OFFSET_STORAGE_KEY = "ryuki_layer_offsets_v2";
 const SPEED_STORAGE_KEY = "ryuki_sequence_duration_v1";
 const MOVE_STORAGE_KEY = "ryuki_final_position_v1";
 const BG3_STORAGE_KEY = "ryuki_bg3_settings_v1";
-const BG3_Y_MIGRATION_KEY = "ryuki_bg3_y_migration_v14";
+const BG3_LAYOUT_MIGRATION_KEY = "ryuki_bg3_layout_migration_v15";
+const SOURCE_SCENE_WIDTH = 1179;
+const SOURCE_SCENE_HEIGHT = 2556;
 const SOURCE_BELT_WIDTH = 1115;
 const DEFAULT_OFFSETS = { up: { x: -20, y: 0 }, down: { x: -25, y: 0 } };
 const DEFAULT_SEQUENCE_DURATION = 5;
 const DEFAULT_MOVE = { x: 0, y: -500, duration: 1.2 };
-const DEFAULT_BG3 = { x: 0, y: -320, width: 104, height: 100, duration: 1.5 };
+const DEFAULT_BG3 = { x: 0, y: -320, width: 99, height: 100, duration: 1.5 };
 const WATER_PHASE_RATIO = 0.2;
 const MOVE_START_RATIO = 0.74;
 const BACKGROUND_FADE_DURATION = 0.55;
@@ -117,9 +119,12 @@ function loadBg3() {
       defaults.duration = Math.round(duration * 10) / 10;
     }
 
-    if (localStorage.getItem(BG3_Y_MIGRATION_KEY) !== "done") {
+    if (localStorage.getItem(BG3_LAYOUT_MIGRATION_KEY) !== "done") {
+      defaults.x = DEFAULT_BG3.x;
       defaults.y = DEFAULT_BG3.y;
-      localStorage.setItem(BG3_Y_MIGRATION_KEY, "done");
+      defaults.width = DEFAULT_BG3.width;
+      defaults.height = DEFAULT_BG3.height;
+      localStorage.setItem(BG3_LAYOUT_MIGRATION_KEY, "done");
     }
   } catch {
     // 无有效记录时使用默认值。
@@ -129,7 +134,14 @@ function loadBg3() {
 }
 
 function applyOffsets() {
-  const scale = belt.clientWidth / SOURCE_BELT_WIDTH;
+  // 背景使用 object-fit: cover；所有前景层必须使用完全相同的 cover 缩放比。
+  // 这样 Safari 地址栏、安全区或不同屏幕比例只会改变统一画布的裁切，
+  // 不会让腰带和 bg3 分别按不同基准缩放而错位。
+  const scale = Math.max(
+    scene.clientWidth / SOURCE_SCENE_WIDTH,
+    scene.clientHeight / SOURCE_SCENE_HEIGHT,
+  );
+  scene.style.setProperty("--belt-width", `${SOURCE_BELT_WIDTH * scale}px`);
 
   belt.style.setProperty("--up-x", `${offsets.up.x * scale}px`);
   belt.style.setProperty("--up-y", `${offsets.up.y * scale}px`);
@@ -447,6 +459,7 @@ resetAdjustments.addEventListener("click", () => {
 });
 
 window.addEventListener("resize", applyOffsets);
+window.visualViewport?.addEventListener("resize", applyOffsets);
 applyOffsets();
 
 if ("serviceWorker" in navigator) {
