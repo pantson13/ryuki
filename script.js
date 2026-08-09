@@ -21,11 +21,12 @@ const OFFSET_STORAGE_KEY = "ryuki_layer_offsets_v2";
 const SPEED_STORAGE_KEY = "ryuki_sequence_duration_v1";
 const MOVE_STORAGE_KEY = "ryuki_final_position_v1";
 const BG3_STORAGE_KEY = "ryuki_bg3_settings_v1";
+const BG3_Y_MIGRATION_KEY = "ryuki_bg3_y_migration_v14";
 const SOURCE_BELT_WIDTH = 1115;
 const DEFAULT_OFFSETS = { up: { x: -20, y: 0 }, down: { x: -25, y: 0 } };
 const DEFAULT_SEQUENCE_DURATION = 5;
 const DEFAULT_MOVE = { x: 0, y: -500, duration: 1.2 };
-const DEFAULT_BG3 = { x: 0, y: 160, width: 104, height: 100, duration: 1.5 };
+const DEFAULT_BG3 = { x: 0, y: -320, width: 104, height: 100, duration: 1.5 };
 const WATER_PHASE_RATIO = 0.2;
 const MOVE_START_RATIO = 0.74;
 const BACKGROUND_FADE_DURATION = 0.55;
@@ -86,6 +87,7 @@ function loadMove() {
     if (Number.isFinite(duration) && duration >= 0.2 && duration <= 10) {
       defaults.duration = Math.round(duration * 10) / 10;
     }
+
   } catch {
     // 无有效记录时使用默认值。
   }
@@ -113,6 +115,11 @@ function loadBg3() {
     }
     if (Number.isFinite(duration) && duration >= 0.2 && duration <= 10) {
       defaults.duration = Math.round(duration * 10) / 10;
+    }
+
+    if (localStorage.getItem(BG3_Y_MIGRATION_KEY) !== "done") {
+      defaults.y = DEFAULT_BG3.y;
+      localStorage.setItem(BG3_Y_MIGRATION_KEY, "done");
     }
   } catch {
     // 无有效记录时使用默认值。
