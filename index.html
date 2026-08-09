@@ -14,7 +14,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="./style.css?v=16" />
+    <link rel="stylesheet" href="./style.css?v=18" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -58,19 +58,28 @@
       </div>
 
       <div class="belt-position">
-        <button class="belt" id="belt" type="button" aria-label="重新播放腰带进场动画">
+        <div class="belt" id="belt" role="button" tabindex="0" aria-label="重新播放腰带进场动画">
           <span class="belt-effect" id="beltEffect">
             <span class="belt-art" id="beltArt">
               <img class="belt-base" src="./assets/images/ydbg.png" alt="" />
+
+              <button class="card-box" id="cardBox" type="button" aria-label="将卡盒插入腰带">
+                <img class="card-layer card-bottom" src="./assets/images/khdc.png" alt="" />
+                <img class="card-layer card-middle" src="./assets/images/kpc.png" alt="" />
+                <img class="card-layer card-glow" src="./assets/images/khfg.png" alt="" />
+                <img class="card-layer card-cover" src="./assets/images/khzd.png" alt="" />
+              </button>
+
               <img class="belt-layer belt-layer-up" src="./assets/images/ydup.png" alt="" />
               <img class="belt-layer belt-layer-down" src="./assets/images/yddown.png" alt="" />
+              <img class="belt-glow" src="./assets/images/ydfg.png" alt="" />
             </span>
           </span>
-        </button>
+        </div>
       </div>
 
     </main>
 
-    <script src="./script.js?v=16"></script>
+    <script src="./script.js?v=18"></script>
   </body>
 </html>

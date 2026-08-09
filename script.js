@@ -7,7 +7,7 @@ const ANIMATION_CONFIG = {
   sequenceDuration: 5,
   move: {
     x: 0,
-    y: -500,
+    y: -950,
     duration: 1.2,
   },
   bg3: {
@@ -21,6 +21,12 @@ const ANIMATION_CONFIG = {
     up: { x: -20, y: 0 },
     down: { x: -25, y: 0 },
   },
+  card: {
+    start: { x: 0, y: 1700 },
+    insert: { x: 0, y: 0 },
+    width: 485,
+    duration: 1.25,
+  },
 };
 
 const PHONE_VIEWPORT = { width: 440, height: 956 };
@@ -28,10 +34,11 @@ const SOURCE_SCENE = { width: 1179, height: 2556 };
 const SOURCE_BELT_WIDTH = 1115;
 const WATER_PHASE_RATIO = 0.2;
 const MOVE_START_RATIO = 0.74;
-const BACKGROUND_FADE_DURATION = 0.55;
+const CARD_READY_DELAY = 0.55;
 
 const scene = document.querySelector("#scene");
 const belt = document.querySelector("#belt");
+const cardBox = document.querySelector("#cardBox");
 const sceneImages = [...scene.querySelectorAll("img")];
 const waterNoise = document.querySelector("#waterNoise");
 const waterDisplacement = document.querySelector("#waterDisplacement");
@@ -54,7 +61,7 @@ function applyPhoneLayout() {
     scene.clientHeight / SOURCE_SCENE.height,
   );
 
-  const { sequenceDuration, move, bg3, beltLayers } = ANIMATION_CONFIG;
+  const { sequenceDuration, move, bg3, beltLayers, card } = ANIMATION_CONFIG;
 
   scene.style.setProperty("--belt-width", `${SOURCE_BELT_WIDTH * scale}px`);
   scene.style.setProperty("--final-x", `${move.x * scale}px`);
@@ -64,6 +71,12 @@ function applyPhoneLayout() {
   scene.style.setProperty("--bg3-width", `${bg3.width}%`);
   scene.style.setProperty("--bg3-height-scale", String(bg3.height / 100));
   scene.style.setProperty("--bg3-duration", `${bg3.duration}s`);
+  scene.style.setProperty("--card-start-x", `${card.start.x * scale}px`);
+  scene.style.setProperty("--card-start-y", `${card.start.y * scale}px`);
+  scene.style.setProperty("--card-insert-x", `${card.insert.x * scale}px`);
+  scene.style.setProperty("--card-insert-y", `${card.insert.y * scale}px`);
+  scene.style.setProperty("--card-width", `${card.width * scale}px`);
+  scene.style.setProperty("--card-insert-duration", `${card.duration}s`);
 
   belt.style.setProperty("--sequence-duration", `${sequenceDuration}s`);
   belt.style.setProperty("--move-delay", `${sequenceDuration * MOVE_START_RATIO}s`);
@@ -115,7 +128,8 @@ function playSequence() {
 
   scene.classList.add("is-resetting");
   scene.classList.remove("show-final-background", "show-bg3");
-  belt.classList.remove("is-sequencing");
+  belt.classList.remove("is-sequencing", "is-card-powered");
+  cardBox.classList.remove("is-ready", "is-inserting", "is-inserted");
   void scene.offsetWidth;
   scene.classList.remove("is-resetting");
   belt.classList.add("is-sequencing");
@@ -131,8 +145,26 @@ function playSequence() {
   );
   sceneTimers.push(
     setTimeout(() => {
-      scene.classList.add("show-bg3");
-    }, moveEndDelay + BACKGROUND_FADE_DURATION * 1000),
+      cardBox.classList.add("is-ready");
+    }, moveEndDelay + CARD_READY_DELAY * 1000),
+  );
+}
+
+function insertCard(event) {
+  event?.stopPropagation();
+  if (!cardBox.classList.contains("is-ready") || cardBox.classList.contains("is-inserting")) {
+    return;
+  }
+
+  cardBox.classList.remove("is-ready");
+  cardBox.classList.add("is-inserting");
+
+  sceneTimers.push(
+    setTimeout(() => {
+      cardBox.classList.remove("is-inserting");
+      cardBox.classList.add("is-inserted");
+      belt.classList.add("is-card-powered");
+    }, ANIMATION_CONFIG.card.duration * 1000),
   );
 }
 
@@ -154,7 +186,16 @@ waitForSceneImages().then(() => {
   requestAnimationFrame(playSequence);
 });
 
-belt.addEventListener("click", playSequence);
+cardBox.addEventListener("click", insertCard);
+belt.addEventListener("click", (event) => {
+  if (event.target.closest("#cardBox")) return;
+  playSequence();
+});
+belt.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.preventDefault();
+  playSequence();
+});
 window.addEventListener("resize", applyPhoneLayout);
 window.visualViewport?.addEventListener("resize", applyPhoneLayout);
 applyPhoneLayout();
