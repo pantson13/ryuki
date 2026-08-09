@@ -14,7 +14,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="./style.css?v=15" />
+    <link rel="stylesheet" href="./style.css?v=16" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -69,149 +69,8 @@
         </button>
       </div>
 
-      <button class="adjust-toggle" id="adjustToggle" type="button" aria-expanded="false">
-        调整动画
-      </button>
-
-      <section class="adjust-panel" id="adjustPanel" aria-label="动画参数调整" hidden>
-        <div class="adjust-heading">
-          <strong>动画参数调整</strong>
-          <button class="panel-close" id="panelClose" type="button" aria-label="关闭调整面板">×</button>
-        </div>
-
-        <p class="adjust-tip">数值以原图像素计算，刷新页面后仍会保留。</p>
-
-        <fieldset>
-          <legend>动画速度</legend>
-          <label>
-            整段时长（秒）
-            <span class="stepper">
-              <button type="button" data-speed-step="-0.1">−</button>
-              <input id="sequenceDuration" type="number" inputmode="decimal" min="1.5" max="20" step="0.1" value="5" />
-              <button type="button" data-speed-step="0.1">＋</button>
-            </span>
-          </label>
-          <button class="preview-sequence" id="previewSequence" type="button">重新播放</button>
-        </fieldset>
-
-        <fieldset>
-          <legend>翻转后的最终位置</legend>
-          <label>
-            左右 X
-            <span class="stepper">
-              <button type="button" data-move-axis="x" data-move-step="-10">−</button>
-              <input id="moveX" type="number" inputmode="numeric" step="1" value="0" />
-              <button type="button" data-move-axis="x" data-move-step="10">＋</button>
-            </span>
-          </label>
-          <label>
-            上下 Y
-            <span class="stepper">
-              <button type="button" data-move-axis="y" data-move-step="-10">−</button>
-              <input id="moveY" type="number" inputmode="numeric" step="1" value="-500" />
-              <button type="button" data-move-axis="y" data-move-step="10">＋</button>
-            </span>
-          </label>
-          <label>
-            平移时长（秒）
-            <span class="stepper">
-              <button type="button" data-move-duration-step="-0.1">−</button>
-              <input id="moveDuration" type="number" inputmode="decimal" min="0.2" max="10" step="0.1" value="1.2" />
-              <button type="button" data-move-duration-step="0.1">＋</button>
-            </span>
-          </label>
-          <p class="fieldset-tip">X 正数向右；Y 负数向上。位置数值按腰带原图像素计算。</p>
-        </fieldset>
-
-        <fieldset>
-          <legend>bg3 人物出现</legend>
-          <label>
-            左右 X
-            <span class="stepper">
-              <button type="button" data-bg3-axis="x" data-bg3-step="-10">−</button>
-              <input id="bg3X" type="number" inputmode="numeric" step="1" value="0" />
-              <button type="button" data-bg3-axis="x" data-bg3-step="10">＋</button>
-            </span>
-          </label>
-          <label>
-            上下 Y
-            <span class="stepper">
-              <button type="button" data-bg3-axis="y" data-bg3-step="-10">−</button>
-              <input id="bg3Y" type="number" inputmode="numeric" step="1" value="-320" />
-              <button type="button" data-bg3-axis="y" data-bg3-step="10">＋</button>
-            </span>
-          </label>
-          <label>
-            宽度（%）
-            <span class="stepper">
-              <button type="button" data-bg3-width-step="-1">−</button>
-              <input id="bg3Width" type="number" inputmode="numeric" min="20" max="200" step="1" value="99" />
-              <button type="button" data-bg3-width-step="1">＋</button>
-            </span>
-          </label>
-          <label>
-            高度（%）
-            <span class="stepper">
-              <button type="button" data-bg3-height-step="-1">−</button>
-              <input id="bg3Height" type="number" inputmode="numeric" min="20" max="300" step="1" value="100" />
-              <button type="button" data-bg3-height-step="1">＋</button>
-            </span>
-          </label>
-          <label>
-            显现时长（秒）
-            <span class="stepper">
-              <button type="button" data-bg3-duration-step="-0.1">−</button>
-              <input id="bg3Duration" type="number" inputmode="decimal" min="0.2" max="10" step="0.1" value="1.5" />
-              <button type="button" data-bg3-duration-step="0.1">＋</button>
-            </span>
-          </label>
-          <p class="fieldset-tip">宽度和高度可分别调整；X、Y 用来对准腰带接缝。bg3 位于腰带后方，Y 正数向下。</p>
-        </fieldset>
-
-        <fieldset>
-          <legend>上层 ydup.png</legend>
-          <label>
-            左右 X
-            <span class="stepper">
-              <button type="button" data-layer="up" data-axis="x" data-step="-1">−</button>
-              <input id="upX" type="number" inputmode="numeric" step="1" value="0" />
-              <button type="button" data-layer="up" data-axis="x" data-step="1">＋</button>
-            </span>
-          </label>
-          <label>
-            上下 Y
-            <span class="stepper">
-              <button type="button" data-layer="up" data-axis="y" data-step="-1">−</button>
-              <input id="upY" type="number" inputmode="numeric" step="1" value="0" />
-              <button type="button" data-layer="up" data-axis="y" data-step="1">＋</button>
-            </span>
-          </label>
-        </fieldset>
-
-        <fieldset>
-          <legend>下层 yddown.png</legend>
-          <label>
-            左右 X
-            <span class="stepper">
-              <button type="button" data-layer="down" data-axis="x" data-step="-1">−</button>
-              <input id="downX" type="number" inputmode="numeric" step="1" value="0" />
-              <button type="button" data-layer="down" data-axis="x" data-step="1">＋</button>
-            </span>
-          </label>
-          <label>
-            上下 Y
-            <span class="stepper">
-              <button type="button" data-layer="down" data-axis="y" data-step="-1">−</button>
-              <input id="downY" type="number" inputmode="numeric" step="1" value="0" />
-              <button type="button" data-layer="down" data-axis="y" data-step="1">＋</button>
-            </span>
-          </label>
-        </fieldset>
-
-        <button class="reset-adjustments" id="resetAdjustments" type="button">恢复位置默认值</button>
-      </section>
     </main>
 
-    <script src="./script.js?v=15"></script>
+    <script src="./script.js?v=16"></script>
   </body>
 </html>

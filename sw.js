@@ -1,10 +1,10 @@
-const CACHE_NAME = "ryuki-pwa-v15";
+const CACHE_NAME = "ryuki-pwa-v16-iphone16promax";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=15",
-  "./script.js?v=15",
+  "./style.css?v=16",
+  "./script.js?v=16",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

@@ -17,6 +17,8 @@ body {
 
 body {
   background: #080808;
+  display: grid;
+  place-items: center;
   font-family: system-ui, sans-serif;
 }
 
@@ -35,12 +37,23 @@ body {
   --bg3-height-scale: 1;
   --bg3-duration: 1.5s;
   position: relative;
-  width: 100%;
-  height: 100%;
-  height: 100dvh;
+  width: 100vw;
+  height: auto;
+  aspect-ratio: 440 / 956;
   overflow: hidden;
   isolation: isolate;
   background: #080808;
+}
+
+/*
+ * 目标画布：iPhone 16 Pro Max 竖屏 440 × 956 CSS px。
+ * 更宽的电脑屏幕只负责居中预览，不参与前景坐标计算。
+ */
+@media (min-aspect-ratio: 440 / 956) {
+  .scene {
+    width: auto;
+    height: 100dvh;
+  }
 }
 
 .scene-backgrounds,
@@ -249,159 +262,6 @@ body {
   bottom: 0;
   width: 50.224%;
   transform: translateX(calc(-50% + var(--down-x))) translateY(var(--down-y));
-}
-
-.adjust-toggle {
-  position: fixed;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: max(16px, env(safe-area-inset-bottom));
-  z-index: 20;
-  padding: 10px 14px;
-  border: 1px solid rgb(255 255 255 / 28%);
-  border-radius: 999px;
-  color: #fff;
-  background: rgb(8 8 8 / 78%);
-  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
-  backdrop-filter: blur(12px);
-  cursor: pointer;
-}
-
-.adjust-panel {
-  position: fixed;
-  right: max(16px, env(safe-area-inset-right));
-  bottom: max(64px, calc(env(safe-area-inset-bottom) + 54px));
-  z-index: 21;
-  width: min(310px, calc(100vw - 32px));
-  max-height: calc(100dvh - 96px);
-  overflow-y: auto;
-  padding: 16px;
-  border: 1px solid rgb(255 255 255 / 20%);
-  border-radius: 16px;
-  color: #fff;
-  background: rgb(12 12 12 / 92%);
-  box-shadow: 0 18px 50px rgb(0 0 0 / 50%);
-  backdrop-filter: blur(18px);
-}
-
-.adjust-panel[hidden] {
-  display: none;
-}
-
-.adjust-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 16px;
-}
-
-.panel-close {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 0;
-  color: #fff;
-  background: transparent;
-  font-size: 26px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.adjust-tip {
-  margin: 6px 0 14px;
-  color: rgb(255 255 255 / 62%);
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.fieldset-tip {
-  margin: 2px 0 0;
-  color: rgb(255 255 255 / 54%);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.adjust-panel fieldset {
-  display: grid;
-  gap: 9px;
-  margin: 0 0 12px;
-  padding: 10px 12px 12px;
-  border: 1px solid rgb(255 255 255 / 14%);
-  border-radius: 12px;
-}
-
-.adjust-panel legend {
-  padding: 0 5px;
-  color: rgb(255 255 255 / 78%);
-  font-size: 13px;
-}
-
-.adjust-panel label {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
-}
-
-.stepper {
-  display: grid;
-  grid-template-columns: 34px 62px 34px;
-  overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 20%);
-  border-radius: 9px;
-}
-
-.stepper button,
-.stepper input,
-.reset-adjustments,
-.preview-sequence {
-  min-height: 34px;
-  border: 0;
-  color: #fff;
-  background: rgb(255 255 255 / 8%);
-}
-
-.stepper button {
-  font-size: 17px;
-  cursor: pointer;
-}
-
-.stepper input {
-  width: 62px;
-  border-inline: 1px solid rgb(255 255 255 / 16%);
-  border-radius: 0;
-  outline: 0;
-  text-align: center;
-  font: inherit;
-  appearance: textfield;
-}
-
-.stepper input::-webkit-inner-spin-button,
-.stepper input::-webkit-outer-spin-button {
-  margin: 0;
-  appearance: none;
-}
-
-.reset-adjustments {
-  width: 100%;
-  border: 1px solid rgb(255 255 255 / 16%);
-  border-radius: 9px;
-  cursor: pointer;
-}
-
-.preview-sequence {
-  width: 100%;
-  border: 1px solid rgb(255 255 255 / 22%);
-  border-radius: 9px;
-  background: rgb(255 255 255 / 13%);
-  cursor: pointer;
-}
-
-.stepper button:active,
-.reset-adjustments:active,
-.preview-sequence:active,
-.adjust-toggle:active {
-  transform: translateY(1px);
 }
 
 .belt.is-sequencing .belt-effect {
