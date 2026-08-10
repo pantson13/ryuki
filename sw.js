@@ -1,11 +1,11 @@
-// Ryuki v56: PWA/iPhone-first Canvas shatter + repeatable extract/replay/reinsert loop
-const CACHE_NAME = "ryuki-pwa-v56-canvas-shatter-loop";
+// Ryuki v57: PWA/iPhone-first Canvas shatter + repeatable extract/replay/reinsert loop
+const CACHE_NAME = "ryuki-pwa-v57-canvas-shatter-loop";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=56",
-  "./style.css?v=56",
-  "./script.js?v=56",
+  "./manifest.webmanifest?v=57",
+  "./style.css?v=57",
+  "./script.js?v=57",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

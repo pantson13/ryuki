@@ -1,4 +1,4 @@
-/* Ryuki v56: PWA/iPhone-first Canvas shatter + repeatable extract/replay/reinsert loop */
+/* Ryuki v57: PWA/iPhone-first low-memory Canvas shatter + repeatable extract/replay/reinsert loop */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -440,8 +440,11 @@ function buildShatterSnapshot() {
   const sceneRect = scene.getBoundingClientRect();
   const cssWidth = Math.max(1, sceneRect.width);
   const cssHeight = Math.max(1, sceneRect.height);
-  // iPhone PWA 优先：DPR 封顶 2，减少瞬时 Canvas 内存和重绘压力。
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // iPhone / PWA 优先：碎裂只有不到 1 秒，宁可牺牲一点 Retina 清晰度也不要触发 WebKit Canvas 内存回收。
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches || window.navigator.standalone === true;
+  const dpr = (isIOS || isStandalone) ? 1 : Math.min(window.devicePixelRatio || 1, 1.5);
 
   const source = document.createElement("canvas");
   source.width = Math.round(cssWidth * dpr);
@@ -486,42 +489,20 @@ function buildShatterSnapshot() {
   return { source, sceneRect, cssWidth, cssHeight, dpr, targets };
 }
 
-function createCanvasShard(source, dpr, sceneWidth, sceneHeight, targetRect, polygon, motion, index) {
-  const tile = document.createElement("canvas");
-  tile.width = Math.max(1, Math.ceil(targetRect.width * dpr));
-  tile.height = Math.max(1, Math.ceil(targetRect.height * dpr));
-  const ctx = tile.getContext("2d", { alpha: true });
-  if (!ctx) return null;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
+function createCanvasShard(targetRect, polygon, motion, index) {
   const absolutePoints = parseShatterPolygon(polygon, targetRect);
-  const localPoints = absolutePoints.map((point) => ({
-    x: point.x - targetRect.x,
-    y: point.y - targetRect.y,
-  }));
-
-  ctx.beginPath();
-  localPoints.forEach((point, pointIndex) => {
-    if (pointIndex === 0) ctx.moveTo(point.x, point.y);
-    else ctx.lineTo(point.x, point.y);
-  });
-  ctx.closePath();
-  ctx.clip();
-  ctx.drawImage(source, -targetRect.x, -targetRect.y, sceneWidth, sceneHeight);
-
-  const centroid = localPoints.reduce(
-    (acc, point) => ({ x: acc.x + point.x / localPoints.length, y: acc.y + point.y / localPoints.length }),
+  const centroid = absolutePoints.reduce(
+    (acc, point) => ({
+      x: acc.x + point.x / absolutePoints.length,
+      y: acc.y + point.y / absolutePoints.length,
+    }),
     { x: 0, y: 0 },
   );
 
   return {
-    tile,
-    width: targetRect.width,
-    height: targetRect.height,
-    x: targetRect.x,
-    y: targetRect.y,
-    cx: targetRect.x + centroid.x,
-    cy: targetRect.y + centroid.y,
+    points: absolutePoints,
+    cx: centroid.x,
+    cy: centroid.y,
     dx: motion[0] * sceneScale,
     dy: motion[1] * sceneScale,
     rz: motion[2] * (Math.PI / 180),
@@ -590,7 +571,8 @@ function startMirrorShatter() {
 
   const snapshot = buildShatterSnapshot();
   if (!snapshot) {
-    scene.classList.remove("show-bg3");
+    // Canvas 真不可用时才退回普通隐藏，但不让流程卡死。
+    scene.classList.remove("show-bg3", "show-final-background");
     belt.classList.add("is-shatter-hidden");
     return;
   }
@@ -599,44 +581,31 @@ function startMirrorShatter() {
   if (shatterAnimationFrame) cancelAnimationFrame(shatterAnimationFrame);
 
   const { source, cssWidth, cssHeight, dpr, targets } = snapshot;
-  shatterCanvas.width = Math.round(cssWidth * dpr);
-  shatterCanvas.height = Math.round(cssHeight * dpr);
+  shatterCanvas.width = Math.max(1, Math.round(cssWidth * dpr));
+  shatterCanvas.height = Math.max(1, Math.round(cssHeight * dpr));
   const ctx = shatterCanvas.getContext("2d", { alpha: true });
   if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+  // 关键修复：这里只保存几何数据，不再为 24 块碎片各创建一个离屏 Canvas。
+  // iPhone PWA 运行时常驻仅 source + shatterCanvas 两块画布。
   const shards = targets.flatMap((target) =>
     SHATTER_POLYGONS.map((polygon, index) =>
-      createCanvasShard(
-        source,
-        dpr,
-        cssWidth,
-        cssHeight,
-        target.rect,
-        polygon,
-        SHATTER_MOTION[index],
-        index,
-      ),
-    ).filter(Boolean),
+      createCanvasShard(target.rect, polygon, SHATTER_MOTION[index], index),
+    ),
   );
 
+  const durationMs = ANIMATION_CONFIG.shatter.duration * 1000;
   scene.classList.add("is-shattering");
-  scene.classList.remove("show-bg3");
-  belt.classList.add("is-shatter-hidden");
   shatterCanvas.classList.add("is-active");
 
-  const durationMs = ANIMATION_CONFIG.shatter.duration * 1000;
-  const startedAt = performance.now();
-
-  const render = (now) => {
-    const elapsed = now - startedAt;
-    const overall = Math.min(1, elapsed / durationMs);
+  function drawFrame(elapsed) {
+    const overall = Math.min(1, Math.max(0, elapsed / durationMs));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssWidth, cssHeight);
 
     shards.forEach((shard) => {
       const local = Math.max(0, Math.min(1, (elapsed - shard.delay) / durationMs));
-      // 2D ease-out，PWA 上比 CSS 多层合成更稳定。
       const eased = 1 - Math.pow(1 - local, 3);
       const alpha = 1 - Math.pow(local, 1.55);
       const scale = 1.015 - eased * 0.23;
@@ -646,19 +615,37 @@ function startMirrorShatter() {
       ctx.translate(shard.cx + shard.dx * eased, shard.cy + shard.dy * eased);
       ctx.rotate(shard.rz * eased);
       ctx.scale(scale, scale);
-      ctx.drawImage(
-        shard.tile,
-        -shard.width / 2 - (shard.cx - (shard.x + shard.width / 2)),
-        -shard.height / 2 - (shard.cy - (shard.y + shard.height / 2)),
-        shard.width,
-        shard.height,
-      );
+      ctx.translate(-shard.cx, -shard.cy);
+
+      ctx.beginPath();
+      shard.points.forEach((point, pointIndex) => {
+        if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+        else ctx.lineTo(point.x, point.y);
+      });
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(source, 0, 0, cssWidth, cssHeight);
       ctx.restore();
     });
 
     targets.forEach((target) => drawCanvasCracks(ctx, target.rect, overall));
+  }
 
-    if (overall < 1 && scene.classList.contains("is-shattering")) {
+  // 先把完整快照画到 Canvas。此时真实 bg3/腰带还在，因此即使 WebKit 首帧延迟也不会出现“直接重置”的空窗。
+  drawFrame(0);
+
+  let startedAt = 0;
+  const render = (now) => {
+    if (!scene.classList.contains("is-shattering")) {
+      shatterAnimationFrame = 0;
+      return;
+    }
+
+    if (!startedAt) startedAt = now;
+    const elapsed = now - startedAt;
+    drawFrame(elapsed);
+
+    if (elapsed < durationMs) {
       shatterAnimationFrame = requestAnimationFrame(render);
       return;
     }
@@ -669,7 +656,13 @@ function startMirrorShatter() {
     scene.classList.remove("is-shattering");
   };
 
-  shatterAnimationFrame = requestAnimationFrame(render);
+  // 下一帧才把真实对象隐藏并恢复默认背景。这样 Canvas 至少已经成功提交过一帧。
+  shatterAnimationFrame = requestAnimationFrame(() => {
+    scene.classList.remove("show-bg3", "show-final-background");
+    belt.classList.add("is-shatter-hidden");
+    shatterAnimationFrame = requestAnimationFrame(render);
+  });
+
   shatterCleanupTimer = setTimeout(() => {
     if (shatterAnimationFrame) {
       cancelAnimationFrame(shatterAnimationFrame);
@@ -679,7 +672,7 @@ function startMirrorShatter() {
     shatterCanvas.classList.remove("is-active");
     scene.classList.remove("is-shattering");
     shatterCleanupTimer = 0;
-  }, durationMs + 120);
+  }, durationMs + 260);
 }
 
 function hideLqPanel() {
@@ -1074,7 +1067,6 @@ function completeCardExtraction(pointerId) {
 
   // 卡盒向右抽出成功：bg3 + 腰带镜面碎裂消失，同时恢复开始时默认背景。
   startMirrorShatter();
-  scene.classList.remove("show-final-background");
 }
 
 function handleExtractPointerEnd(event) {
@@ -1334,7 +1326,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=56", { updateViaCache: "none" })
+      .register("./sw.js?v=57", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
