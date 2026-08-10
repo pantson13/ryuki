@@ -1,4 +1,4 @@
-/* Ryuki v31: start stage two immediately when kh1 finishes */
+/* Ryuki v32: steady ydfg/khfg, hidden when charu ends */
 
 :root {
   color-scheme: dark;
@@ -400,8 +400,8 @@ body {
     translate3d(var(--khzd-x), var(--khzd-y), 0);
 }
 
-.card-box.is-inserted .card-glow {
-  animation: powered-glow 1.1s ease-in-out infinite alternate;
+.card-box.is-card-powered .card-glow {
+  opacity: 1;
 }
 
 .belt-layer {
@@ -429,7 +429,7 @@ body {
 }
 
 .belt.is-card-powered .belt-glow {
-  animation: powered-glow 1.1s ease-in-out infinite alternate;
+  opacity: 1;
 }
 
 .belt-layer-up {
@@ -552,16 +552,6 @@ body {
 
   to {
     background-position: -80% 50%, -80% 50%;
-  }
-}
-
-@keyframes powered-glow {
-  from {
-    opacity: 0.72;
-  }
-
-  to {
-    opacity: 1;
   }
 }
 

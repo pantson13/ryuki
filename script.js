@@ -1,4 +1,4 @@
-/* Ryuki v31: start stage two immediately when kh1 finishes */
+/* Ryuki v32: steady ydfg/khfg, hidden when charu ends */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -86,6 +86,7 @@ let activePointerId = null;
 let stageTwoAudioFallback = 0;
 let insertionAudioFallback = 0;
 let insertionTimer = 0;
+let charuFinished = true;
 let pointerStart = { x: 0, y: 0 };
 let dragOrigin = { x: 0, y: 0 };
 let cardDragPosition = { x: ANIMATION_CONFIG.card.start.x, y: ANIMATION_CONFIG.card.start.y };
@@ -271,13 +272,14 @@ function resetToCard() {
   stopAudio(charuAudio);
   ydMusicInUse = false;
   insertionAudioInUse = false;
+  charuFinished = true;
   flowStarted = false;
   resetCardGesture();
 
   scene.classList.add("is-resetting");
   scene.classList.remove("show-final-background", "show-bg3");
   belt.classList.remove("is-ready", "is-stage-two", "is-moving", "is-card-powered");
-  cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted");
+  cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted", "is-card-powered");
   cardTrigger.classList.remove("is-waiting", "is-hidden");
   void scene.offsetWidth;
   scene.classList.remove("is-resetting");
@@ -289,6 +291,7 @@ function completeCardInsertion(pointerId) {
 
   dragReady = false;
   isDragging = false;
+  charuFinished = false;
 
   if (pointerId !== null && cardTrigger.hasPointerCapture?.(pointerId)) {
     cardTrigger.releasePointerCapture(pointerId);
@@ -300,7 +303,8 @@ function completeCardInsertion(pointerId) {
   scene.style.setProperty("--card-handoff-x", `${handoffX * sceneScale}px`);
   scene.style.setProperty("--card-handoff-y", `${handoffY * sceneScale}px`);
 
-  cardBox.classList.remove("is-inserting", "is-inserted");
+  cardBox.classList.remove("is-inserting", "is-inserted", "is-card-powered");
+  belt.classList.remove("is-card-powered");
   cardBox.classList.add("is-handoff");
   void cardBox.offsetWidth;
 
@@ -321,9 +325,18 @@ function completeCardInsertion(pointerId) {
     insertionTimer = setTimeout(() => {
       cardBox.classList.remove("is-inserting");
       cardBox.classList.add("is-inserted");
-      belt.classList.add("is-card-powered");
+      if (!charuFinished) {
+        cardBox.classList.add("is-card-powered");
+        belt.classList.add("is-card-powered");
+      }
     }, ANIMATION_CONFIG.card.duration * 1000);
   });
+}
+
+function hideInsertionGlows() {
+  charuFinished = true;
+  cardBox.classList.remove("is-card-powered");
+  belt.classList.remove("is-card-powered");
 }
 
 function playInsertionAudio() {
@@ -338,6 +351,7 @@ function playInsertionAudio() {
   const playCharuImmediately = () => {
     playAudio(charuAudio).catch((error) => {
       console.warn("charu 音效播放失败：", error);
+      hideInsertionGlows();
     });
   };
 
@@ -537,6 +551,7 @@ cardTrigger.addEventListener("pointerup", handleCardPointerEnd);
 cardTrigger.addEventListener("pointercancel", handleCardPointerEnd);
 cardTrigger.addEventListener("contextmenu", (event) => event.preventDefault());
 kh1Audio.addEventListener("ended", finishFirstStage);
+charuAudio.addEventListener("ended", hideInsertionGlows);
 belt.addEventListener("click", (event) => {
   if (event.target.closest("#cardBox")) return;
   resetToCard();
@@ -557,7 +572,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=31", { updateViaCache: "none" })
+      .register("./sw.js?v=32", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
