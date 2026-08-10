@@ -4,6 +4,7 @@
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
 const ANIMATION_CONFIG = {
+  // 第二阶段：腰带出现到翻转结束。上移不包含在这 5 秒内。
   sequenceDuration: 5,
   move: {
     x: 0,
@@ -39,22 +40,34 @@ const ANIMATION_CONFIG = {
   beltGlow: { x: -25, y: -80, width: 777 },
 };
 
+// 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
+const AUDIO_CONFIG = {
+  kh1: "./assets/audio/kh1.mp3",
+  ydmusic: "./assets/audio/ydmusic.mp3",
+};
+
 const PHONE_VIEWPORT = { width: 440, height: 956 };
 const SOURCE_SCENE = { width: 1179, height: 2556 };
 const SOURCE_BELT_WIDTH = 1115;
 const WATER_PHASE_RATIO = 0.2;
-const MOVE_START_RATIO = 0.74;
-const CARD_READY_DELAY = 0.55;
 
 const scene = document.querySelector("#scene");
 const belt = document.querySelector("#belt");
 const cardBox = document.querySelector("#cardBox");
+const cardTrigger = document.querySelector("#cardTrigger");
 const sceneImages = [...scene.querySelectorAll("img")];
 const waterNoise = document.querySelector("#waterNoise");
 const waterDisplacement = document.querySelector("#waterDisplacement");
 
 let rippleAnimationFrame = 0;
 let sceneTimers = [];
+let flowStarted = false;
+let ydMusicInUse = false;
+
+const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
+const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
+kh1Audio.preload = "auto";
+ydMusicAudio.preload = "auto";
 
 function applyPhoneLayout() {
   // scene 始终保持 iPhone 16 Pro Max 的 440:956 比例。
@@ -83,6 +96,9 @@ function applyPhoneLayout() {
   scene.style.setProperty("--bg3-duration", `${bg3.duration}s`);
   scene.style.setProperty("--card-start-x", `${card.start.x * scale}px`);
   scene.style.setProperty("--card-start-y", `${card.start.y * scale}px`);
+  // 内层卡盒在腰带上移后接棒；减去 move 可让接棒前后保持同一屏幕坐标。
+  scene.style.setProperty("--card-nested-start-x", `${(card.start.x - move.x) * scale}px`);
+  scene.style.setProperty("--card-nested-start-y", `${(card.start.y - move.y) * scale}px`);
   scene.style.setProperty("--card-insert-x", `${card.insert.x * scale}px`);
   scene.style.setProperty("--card-insert-y", `${card.insert.y * scale}px`);
   scene.style.setProperty("--card-width", `${card.width * scale}px`);
@@ -101,7 +117,6 @@ function applyPhoneLayout() {
   scene.style.setProperty("--ydfg-width", `${beltGlow.width * scale}px`);
 
   belt.style.setProperty("--sequence-duration", `${sequenceDuration}s`);
-  belt.style.setProperty("--move-delay", `${sequenceDuration * MOVE_START_RATIO}s`);
   belt.style.setProperty("--move-x", `${move.x * scale}px`);
   belt.style.setProperty("--move-y", `${move.y * scale}px`);
   belt.style.setProperty("--move-duration", `${move.duration}s`);
@@ -128,7 +143,7 @@ function runWaterRipple(startTime) {
       `${horizontalFrequency.toFixed(4)} ${verticalFrequency.toFixed(4)}`,
     );
 
-    if (progress < 1 && belt.classList.contains("is-sequencing")) {
+    if (progress < 1 && belt.classList.contains("is-stage-two")) {
       rippleAnimationFrame = requestAnimationFrame(update);
     } else {
       waterDisplacement.setAttribute("scale", "0");
@@ -143,42 +158,72 @@ function clearSceneTimers() {
   sceneTimers = [];
 }
 
-function playSequence() {
-  clearSceneTimers();
-  cancelAnimationFrame(rippleAnimationFrame);
-  waterDisplacement.setAttribute("scale", "30");
-
-  scene.classList.add("is-resetting");
-  scene.classList.remove("show-final-background", "show-bg3");
-  belt.classList.remove("is-sequencing", "is-card-powered");
-  cardBox.classList.remove("is-ready", "is-inserting", "is-inserted");
-  void scene.offsetWidth;
-  scene.classList.remove("is-resetting");
-  belt.classList.add("is-sequencing");
-  runWaterRipple(performance.now());
-
-  const { sequenceDuration, move } = ANIMATION_CONFIG;
-  const moveEndDelay = (sequenceDuration * MOVE_START_RATIO + move.duration) * 1000;
-
-  sceneTimers.push(
-    setTimeout(() => {
-      scene.classList.add("show-final-background");
-    }, moveEndDelay),
-  );
-  sceneTimers.push(
-    setTimeout(() => {
-      cardBox.classList.add("is-ready");
-    }, moveEndDelay + CARD_READY_DELAY * 1000),
-  );
+function stopAudio(audio) {
+  audio.pause();
+  try {
+    audio.currentTime = 0;
+  } catch {
+    // Safari 在音频元数据尚未载入时可能不允许设置 currentTime。
+  }
 }
 
-function insertCard(event) {
-  event?.stopPropagation();
-  if (!cardBox.classList.contains("is-ready") || cardBox.classList.contains("is-inserting")) {
+function playAudio(audio) {
+  stopAudio(audio);
+  const playPromise = audio.play();
+  return playPromise instanceof Promise ? playPromise : Promise.resolve();
+}
+
+function primeKh2Audio() {
+  ydMusicInUse = false;
+  ydMusicAudio.muted = true;
+  const playPromise = ydMusicAudio.play();
+
+  if (!(playPromise instanceof Promise)) {
+    ydMusicAudio.pause();
+    ydMusicAudio.currentTime = 0;
+    ydMusicAudio.muted = false;
     return;
   }
 
-  cardBox.classList.remove("is-ready");
+  playPromise
+    .then(() => {
+      if (!ydMusicInUse) {
+        ydMusicAudio.pause();
+        ydMusicAudio.currentTime = 0;
+      }
+      ydMusicAudio.muted = false;
+    })
+    .catch(() => {
+      ydMusicAudio.muted = false;
+    });
+}
+
+function resetToCard() {
+  clearSceneTimers();
+  cancelAnimationFrame(rippleAnimationFrame);
+  waterDisplacement.setAttribute("scale", "0");
+  stopAudio(kh1Audio);
+  stopAudio(ydMusicAudio);
+  ydMusicInUse = false;
+  flowStarted = false;
+
+  scene.classList.add("is-resetting");
+  scene.classList.remove("show-final-background", "show-bg3");
+  belt.classList.remove("is-ready", "is-stage-two", "is-moving", "is-card-powered");
+  cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted");
+  cardTrigger.classList.remove("is-waiting", "is-hidden");
+  void scene.offsetWidth;
+  scene.classList.remove("is-resetting");
+  cardTrigger.classList.add("is-ready");
+}
+
+function insertCard() {
+  // 外层卡盒与腰带内部卡盒在同一屏幕位置无缝接棒，之后才向插槽移动。
+  cardTrigger.classList.remove("is-waiting");
+  cardTrigger.classList.add("is-hidden");
+  cardBox.classList.add("is-handoff");
+  void cardBox.offsetWidth;
+  cardBox.classList.remove("is-handoff");
   cardBox.classList.add("is-inserting");
 
   sceneTimers.push(
@@ -188,6 +233,64 @@ function insertCard(event) {
       belt.classList.add("is-card-powered");
     }, ANIMATION_CONFIG.card.duration * 1000),
   );
+}
+
+function startStageTwo() {
+  if (!flowStarted) return;
+
+  // ydmusic 与第二阶段从同一帧开始。
+  ydMusicInUse = true;
+  ydMusicAudio.muted = false;
+  playAudio(ydMusicAudio).catch((error) => {
+    console.warn("ydmusic 音效播放失败：", error);
+  });
+
+  belt.classList.add("is-ready", "is-stage-two");
+  runWaterRipple(performance.now());
+
+  const { sequenceDuration, move } = ANIMATION_CONFIG;
+  sceneTimers.push(
+    setTimeout(() => {
+      // 第二阶段结束后，才单独执行腰带上移。
+      belt.classList.add("is-moving");
+
+      sceneTimers.push(
+        setTimeout(() => {
+          scene.classList.add("show-final-background");
+          insertCard();
+        }, move.duration * 1000),
+      );
+    }, sequenceDuration * 1000),
+  );
+}
+
+function startFromCard(event) {
+  event?.stopPropagation();
+  if (flowStarted || !cardTrigger.classList.contains("is-ready")) {
+    return;
+  }
+
+  flowStarted = true;
+  cardTrigger.classList.remove("is-ready");
+  cardTrigger.classList.add("is-waiting");
+
+  // 在 iPhone 的真实点击手势中预解锁 ydmusic，确保 kh1 播放完后仍能自动播放。
+  primeKh2Audio();
+
+  let stageStarted = false;
+  const beginStageOnce = () => {
+    if (stageStarted) return;
+    stageStarted = true;
+    startStageTwo();
+  };
+
+  kh1Audio.addEventListener("ended", beginStageOnce, { once: true });
+  kh1Audio.addEventListener("error", beginStageOnce, { once: true });
+
+  playAudio(kh1Audio).catch((error) => {
+    console.warn("kh1 音效播放失败：", error);
+    beginStageOnce();
+  });
 }
 
 async function waitForSceneImages() {
@@ -204,19 +307,18 @@ async function waitForSceneImages() {
 
 waitForSceneImages().then(() => {
   applyPhoneLayout();
-  belt.classList.add("is-ready");
-  requestAnimationFrame(playSequence);
+  requestAnimationFrame(resetToCard);
 });
 
-cardBox.addEventListener("click", insertCard);
+cardTrigger.addEventListener("click", startFromCard);
 belt.addEventListener("click", (event) => {
   if (event.target.closest("#cardBox")) return;
-  playSequence();
+  resetToCard();
 });
 belt.addEventListener("keydown", (event) => {
   if (event.key !== "Enter" && event.key !== " ") return;
   event.preventDefault();
-  playSequence();
+  resetToCard();
 });
 window.addEventListener("resize", applyPhoneLayout);
 window.visualViewport?.addEventListener("resize", applyPhoneLayout);

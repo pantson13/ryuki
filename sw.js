@@ -1,10 +1,10 @@
-const CACHE_NAME = "ryuki-pwa-v21-khfg-top-layer";
+const CACHE_NAME = "ryuki-pwa-v23-ydmusic-audio";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=21",
-  "./script.js?v=21",
+  "./style.css?v=22",
+  "./script.js?v=22",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

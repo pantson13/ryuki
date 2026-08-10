@@ -37,7 +37,9 @@ body {
   --bg3-height-scale: 1;
   --bg3-duration: 1.5s;
   --card-start-x: 0px;
-  --card-start-y: 1700px;
+  --card-start-y: 500px;
+  --card-nested-start-x: 0px;
+  --card-nested-start-y: 1450px;
   --card-insert-x: 0px;
   --card-insert-y: 0px;
   --card-width: 485px;
@@ -142,6 +144,10 @@ body {
   animation: none;
 }
 
+.scene.is-resetting .card-unit {
+  transition: none;
+}
+
 .belt-position {
   position: absolute;
   z-index: 3;
@@ -159,7 +165,6 @@ body {
   --down-x: 0px;
   --down-y: 0px;
   --sequence-duration: 5s;
-  --move-delay: 3.7s;
   --move-x: 0px;
   --move-y: -950px;
   --move-duration: 1.2s;
@@ -246,7 +251,8 @@ body {
   mix-blend-mode: screen;
 }
 
-.belt img {
+.belt img,
+.card-unit img {
   display: block;
   user-select: none;
   -webkit-user-drag: none;
@@ -260,9 +266,8 @@ body {
   height: auto;
 }
 
-.card-box {
+.card-unit {
   position: absolute;
-  z-index: 2;
   top: 50%;
   left: 50%;
   display: block;
@@ -277,9 +282,6 @@ body {
   cursor: pointer;
   pointer-events: none;
   opacity: 0;
-  transform:
-    translate(-50%, -50%)
-    translate3d(var(--card-start-x), var(--card-start-y), 0);
   transform-origin: 50% 50%;
   transition:
     opacity 0.32s linear,
@@ -288,9 +290,40 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-.card-box.is-ready {
+.card-trigger {
+  z-index: 4;
+  transform:
+    translate(-50%, -50%)
+    translate3d(var(--card-start-x), var(--card-start-y), 0);
+}
+
+.card-box {
+  z-index: 2;
+  transform:
+    translate(-50%, -50%)
+    translate3d(var(--card-nested-start-x), var(--card-nested-start-y), 0);
+}
+
+.card-trigger.is-ready {
   pointer-events: auto;
   opacity: 1;
+}
+
+.card-trigger.is-waiting {
+  pointer-events: none;
+  opacity: 1;
+}
+
+.card-trigger.is-hidden {
+  pointer-events: none;
+  opacity: 0;
+  transition: none;
+}
+
+.card-box.is-handoff {
+  pointer-events: none;
+  opacity: 1;
+  transition: none;
 }
 
 .card-box.is-inserting,
@@ -386,24 +419,23 @@ body {
   transform: translateX(calc(-50% + var(--down-x))) translateY(var(--down-y));
 }
 
-.belt.is-sequencing .belt-effect {
+.belt.is-stage-two .belt-effect {
   animation: belt-sequence var(--sequence-duration) linear both;
 }
 
-.belt.is-sequencing {
-  animation: belt-move-up var(--move-duration) cubic-bezier(0.22, 0.72, 0.28, 1)
-    var(--move-delay) both;
+.belt.is-moving {
+  animation: belt-move-up var(--move-duration) cubic-bezier(0.22, 0.72, 0.28, 1) both;
 }
 
-.belt.is-sequencing .belt-art {
+.belt.is-stage-two .belt-art {
   animation: belt-materialize var(--sequence-duration) linear both;
 }
 
-.belt.is-sequencing .belt-effect::before {
+.belt.is-stage-two .belt-effect::before {
   animation: energy-aura var(--sequence-duration) ease-out both;
 }
 
-.belt.is-sequencing .belt-effect::after {
+.belt.is-stage-two .belt-effect::after {
   animation:
     energy-surface var(--sequence-duration) ease-out both,
     water-roll calc(var(--sequence-duration) * 0.2) linear infinite;
