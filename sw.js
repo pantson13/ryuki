@@ -1,11 +1,11 @@
-// Ryuki v30: keep the original background until card insertion starts
-const CACHE_NAME = "ryuki-pwa-v30-background-on-insert";
+// Ryuki v31: start stage two immediately when kh1 finishes
+const CACHE_NAME = "ryuki-pwa-v31-kh1-immediate-stage2";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=30",
-  "./script.js?v=30",
+  "./style.css?v=31",
+  "./script.js?v=31",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

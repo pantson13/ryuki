@@ -1,4 +1,4 @@
-/* Ryuki v30: keep the original background until card insertion starts */
+/* Ryuki v31: start stage two immediately when kh1 finishes */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -6,7 +6,7 @@
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
 const ANIMATION_CONFIG = {
-  // 第一阶段：点击卡盒、播放 kh1，到第二阶段开始前，固定为 3 秒。
+  // 第一阶段最长 3 秒；kh1 提前播完时立即进入第二阶段，不再空等。
   firstStageDuration: 3,
   // 第二阶段：腰带出现到翻转结束。上移不包含在内；由 5 秒加快至 3.5 秒。
   sequenceDuration: 3.5,
@@ -449,7 +449,7 @@ function handleBeltAnimationStart(event) {
 function startStageTwo() {
   if (!flowStarted) return;
 
-  // 3 秒到点后立即启动，不再额外等待两次 requestAnimationFrame。
+  // kh1 结束（或最长 3 秒保护到点）后立即启动，不再额外等待绘制帧。
   belt.classList.add("is-ready", "is-stage-two");
   runWaterRipple(performance.now());
 
@@ -472,6 +472,13 @@ function startStageTwo() {
   );
 }
 
+function finishFirstStage() {
+  if (!flowStarted || belt.classList.contains("is-stage-two")) return;
+
+  stopAudio(kh1Audio);
+  startStageTwo();
+}
+
 function startFromCard(event) {
   event?.stopPropagation();
   if (flowStarted || !cardTrigger.classList.contains("is-ready")) {
@@ -491,13 +498,14 @@ function startFromCard(event) {
 
   playAudio(kh1Audio).catch((error) => {
     console.warn("kh1 音效播放失败：", error);
+    // 音效无法播放时不让流程停顿，立即进入第二阶段。
+    finishFirstStage();
   });
 
   sceneTimers.push(
     setTimeout(() => {
-      // 第一阶段严格固定为 3 秒，不受 kh1 文件本身时长影响。
-      stopAudio(kh1Audio);
-      startStageTwo();
+      // 仅作为最大等待时间与 Safari ended 事件异常时的保底。
+      finishFirstStage();
     }, ANIMATION_CONFIG.firstStageDuration * 1000),
   );
 }
@@ -528,6 +536,7 @@ cardTrigger.addEventListener("pointermove", handleCardPointerMove);
 cardTrigger.addEventListener("pointerup", handleCardPointerEnd);
 cardTrigger.addEventListener("pointercancel", handleCardPointerEnd);
 cardTrigger.addEventListener("contextmenu", (event) => event.preventDefault());
+kh1Audio.addEventListener("ended", finishFirstStage);
 belt.addEventListener("click", (event) => {
   if (event.target.closest("#cardBox")) return;
   resetToCard();
@@ -548,7 +557,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=30", { updateViaCache: "none" })
+      .register("./sw.js?v=31", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

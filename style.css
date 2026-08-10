@@ -1,4 +1,4 @@
-/* Ryuki v30: keep the original background until card insertion starts */
+/* Ryuki v31: start stage two immediately when kh1 finishes */
 
 :root {
   color-scheme: dark;
