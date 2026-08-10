@@ -38,15 +38,12 @@ body {
   --bg3-duration: 1.5s;
   --card-start-x: 0px;
   --card-start-y: 500px;
-  --card-drag-x: 0px;
-  --card-drag-y: 500px;
   --card-nested-start-x: 0px;
   --card-nested-start-y: 1450px;
   --card-insert-x: 0px;
   --card-insert-y: 0px;
   --card-width: 485px;
   --card-insert-duration: 1.25s;
-  --card-return-duration: 0.35s;
   --kpc-x: 0px;
   --kpc-y: 0px;
   --kpc-width: 437px;
@@ -315,35 +312,6 @@ body {
 .card-trigger.is-waiting {
   pointer-events: none;
   opacity: 1;
-}
-
-.card-trigger.is-draggable {
-  pointer-events: auto;
-  opacity: 1;
-  cursor: grab;
-  touch-action: none;
-  -webkit-touch-callout: none;
-  transform:
-    translate(-50%, -50%)
-    translate3d(var(--card-drag-x), var(--card-drag-y), 0);
-}
-
-.card-trigger.is-pressing {
-  filter: brightness(1.12);
-  transform:
-    translate(-50%, -50%)
-    translate3d(var(--card-drag-x), var(--card-drag-y), 0)
-    scale(1.035);
-}
-
-.card-trigger.is-dragging {
-  cursor: grabbing;
-  transition: none;
-  filter: brightness(1.08) drop-shadow(0 0 14px rgb(70 255 155 / 46%));
-}
-
-.card-trigger.is-returning {
-  transition: transform var(--card-return-duration) cubic-bezier(0.2, 0.72, 0.2, 1);
 }
 
 .card-trigger.is-hidden {
