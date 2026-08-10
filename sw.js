@@ -1,11 +1,11 @@
-// Ryuki v55: LQ6 + extracted-card stage-two replay cache
-const CACHE_NAME = "ryuki-pwa-v55-lq6-stage2-replay";
+// Ryuki v56: PWA/iPhone-first Canvas shatter + repeatable extract/replay/reinsert loop
+const CACHE_NAME = "ryuki-pwa-v56-canvas-shatter-loop";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=54",
-  "./style.css?v=55",
-  "./script.js?v=55",
+  "./manifest.webmanifest?v=56",
+  "./style.css?v=56",
+  "./script.js?v=56",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -36,10 +36,22 @@ const scopedUrl = (path) => new URL(path, self.location.href).href;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches
-      .open(CACHE_NAME)
-      .then((cache) => cache.addAll(APP_SHELL.map(scopedUrl)))
-      .then(() => self.skipWaiting()),
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // PWA 优先：单个图片/音效暂时缺失时，不允许拖垮整个新版 Service Worker 安装。
+      // 否则 iPhone 会继续运行旧缓存，看起来就像“代码明明改了但 PWA 没变化”。
+      await Promise.all(
+        APP_SHELL.map(async (path) => {
+          const url = scopedUrl(path);
+          try {
+            const response = await fetch(url, { cache: "reload" });
+            if (response.ok) await cache.put(url, response);
+          } catch {
+            // 缺失或暂时离线的资源按需在 fetch 阶段再获取。
+          }
+        }),
+      );
+      await self.skipWaiting();
+    }),
   );
 });
 

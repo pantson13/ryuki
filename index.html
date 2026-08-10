@@ -12,7 +12,7 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="Ryuki 腰带变身动画演示" />
     <title>Ryuki</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=54" />
+    <link rel="manifest" href="./manifest.webmanifest?v=56" />
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png?v=50" />
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=50" />
     <link rel="preload" href="./assets/audio/ydmusic.mp3" as="audio" type="audio/mpeg" />
@@ -21,7 +21,7 @@
     <link rel="preload" href="./assets/audio/chouka.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/images/bg4.png" as="image" type="image/png" />
     <link rel="preload" href="./assets/images/bg5.png" as="image" type="image/png" />
-    <link rel="stylesheet" href="./style.css?v=55" />
+    <link rel="stylesheet" href="./style.css?v=56" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -103,7 +103,7 @@
         </div>
       </div>
 
-      <div class="shatter-overlay" id="shatterOverlay" aria-hidden="true"></div>
+      <canvas class="shatter-canvas" id="shatterCanvas" aria-hidden="true"></canvas>
 
       <div class="lq-panel" id="lqPanel" aria-label="抽卡选择">
         <button class="lq-card" type="button" data-lq="1" aria-label="选择 LQ1"><img src="./assets/images/lq1.png" alt="" /></button>
@@ -123,6 +123,6 @@
 
     </main>
 
-    <script src="./script.js?v=55"></script>
+    <script src="./script.js?v=56"></script>
   </body>
 </html>

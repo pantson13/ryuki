@@ -422,6 +422,15 @@ body {
     translate3d(var(--card-drag-x), var(--card-drag-y), 0);
 }
 
+.card-trigger.is-replay-waiting {
+  z-index: 10;
+  pointer-events: none;
+  opacity: 1;
+  transform:
+    translate(-50%, -50%)
+    translate3d(var(--card-drag-x), var(--card-drag-y), 0);
+}
+
 .card-trigger.is-dragging {
   cursor: grabbing;
   transition: none;
@@ -668,124 +677,22 @@ body {
 }
 
 /* 卡盒向右抽出成功时：bg3 + 腰带镜面碎裂退场。
- * iPhone/Safari 稳定版：clip-path 只负责切片，外层只做 2D transform。
- * 避免 WebKit 对 clip-path + 3D transform + filter 的合成异常。
+ * PWA / iPhone 优先版：全部碎裂绘制交给一个 Canvas 2D 图层。
+ * 不再依赖 clip-path、3D transform、filter 的 WebKit 合成。
  */
-.shatter-overlay {
+.shatter-canvas {
   position: absolute;
   z-index: 8;
   inset: 0;
-  overflow: visible;
-  pointer-events: none;
-  contain: layout style;
-}
-
-.shatter-fragment,
-.shatter-crack {
-  position: absolute;
-  pointer-events: none;
-}
-
-/* 外层只负责飞散动画，不再直接承载 clip-path。 */
-.shatter-fragment {
-  opacity: 0;
-  transform-origin: 50% 50%;
-  will-change: transform, opacity;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-}
-
-/* 内层固定切片，避免 clip-path 和 transform 动画落在同一个元素。 */
-.shatter-fragment-clip {
-  position: absolute;
-  inset: 0;
-  overflow: visible;
-  -webkit-transform: translateZ(0);
-  transform: translateZ(0);
-}
-
-.shatter-source {
-  position: absolute !important;
-  inset: 0 !important;
-  top: 0 !important;
-  left: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  margin: 0 !important;
-  transform: none !important;
-  animation: none !important;
-  opacity: 1 !important;
-  pointer-events: none !important;
-}
-
-.shatter-source-bg3 .character-image {
   width: 100%;
   height: 100%;
-  object-fit: fill;
-}
-
-.shatter-source-belt {
-  display: block !important;
-}
-
-.shatter-source-belt .belt-base {
-  width: 100%;
-}
-
-.shatter-overlay.is-active .shatter-fragment {
-  animation: mirror-shard-fly-ios var(--shatter-duration) cubic-bezier(0.16, 0.72, 0.22, 1) var(--shatter-delay) both;
-}
-
-.shatter-crack {
+  display: block;
+  pointer-events: none;
   opacity: 0;
-  background:
-    linear-gradient(31deg, transparent 49.4%, rgb(255 255 255 / 94%) 49.8% 50.2%, transparent 50.6%),
-    linear-gradient(-24deg, transparent 49.5%, rgb(255 255 255 / 80%) 49.8% 50.15%, transparent 50.5%),
-    linear-gradient(68deg, transparent 49.55%, rgb(255 255 255 / 62%) 49.85% 50.1%, transparent 50.45%);
-  mix-blend-mode: screen;
-  will-change: opacity;
 }
 
-.shatter-overlay.is-active .shatter-crack {
-  animation: mirror-crack-flash 0.22s ease-out both;
-}
-
-@keyframes mirror-shard-fly-ios {
-  0% {
-    opacity: 1;
-    transform: translate(0, 0) rotate(0deg) scale(1);
-  }
-
-  12% {
-    opacity: 1;
-    transform:
-      translate(calc(var(--shatter-dx) * 0.06), calc(var(--shatter-dy) * 0.06))
-      rotate(calc(var(--shatter-rz) * 0.06))
-      scale(1.015);
-  }
-
-  45% {
-    opacity: 0.88;
-    transform:
-      translate(calc(var(--shatter-dx) * 0.46), calc(var(--shatter-dy) * 0.46))
-      rotate(calc(var(--shatter-rz) * 0.46))
-      scale(0.96);
-  }
-
-  100% {
-    opacity: 0;
-    transform:
-      translate(var(--shatter-dx), var(--shatter-dy))
-      rotate(var(--shatter-rz))
-      scale(0.78);
-  }
-}
-
-@keyframes mirror-crack-flash {
-  0% { opacity: 0; }
-  18% { opacity: 1; }
-  58% { opacity: 0.82; }
-  100% { opacity: 0; }
+.shatter-canvas.is-active {
+  opacity: 1;
 }
 
 /* 六张 lq：左下方两排，上 1/2/3，下 4/5/6。 */

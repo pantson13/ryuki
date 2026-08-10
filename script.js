@@ -1,4 +1,4 @@
-/* Ryuki v55: LQ6 + extracted card tap replays stage two, keeping extracted card position */
+/* Ryuki v56: PWA/iPhone-first Canvas shatter + repeatable extract/replay/reinsert loop */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -134,7 +134,7 @@ const lqButtons = [...document.querySelectorAll(".lq-card")];
 const kpcLayer = document.querySelector("#kpcLayer");
 const beltArt = document.querySelector("#beltArt");
 const characterReveal = document.querySelector(".character-reveal");
-const shatterOverlay = document.querySelector("#shatterOverlay");
+const shatterCanvas = document.querySelector("#shatterCanvas");
 const sceneImages = [...scene.querySelectorAll("img")];
 const waterNoise = document.querySelector("#waterNoise");
 const waterDisplacement = document.querySelector("#waterDisplacement");
@@ -160,6 +160,7 @@ let charuFinished = true;
 let bg4MergeStarted = false;
 let bg5TransitionTimer = 0;
 let shatterCleanupTimer = 0;
+let shatterAnimationFrame = 0;
 let charuBg4SyncFrame = 0;
 let selectedLq = null;
 let extractReady = false;
@@ -167,6 +168,7 @@ let isExtracting = false;
 let extractPointerId = null;
 let cardWasExtracted = false;
 let extractedStageTwoReplayActive = false;
+let reinsertReady = false;
 let suppressExtractedCardClick = false;
 let externalCardPointerTravel = 0;
 let extractPointerStart = { x: 0, y: 0 };
@@ -392,70 +394,193 @@ function setCardExtractPosition(x, y) {
   scene.style.setProperty("--card-extract-y", `${y * sceneScale}px`);
 }
 
-function stripCloneIdentity(root) {
-  root.removeAttribute?.("id");
-  root.querySelectorAll?.("[id]").forEach((node) => node.removeAttribute("id"));
-  root.querySelectorAll?.("button").forEach((button) => {
-    button.disabled = true;
-    button.tabIndex = -1;
+function parseShatterPolygon(polygon, rect) {
+  const body = polygon.slice(polygon.indexOf("(") + 1, polygon.lastIndexOf(")"));
+  return body.split(",").map((pair) => {
+    const [x, y] = pair.trim().split(/\s+/);
+    return {
+      x: rect.x + (parseFloat(x) / 100) * rect.width,
+      y: rect.y + (parseFloat(y) / 100) * rect.height,
+    };
   });
 }
 
-function addCrackFlash(rect, sceneRect, kind) {
-  const crack = document.createElement("div");
-  crack.className = `shatter-crack shatter-crack-${kind}`;
-  crack.style.left = `${rect.left - sceneRect.left}px`;
-  crack.style.top = `${rect.top - sceneRect.top}px`;
-  crack.style.width = `${rect.width}px`;
-  crack.style.height = `${rect.height}px`;
-  shatterOverlay.appendChild(crack);
+function effectiveOpacity(element) {
+  let opacity = 1;
+  let node = element;
+  while (node && node !== scene) {
+    const style = getComputedStyle(node);
+    if (style.display === "none" || style.visibility === "hidden") return 0;
+    opacity *= Number.parseFloat(style.opacity || "1");
+    node = node.parentElement;
+  }
+  return opacity;
 }
 
-function addShatterFragments(target, kind) {
-  const rect = target.getBoundingClientRect();
+function drawDomImageToCanvas(ctx, image, sceneRect) {
+  if (!image?.complete || !image.naturalWidth || !image.naturalHeight) return;
+  const rect = image.getBoundingClientRect();
+  if (rect.width < 0.5 || rect.height < 0.5) return;
+  const alpha = effectiveOpacity(image);
+  if (alpha <= 0.001) return;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(
+    image,
+    rect.left - sceneRect.left,
+    rect.top - sceneRect.top,
+    rect.width,
+    rect.height,
+  );
+  ctx.restore();
+}
+
+function buildShatterSnapshot() {
   const sceneRect = scene.getBoundingClientRect();
-  if (rect.width < 1 || rect.height < 1) return;
+  const cssWidth = Math.max(1, sceneRect.width);
+  const cssHeight = Math.max(1, sceneRect.height);
+  // iPhone PWA 优先：DPR 封顶 2，减少瞬时 Canvas 内存和重绘压力。
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
-  const cleanSource = target.cloneNode(true);
-  stripCloneIdentity(cleanSource);
-  cleanSource.classList.add("shatter-source", `shatter-source-${kind}`);
+  const source = document.createElement("canvas");
+  source.width = Math.round(cssWidth * dpr);
+  source.height = Math.round(cssHeight * dpr);
+  const sourceCtx = source.getContext("2d", { alpha: true });
+  if (!sourceCtx) return null;
+  sourceCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  sourceCtx.clearRect(0, 0, cssWidth, cssHeight);
 
-  // 腰带碎裂时卡盒已经被抽出，碎片里不要再复制一个幽灵卡盒。
-  if (kind === "belt") cleanSource.querySelector(".card-box")?.remove();
+  const targets = [];
 
-  SHATTER_POLYGONS.forEach((polygon, index) => {
-    const [dx, dy, rz] = SHATTER_MOTION[index];
+  if (scene.classList.contains("show-bg3")) {
+    const bg3Image = characterReveal.querySelector(".character-image");
+    const rect = characterReveal.getBoundingClientRect();
+    drawDomImageToCanvas(sourceCtx, bg3Image, sceneRect);
+    targets.push({
+      kind: "bg3",
+      rect: {
+        x: rect.left - sceneRect.left,
+        y: rect.top - sceneRect.top,
+        width: rect.width,
+        height: rect.height,
+      },
+    });
+  }
 
-    // WebKit 稳定结构：外层只做 transform，内层只做 clip-path。
-    const fragment = document.createElement("div");
-    fragment.className = `shatter-fragment shatter-fragment-${kind}`;
-    fragment.style.left = `${rect.left - sceneRect.left}px`;
-    fragment.style.top = `${rect.top - sceneRect.top}px`;
-    fragment.style.width = `${rect.width}px`;
-    fragment.style.height = `${rect.height}px`;
-    fragment.style.setProperty("--shatter-dx", `${dx * sceneScale}px`);
-    fragment.style.setProperty("--shatter-dy", `${dy * sceneScale}px`);
-    fragment.style.setProperty("--shatter-rz", `${rz}deg`);
-    fragment.style.setProperty("--shatter-delay", `${index * 0.008}s`);
-
-    const clipLayer = document.createElement("div");
-    clipLayer.className = "shatter-fragment-clip";
-    clipLayer.style.clipPath = polygon;
-    clipLayer.style.webkitClipPath = polygon;
-    clipLayer.appendChild(cleanSource.cloneNode(true));
-
-    fragment.appendChild(clipLayer);
-    shatterOverlay.appendChild(fragment);
+  // 只绘制腰带本体图片，明确排除内部卡盒；卡盒拖出后留在最前景。
+  const beltRect = beltArt.getBoundingClientRect();
+  [...beltArt.querySelectorAll("img")]
+    .filter((image) => !image.closest("#cardBox"))
+    .forEach((image) => drawDomImageToCanvas(sourceCtx, image, sceneRect));
+  targets.push({
+    kind: "belt",
+    rect: {
+      x: beltRect.left - sceneRect.left,
+      y: beltRect.top - sceneRect.top,
+      width: beltRect.width,
+      height: beltRect.height,
+    },
   });
 
-  addCrackFlash(rect, sceneRect, kind);
+  return { source, sceneRect, cssWidth, cssHeight, dpr, targets };
+}
+
+function createCanvasShard(source, dpr, sceneWidth, sceneHeight, targetRect, polygon, motion, index) {
+  const tile = document.createElement("canvas");
+  tile.width = Math.max(1, Math.ceil(targetRect.width * dpr));
+  tile.height = Math.max(1, Math.ceil(targetRect.height * dpr));
+  const ctx = tile.getContext("2d", { alpha: true });
+  if (!ctx) return null;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const absolutePoints = parseShatterPolygon(polygon, targetRect);
+  const localPoints = absolutePoints.map((point) => ({
+    x: point.x - targetRect.x,
+    y: point.y - targetRect.y,
+  }));
+
+  ctx.beginPath();
+  localPoints.forEach((point, pointIndex) => {
+    if (pointIndex === 0) ctx.moveTo(point.x, point.y);
+    else ctx.lineTo(point.x, point.y);
+  });
+  ctx.closePath();
+  ctx.clip();
+  ctx.drawImage(source, -targetRect.x, -targetRect.y, sceneWidth, sceneHeight);
+
+  const centroid = localPoints.reduce(
+    (acc, point) => ({ x: acc.x + point.x / localPoints.length, y: acc.y + point.y / localPoints.length }),
+    { x: 0, y: 0 },
+  );
+
+  return {
+    tile,
+    width: targetRect.width,
+    height: targetRect.height,
+    x: targetRect.x,
+    y: targetRect.y,
+    cx: targetRect.x + centroid.x,
+    cy: targetRect.y + centroid.y,
+    dx: motion[0] * sceneScale,
+    dy: motion[1] * sceneScale,
+    rz: motion[2] * (Math.PI / 180),
+    delay: index * 8,
+  };
+}
+
+function drawCanvasCracks(ctx, targetRect, progress) {
+  if (progress >= 0.34) return;
+  const flash = progress < 0.1
+    ? progress / 0.1
+    : Math.max(0, 1 - (progress - 0.1) / 0.24);
+  if (flash <= 0) return;
+
+  const cx = targetRect.x + targetRect.width * 0.52;
+  const cy = targetRect.y + targetRect.height * 0.5;
+  const rays = [
+    [-0.48, -0.36], [-0.2, -0.52], [0.16, -0.48], [0.46, -0.28],
+    [0.5, 0.14], [0.27, 0.46], [-0.12, 0.5], [-0.43, 0.28],
+  ];
+
+  ctx.save();
+  ctx.globalAlpha = flash * 0.92;
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = Math.max(0.8, 1.25 * sceneScale);
+  ctx.lineCap = "round";
+  rays.forEach(([rx, ry], index) => {
+    const ex = cx + targetRect.width * rx;
+    const ey = cy + targetRect.height * ry;
+    const mx = cx + (ex - cx) * 0.48 + (index % 2 ? 7 : -7) * sceneScale;
+    const my = cy + (ey - cy) * 0.48 + (index % 3 - 1) * 8 * sceneScale;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(mx, my);
+    ctx.lineTo(ex, ey);
+    ctx.stroke();
+
+    if (index % 2 === 0) {
+      ctx.globalAlpha = flash * 0.55;
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.lineTo(mx + (index < 4 ? 18 : -18) * sceneScale, my + 12 * sceneScale);
+      ctx.stroke();
+      ctx.globalAlpha = flash * 0.92;
+    }
+  });
+  ctx.restore();
 }
 
 function clearMirrorShatter() {
   clearTimeout(shatterCleanupTimer);
   shatterCleanupTimer = 0;
-  shatterOverlay.classList.remove("is-active");
-  shatterOverlay.replaceChildren();
+  if (shatterAnimationFrame) {
+    cancelAnimationFrame(shatterAnimationFrame);
+    shatterAnimationFrame = 0;
+  }
+  shatterCanvas.classList.remove("is-active");
+  const ctx = shatterCanvas.getContext("2d");
+  ctx?.clearRect(0, 0, shatterCanvas.width, shatterCanvas.height);
   scene.classList.remove("is-shattering");
   belt.classList.remove("is-shatter-hidden");
 }
@@ -463,25 +588,98 @@ function clearMirrorShatter() {
 function startMirrorShatter() {
   if (!flowStarted || scene.classList.contains("is-shattering")) return;
 
-  clearTimeout(shatterCleanupTimer);
-  shatterOverlay.replaceChildren();
+  const snapshot = buildShatterSnapshot();
+  if (!snapshot) {
+    scene.classList.remove("show-bg3");
+    belt.classList.add("is-shatter-hidden");
+    return;
+  }
 
-  // 必须先抓取当前真实屏幕位置，再隐藏原图，否则碎片会从错误坐标起飞。
-  if (scene.classList.contains("show-bg3")) addShatterFragments(characterReveal, "bg3");
-  addShatterFragments(beltArt, "belt");
+  clearTimeout(shatterCleanupTimer);
+  if (shatterAnimationFrame) cancelAnimationFrame(shatterAnimationFrame);
+
+  const { source, cssWidth, cssHeight, dpr, targets } = snapshot;
+  shatterCanvas.width = Math.round(cssWidth * dpr);
+  shatterCanvas.height = Math.round(cssHeight * dpr);
+  const ctx = shatterCanvas.getContext("2d", { alpha: true });
+  if (!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const shards = targets.flatMap((target) =>
+    SHATTER_POLYGONS.map((polygon, index) =>
+      createCanvasShard(
+        source,
+        dpr,
+        cssWidth,
+        cssHeight,
+        target.rect,
+        polygon,
+        SHATTER_MOTION[index],
+        index,
+      ),
+    ).filter(Boolean),
+  );
 
   scene.classList.add("is-shattering");
   scene.classList.remove("show-bg3");
   belt.classList.add("is-shatter-hidden");
-  void shatterOverlay.offsetWidth;
-  shatterOverlay.classList.add("is-active");
+  shatterCanvas.classList.add("is-active");
 
+  const durationMs = ANIMATION_CONFIG.shatter.duration * 1000;
+  const startedAt = performance.now();
+
+  const render = (now) => {
+    const elapsed = now - startedAt;
+    const overall = Math.min(1, elapsed / durationMs);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+    shards.forEach((shard) => {
+      const local = Math.max(0, Math.min(1, (elapsed - shard.delay) / durationMs));
+      // 2D ease-out，PWA 上比 CSS 多层合成更稳定。
+      const eased = 1 - Math.pow(1 - local, 3);
+      const alpha = 1 - Math.pow(local, 1.55);
+      const scale = 1.015 - eased * 0.23;
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, alpha);
+      ctx.translate(shard.cx + shard.dx * eased, shard.cy + shard.dy * eased);
+      ctx.rotate(shard.rz * eased);
+      ctx.scale(scale, scale);
+      ctx.drawImage(
+        shard.tile,
+        -shard.width / 2 - (shard.cx - (shard.x + shard.width / 2)),
+        -shard.height / 2 - (shard.cy - (shard.y + shard.height / 2)),
+        shard.width,
+        shard.height,
+      );
+      ctx.restore();
+    });
+
+    targets.forEach((target) => drawCanvasCracks(ctx, target.rect, overall));
+
+    if (overall < 1 && scene.classList.contains("is-shattering")) {
+      shatterAnimationFrame = requestAnimationFrame(render);
+      return;
+    }
+
+    shatterAnimationFrame = 0;
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+    shatterCanvas.classList.remove("is-active");
+    scene.classList.remove("is-shattering");
+  };
+
+  shatterAnimationFrame = requestAnimationFrame(render);
   shatterCleanupTimer = setTimeout(() => {
-    shatterOverlay.classList.remove("is-active");
-    shatterOverlay.replaceChildren();
+    if (shatterAnimationFrame) {
+      cancelAnimationFrame(shatterAnimationFrame);
+      shatterAnimationFrame = 0;
+    }
+    ctx.clearRect(0, 0, cssWidth, cssHeight);
+    shatterCanvas.classList.remove("is-active");
     scene.classList.remove("is-shattering");
     shatterCleanupTimer = 0;
-  }, ANIMATION_CONFIG.shatter.duration * 1000 + 140);
+  }, durationMs + 120);
 }
 
 function hideLqPanel() {
@@ -533,7 +731,7 @@ function resetCardGesture() {
   isDragging = false;
   parallelReached = false;
   activePointerId = null;
-  cardTrigger.classList.remove("is-draggable", "is-dragging");
+  cardTrigger.classList.remove("is-draggable", "is-dragging", "is-replay-waiting");
   cardTrigger.setAttribute("aria-label", "启动卡盒与腰带动画");
   setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
 }
@@ -554,8 +752,12 @@ function resetToCard() {
   bg5TransitionTimer = 0;
   clearTimeout(shatterCleanupTimer);
   shatterCleanupTimer = 0;
-  shatterOverlay.classList.remove("is-active");
-  shatterOverlay.replaceChildren();
+  shatterCanvas.classList.remove("is-active");
+  if (shatterAnimationFrame) {
+    cancelAnimationFrame(shatterAnimationFrame);
+    shatterAnimationFrame = 0;
+  }
+  shatterCanvas.getContext("2d")?.clearRect(0, 0, shatterCanvas.width, shatterCanvas.height);
   cancelAnimationFrame(rippleAnimationFrame);
   cancelCharuBg4Sync();
   waterDisplacement.setAttribute("scale", "0");
@@ -574,6 +776,7 @@ function resetToCard() {
   extractPointerId = null;
   cardWasExtracted = false;
   extractedStageTwoReplayActive = false;
+  reinsertReady = false;
   suppressExtractedCardClick = false;
   setCardExtractPosition(0, 0);
   flowStarted = false;
@@ -584,7 +787,7 @@ function resetToCard() {
   belt.classList.remove("is-ready", "is-stage-two", "is-stage-two-front", "is-moving", "is-card-powered", "is-shatter-hidden");
   cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted", "is-card-powered", "is-extractable", "is-extracting", "is-detached", "is-kpc-ejected");
   lqButtons.forEach((button) => button.classList.remove("is-selected"));
-  cardTrigger.classList.remove("is-waiting", "is-hidden");
+  cardTrigger.classList.remove("is-waiting", "is-hidden", "is-replay-waiting");
   void scene.offsetWidth;
   scene.classList.remove("is-resetting");
   cardTrigger.classList.add("is-ready");
@@ -596,6 +799,11 @@ function completeCardInsertion(pointerId) {
   dragReady = false;
   isDragging = false;
   cardWasExtracted = false;
+  reinsertReady = false;
+  extractedStageTwoReplayActive = false;
+  bg4MergeStarted = false;
+  clearTimeout(bg5TransitionTimer);
+  bg5TransitionTimer = 0;
   charuFinished = false;
 
   if (pointerId !== null && cardTrigger.hasPointerCapture?.(pointerId)) {
@@ -727,11 +935,15 @@ function enableCardDrag(options = {}) {
   if (!preservePosition) {
     setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
   }
-  cardTrigger.classList.remove("is-waiting");
+  cardTrigger.classList.remove("is-waiting", "is-replay-waiting");
   cardTrigger.classList.add("is-draggable");
   cardTrigger.setAttribute(
     "aria-label",
-    cardWasExtracted ? "点击卡盒重新启动第二阶段；也可继续拖动" : "按住并拖动卡盒至腰带右侧，再插入凹槽",
+    reinsertReady
+      ? "拖动卡盒至腰带右侧，再插入凹槽"
+      : cardWasExtracted
+        ? "点击卡盒重新启动第二阶段；也可继续拖动"
+        : "按住并拖动卡盒至腰带右侧，再插入凹槽",
   );
 }
 
@@ -778,7 +990,7 @@ function handleCardPointerMove(event) {
   const slotX = ANIMATION_CONFIG.move.x + ANIMATION_CONFIG.card.insert.x;
   const slotY = ANIMATION_CONFIG.move.y + ANIMATION_CONFIG.card.insert.y;
   if (
-    !cardWasExtracted &&
+    (!cardWasExtracted || reinsertReady) &&
     parallelReached &&
     Math.abs(nextX - slotX) <= slotTolerance.x &&
     Math.abs(nextY - slotY) <= slotTolerance.y
@@ -838,6 +1050,7 @@ function completeCardExtraction(pointerId) {
   extractReady = false;
   isExtracting = false;
   cardWasExtracted = true;
+  reinsertReady = false;
   extractedStageTwoReplayActive = false;
 
   if (pointerId !== null && cardBox.hasPointerCapture?.(pointerId)) {
@@ -909,11 +1122,14 @@ function finishStageTwo() {
   ydMusicInUse = false;
   belt.classList.add("is-moving");
 
+  const replayWillUnlockReinsert = cardWasExtracted && extractedStageTwoReplayActive;
   const { move } = ANIMATION_CONFIG;
   sceneTimers.push(
     setTimeout(() => {
-      // ydmusic 真正结束后完成上移，再解锁卡盒拖动。
-      // 若这是抽出卡盒后的第二阶段重播，保持卡盒当前坐标，不把它瞬移回初始位置。
+      // 抽出卡盒后点击重播第二阶段：腰带上移完成后，才解锁再次插入。
+      if (replayWillUnlockReinsert) {
+        reinsertReady = true;
+      }
       enableCardDrag({ preservePosition: cardWasExtracted });
       extractedStageTwoReplayActive = false;
     }, move.duration * 1000),
@@ -994,14 +1210,22 @@ function finishFirstStage() {
 }
 
 function replayStageTwoFromExtractedCard(event) {
-  if (!flowStarted || !cardWasExtracted || extractedStageTwoReplayActive) return;
+  if (!flowStarted || !cardWasExtracted || extractedStageTwoReplayActive || reinsertReady) return;
   if (suppressExtractedCardClick) return;
 
   event?.preventDefault();
   event?.stopPropagation();
   extractedStageTwoReplayActive = true;
+  reinsertReady = false;
 
-  // 清掉上一次碎裂的残留并重新显示腰带。默认背景保持不变，抽出的卡盒留在当前位置。
+  // 第二阶段播放期间锁住外部卡盒位置；音效结束 + 腰带上移完成后再允许拖动插入。
+  dragReady = false;
+  isDragging = false;
+  activePointerId = null;
+  cardTrigger.classList.remove("is-draggable", "is-dragging");
+  cardTrigger.classList.add("is-replay-waiting");
+  cardTrigger.setAttribute("aria-label", "第二阶段播放中，完成后可重新插入卡盒");
+
   clearMirrorShatter();
   hideLqPanel();
   scene.classList.remove("show-bg4", "show-bg5", "show-bg3", "show-final-background", "is-shattering");
@@ -1017,7 +1241,7 @@ function startFromCard(event) {
   event?.stopPropagation();
 
   // 卡盒已经从腰带抽出后，再点击同一张卡盒，直接重新播放第二阶段。
-  if (cardWasExtracted && cardTrigger.classList.contains("is-draggable")) {
+  if (cardWasExtracted && !reinsertReady && cardTrigger.classList.contains("is-draggable")) {
     replayStageTwoFromExtractedCard(event);
     return;
   }
@@ -1110,7 +1334,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=55", { updateViaCache: "none" })
+      .register("./sw.js?v=56", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
