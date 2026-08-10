@@ -1,4 +1,4 @@
-/* Ryuki v38: bg4 starts at charu 1.0s with faster flip */
+/* Ryuki v39: bg4 starts at charu 1.0s and merges in 2s */
 
 :root {
   color-scheme: dark;
@@ -43,7 +43,7 @@ body {
   --bg3-duration: 1.5s;
   --bg4-spread: 360px;
   --bg4-entry: 520px;
-  --bg4-duration: 3s;
+  --bg4-duration: 2s;
   --card-start-x: 0px;
   --card-start-y: 500px;
   --card-drag-x: 0px;

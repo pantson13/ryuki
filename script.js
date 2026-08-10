@@ -1,4 +1,4 @@
-/* Ryuki v38: bg4 starts at charu 1.0s with faster flip */
+/* Ryuki v39: bg4 starts at charu 1.0s and merges in 2s */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -27,7 +27,7 @@ const ANIMATION_CONFIG = {
     spread: 360,
     // 起始位置放到画面外，左右两张从两侧进入，中间一张从上方进入。
     entryDistance: 1400,
-    duration: 3,
+    duration: 2,
     // charu 播放到 1.00 秒时启动 bg4。
     startTimecode: { seconds: 1, frames: 0, fps: 30 },
   },
