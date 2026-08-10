@@ -1,4 +1,4 @@
-/* Ryuki v26: synced stage-two audio + direct card drag */
+/* Ryuki v27: smooth stage two + retained drag position + synced insertion */
 
 :root {
   color-scheme: dark;
@@ -44,11 +44,12 @@ body {
   --card-drag-y: 500px;
   --card-nested-start-x: 0px;
   --card-nested-start-y: 1450px;
+  --card-handoff-x: 0px;
+  --card-handoff-y: 1450px;
   --card-insert-x: 0px;
   --card-insert-y: 0px;
   --card-width: 485px;
   --card-insert-duration: 1.25s;
-  --card-return-duration: 0.35s;
   --kpc-x: 0px;
   --kpc-y: 0px;
   --kpc-width: 437px;
@@ -336,10 +337,6 @@ body {
   filter: brightness(1.08) drop-shadow(0 0 14px rgb(70 255 155 / 46%));
 }
 
-.card-trigger.is-returning {
-  transition: transform var(--card-return-duration) cubic-bezier(0.2, 0.72, 0.2, 1);
-}
-
 .card-trigger.is-hidden {
   pointer-events: none;
   opacity: 0;
@@ -350,6 +347,9 @@ body {
   pointer-events: none;
   opacity: 1;
   transition: none;
+  transform:
+    translate(-50%, -50%)
+    translate3d(var(--card-handoff-x), var(--card-handoff-y), 0);
 }
 
 .card-box.is-inserting,
@@ -468,17 +468,11 @@ body {
 }
 
 @keyframes belt-sequence {
-  0%,
-  25% {
+  0% {
     transform: rotateY(-180deg);
   }
 
-  25.01% {
-    transform: rotateY(-180deg);
-    animation-timing-function: cubic-bezier(0.42, 0, 0.58, 1);
-  }
-
-  47.5% {
+  35% {
     transform: rotateY(-90deg);
   }
 

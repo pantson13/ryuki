@@ -1,11 +1,11 @@
-// Ryuki v26: synced stage-two audio + direct card drag
-const CACHE_NAME = "ryuki-pwa-v26-synced-stage-two-direct-drag";
+// Ryuki v27: smooth stage two + retained drag position + synced insertion
+const CACHE_NAME = "ryuki-pwa-v27-smooth-stage-two-synced-insertion";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=26",
-  "./script.js?v=26",
+  "./style.css?v=27",
+  "./script.js?v=27",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

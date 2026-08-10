@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Ryuki v26: synced stage-two audio + direct card drag -->
+<!-- Ryuki v27: smooth stage two + retained drag position + synced insertion -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -15,7 +15,9 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="./style.css?v=26" />
+    <link rel="preload" href="./assets/audio/ydmusic.mp3" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/charu.mp3" as="audio" type="audio/mpeg" />
+    <link rel="stylesheet" href="./style.css?v=27" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -24,7 +26,7 @@
           id="waterNoise"
           type="fractalNoise"
           baseFrequency="0.009 0.028"
-          numOctaves="2"
+          numOctaves="1"
           seed="7"
           result="noise"
         />
@@ -88,6 +90,6 @@
 
     </main>
 
-    <script src="./script.js?v=26"></script>
+    <script src="./script.js?v=27"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-/* Ryuki v26: synced stage-two audio + direct card drag */
+/* Ryuki v27: smooth stage two + retained drag position + synced insertion */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -36,7 +36,6 @@ const ANIMATION_CONFIG = {
       parallel: { x: 360, y: -950, toleranceX: 100, toleranceY: 220 },
       // 凹槽中心沿用 move + card.insert，只在此范围内判定插入成功。
       slotTolerance: { x: 140, y: 130 },
-      returnDuration: 0.35,
     },
     layers: {
       // kpc：正数向右/向下，width 控制大小（原图宽 437）。
@@ -65,6 +64,7 @@ const WATER_PHASE_RATIO = 0.2;
 
 const scene = document.querySelector("#scene");
 const belt = document.querySelector("#belt");
+const beltEffect = document.querySelector("#beltEffect");
 const cardBox = document.querySelector("#cardBox");
 const cardTrigger = document.querySelector("#cardTrigger");
 const sceneImages = [...scene.querySelectorAll("img")];
@@ -72,6 +72,7 @@ const waterNoise = document.querySelector("#waterNoise");
 const waterDisplacement = document.querySelector("#waterDisplacement");
 
 let rippleAnimationFrame = 0;
+let lastRippleUpdate = 0;
 let sceneTimers = [];
 let flowStarted = false;
 let ydMusicInUse = false;
@@ -81,7 +82,9 @@ let dragReady = false;
 let isDragging = false;
 let parallelReached = false;
 let activePointerId = null;
-let returnTimer = 0;
+let stageTwoAudioFallback = 0;
+let insertionAudioFallback = 0;
+let insertionTimer = 0;
 let pointerStart = { x: 0, y: 0 };
 let dragOrigin = { x: 0, y: 0 };
 let cardDragPosition = { x: ANIMATION_CONFIG.card.start.x, y: ANIMATION_CONFIG.card.start.y };
@@ -92,6 +95,7 @@ const charuAudio = new Audio(AUDIO_CONFIG.charu);
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
 charuAudio.preload = "auto";
+[kh1Audio, ydMusicAudio, charuAudio].forEach((audio) => audio.load());
 
 function applyPhoneLayout() {
   // scene 始终保持 iPhone 16 Pro Max 的 440:956 比例。
@@ -130,7 +134,6 @@ function applyPhoneLayout() {
   scene.style.setProperty("--card-insert-y", `${card.insert.y * scale}px`);
   scene.style.setProperty("--card-width", `${card.width * scale}px`);
   scene.style.setProperty("--card-insert-duration", `${card.duration}s`);
-  scene.style.setProperty("--card-return-duration", `${card.drag.returnDuration}s`);
   scene.style.setProperty("--kpc-x", `${card.layers.middle.x * scale}px`);
   scene.style.setProperty("--kpc-y", `${card.layers.middle.y * scale}px`);
   scene.style.setProperty("--kpc-width", `${card.layers.middle.width * scale}px`);
@@ -156,8 +159,16 @@ function applyPhoneLayout() {
 
 function runWaterRipple(startTime) {
   const waterPhaseDuration = ANIMATION_CONFIG.sequenceDuration * WATER_PHASE_RATIO * 1000;
+  lastRippleUpdate = 0;
 
   function update(now) {
+    // iPhone 上将昂贵的 SVG 位移滤镜限制到约 30fps，腰带主体动画仍保持原帧率。
+    if (lastRippleUpdate && now - lastRippleUpdate < 33) {
+      rippleAnimationFrame = requestAnimationFrame(update);
+      return;
+    }
+    lastRippleUpdate = now;
+
     const progress = Math.min(1, (now - startTime) / waterPhaseDuration);
     const fade = 1 - progress;
     const pulse = 0.72 + Math.sin(progress * Math.PI * 10) * 0.28;
@@ -232,19 +243,23 @@ function setCardDragPosition(x, y) {
 }
 
 function resetCardGesture() {
-  clearTimeout(returnTimer);
-  returnTimer = 0;
+  clearTimeout(insertionTimer);
+  insertionTimer = 0;
   dragReady = false;
   isDragging = false;
   parallelReached = false;
   activePointerId = null;
-  cardTrigger.classList.remove("is-draggable", "is-dragging", "is-returning");
+  cardTrigger.classList.remove("is-draggable", "is-dragging");
   cardTrigger.setAttribute("aria-label", "启动卡盒与腰带动画");
   setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
 }
 
 function resetToCard() {
   clearSceneTimers();
+  clearTimeout(stageTwoAudioFallback);
+  stageTwoAudioFallback = 0;
+  clearTimeout(insertionAudioFallback);
+  insertionAudioFallback = 0;
   cancelAnimationFrame(rippleAnimationFrame);
   waterDisplacement.setAttribute("scale", "0");
   stopAudio(kh1Audio);
@@ -275,20 +290,53 @@ function completeCardInsertion(pointerId) {
     cardTrigger.releasePointerCapture(pointerId);
   }
 
-  // 拖到凹槽后，外层卡盒与腰带内部卡盒在同一位置无缝接棒。
+  // 用当前拖动位置作为腰带内部卡盒的接棒起点，避免跳回旧位置。
+  const handoffX = cardDragPosition.x - ANIMATION_CONFIG.move.x;
+  const handoffY = cardDragPosition.y - ANIMATION_CONFIG.move.y;
+  scene.style.setProperty("--card-handoff-x", `${handoffX * sceneScale}px`);
+  scene.style.setProperty("--card-handoff-y", `${handoffY * sceneScale}px`);
+
+  cardBox.classList.remove("is-inserting", "is-inserted");
+  cardBox.classList.add("is-handoff");
+  void cardBox.offsetWidth;
+
   cardTrigger.classList.remove("is-draggable", "is-dragging", "is-waiting");
   cardTrigger.classList.add("is-hidden");
-  cardBox.classList.add("is-handoff", "is-inserted");
-  void cardBox.offsetWidth;
-  cardBox.classList.remove("is-handoff");
-  belt.classList.add("is-card-powered");
   activePointerId = null;
 
+  // 下一绘制帧启动“吸入卡槽”的位移；charu 由 transitionstart 精确跟随。
+  requestAnimationFrame(() => {
+    if (!flowStarted) return;
+
+    cardBox.classList.remove("is-handoff");
+    cardBox.classList.add("is-inserting");
+    insertionAudioFallback = setTimeout(playInsertionAudio, 80);
+
+    insertionTimer = setTimeout(() => {
+      cardBox.classList.remove("is-inserting");
+      cardBox.classList.add("is-inserted");
+      belt.classList.add("is-card-powered");
+    }, ANIMATION_CONFIG.card.duration * 1000);
+  });
+}
+
+function playInsertionAudio() {
+  if (!flowStarted || !cardBox.classList.contains("is-inserting") || charuInUse) return;
+
+  clearTimeout(insertionAudioFallback);
+  insertionAudioFallback = 0;
   charuInUse = true;
   charuAudio.muted = false;
   playAudio(charuAudio).catch((error) => {
     console.warn("charu 音效播放失败：", error);
   });
+}
+
+function handleCardTransitionStart(event) {
+  if (event.propertyName === "transform" && cardBox.classList.contains("is-inserting")) {
+    // 浏览器确认卡盒位移真正开始的同一时刻启动 charu。
+    playInsertionAudio();
+  }
 }
 
 function enableCardDrag() {
@@ -301,18 +349,6 @@ function enableCardDrag() {
   cardTrigger.setAttribute("aria-label", "按住并拖动卡盒至腰带右侧，再插入凹槽");
 }
 
-function returnCardToStart() {
-  isDragging = false;
-  parallelReached = false;
-  activePointerId = null;
-  cardTrigger.classList.remove("is-dragging");
-  cardTrigger.classList.add("is-returning");
-  setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
-  returnTimer = setTimeout(() => {
-    cardTrigger.classList.remove("is-returning");
-  }, ANIMATION_CONFIG.card.drag.returnDuration * 1000);
-}
-
 function handleCardPointerDown(event) {
   if (!dragReady || !cardTrigger.classList.contains("is-draggable")) return;
 
@@ -321,9 +357,7 @@ function handleCardPointerDown(event) {
   activePointerId = event.pointerId;
   pointerStart = { x: event.clientX, y: event.clientY };
   dragOrigin = { ...cardDragPosition };
-  cardTrigger.classList.remove("is-returning");
   isDragging = true;
-  parallelReached = false;
   cardTrigger.classList.add("is-dragging");
   cardTrigger.setPointerCapture?.(event.pointerId);
 }
@@ -360,7 +394,6 @@ function handleCardPointerMove(event) {
     Math.abs(nextX - slotX) <= slotTolerance.x &&
     Math.abs(nextY - slotY) <= slotTolerance.y
   ) {
-    setCardDragPosition(slotX, slotY);
     completeCardInsertion(event.pointerId);
   }
 }
@@ -368,52 +401,60 @@ function handleCardPointerMove(event) {
 function handleCardPointerEnd(event) {
   if (activePointerId !== event.pointerId) return;
 
-  if (isDragging && dragReady) {
-    returnCardToStart();
-  } else {
-    activePointerId = null;
+  if (cardTrigger.hasPointerCapture?.(event.pointerId)) {
+    cardTrigger.releasePointerCapture(event.pointerId);
+  }
+
+  // 松手后保留卡盒当前位置；下次按住时从这里继续拖动。
+  isDragging = false;
+  activePointerId = null;
+  cardTrigger.classList.remove("is-dragging");
+}
+
+function playStageTwoAudio() {
+  if (!flowStarted || !belt.classList.contains("is-stage-two") || ydMusicInUse) return;
+
+  clearTimeout(stageTwoAudioFallback);
+  stageTwoAudioFallback = 0;
+  ydMusicInUse = true;
+  ydMusicAudio.muted = false;
+  playAudio(ydMusicAudio).catch((error) => {
+    console.warn("ydmusic 音效播放失败：", error);
+  });
+}
+
+function handleBeltAnimationStart(event) {
+  if (event.animationName === "belt-sequence") {
+    // 浏览器确认腰带动画真实开始的同一时刻启动 ydmusic。
+    playStageTwoAudio();
   }
 }
 
 function startStageTwo() {
   if (!flowStarted) return;
 
-  /*
-   * 先在浏览器绘制帧中启动第二阶段画面，再在下一绘制帧播放 ydmusic。
-   * 这样可避免 Safari 先输出声音、CSS 动画下一帧才显示的视觉延迟。
-   */
-  requestAnimationFrame(() => {
-    if (!flowStarted) return;
+  // 3 秒到点后立即启动，不再额外等待两次 requestAnimationFrame。
+  belt.classList.add("is-ready", "is-stage-two");
+  runWaterRipple(performance.now());
 
-    belt.classList.add("is-ready", "is-stage-two");
-    const visualStartTime = performance.now();
-    runWaterRipple(visualStartTime);
+  // 极少数旧版 Safari 不派发 animationstart 时的保底，不影响正常同步路径。
+  stageTwoAudioFallback = setTimeout(playStageTwoAudio, 80);
 
-    requestAnimationFrame(() => {
-      if (!flowStarted || !belt.classList.contains("is-stage-two")) return;
-      ydMusicInUse = true;
-      ydMusicAudio.muted = false;
-      playAudio(ydMusicAudio).catch((error) => {
-        console.warn("ydmusic 音效播放失败：", error);
-      });
-    });
+  const { sequenceDuration, move } = ANIMATION_CONFIG;
+  sceneTimers.push(
+    setTimeout(() => {
+      // 第二阶段结束后，才单独执行腰带上移。
+      belt.classList.add("is-moving");
 
-    const { sequenceDuration, move } = ANIMATION_CONFIG;
-    sceneTimers.push(
-      setTimeout(() => {
-        // 第二阶段结束后，才单独执行腰带上移。
-        belt.classList.add("is-moving");
-
-        sceneTimers.push(
-          setTimeout(() => {
-            scene.classList.add("show-final-background");
-            // 腰带上移完成后即可直接按住拖动卡盒。
-            enableCardDrag();
-          }, move.duration * 1000),
-        );
-      }, sequenceDuration * 1000),
-    );
-  });
+      sceneTimers.push(
+        setTimeout(() => {
+          scene.classList.add("show-final-background");
+          // 腰带上移完成后即可直接按住拖动卡盒。
+          enableCardDrag();
+        }, move.duration * 1000),
+      );
+    }, sequenceDuration * 1000),
+  );
 }
 
 function startFromCard(event) {
@@ -448,11 +489,14 @@ function startFromCard(event) {
 async function waitForSceneImages() {
   await Promise.all(
     sceneImages.map((image) => {
-      if (image.complete) return Promise.resolve();
-      return new Promise((resolve) => {
+      const loaded = image.complete
+        ? Promise.resolve()
+        : new Promise((resolve) => {
         image.addEventListener("load", resolve, { once: true });
         image.addEventListener("error", resolve, { once: true });
-      });
+        });
+
+      return loaded.then(() => image.decode?.().catch(() => undefined));
     }),
   );
 }
@@ -479,12 +523,16 @@ belt.addEventListener("keydown", (event) => {
 });
 window.addEventListener("resize", applyPhoneLayout);
 window.visualViewport?.addEventListener("resize", applyPhoneLayout);
+beltEffect.addEventListener("animationstart", handleBeltAnimationStart);
+beltEffect.addEventListener("webkitAnimationStart", handleBeltAnimationStart);
+cardBox.addEventListener("transitionstart", handleCardTransitionStart);
+cardBox.addEventListener("webkitTransitionStart", handleCardTransitionStart);
 applyPhoneLayout();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=26", { updateViaCache: "none" })
+      .register("./sw.js?v=27", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
