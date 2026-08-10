@@ -1,4 +1,4 @@
-/* Ryuki v41: stage two holds back face for 1.5s from visual appearance, then flips front until ydmusic ends */
+/* Ryuki v44: stage two stronger belt-body distortion, 50% gradient overlay; 1.5s back-face hold preserved */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -75,8 +75,8 @@ const PHONE_VIEWPORT = { width: 440, height: 956 };
 const SOURCE_SCENE = { width: 1179, height: 2556 };
 const SOURCE_BELT_WIDTH = 1115;
 const STAGE_TWO_WAVE_DURATION = 1.5;
-// 第二阶段水波位移峰值；v33 为 30，在 iPhone 上过弱。v34 提高至 72。
-const WATER_MAX_DISPLACEMENT = 72;
+// 第二阶段水波位移峰值；v44 提高到 118，让腰带水波和材质扭曲更明显。
+const WATER_MAX_DISPLACEMENT = 118;
 
 const scene = document.querySelector("#scene");
 const belt = document.querySelector("#belt");

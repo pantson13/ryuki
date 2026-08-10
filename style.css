@@ -1,4 +1,4 @@
-/* Ryuki v41: stage two holds back face for 1.5s, then flips front until ydmusic ends */
+/* Ryuki v44: stronger stage-two belt body distortion; 50% gradient and 1.5s back hold preserved */
 
 :root {
   color-scheme: dark;
@@ -502,7 +502,9 @@ body {
 }
 
 .belt.is-stage-two .belt-art {
-  animation: belt-materialize var(--stage-two-wave-duration) linear both;
+  animation:
+    belt-materialize var(--stage-two-wave-duration) linear both,
+    belt-wave-warp var(--stage-two-wave-duration) ease-in-out both;
 }
 
 .belt.is-stage-two .belt-effect::before {
@@ -542,13 +544,40 @@ body {
   }
 }
 
+/* 前 1.5 秒让腰带本体随水波明显扭曲，结束时回到完全正常形态。 */
+@keyframes belt-wave-warp {
+  0% {
+    transform: translateZ(0) skewY(-4deg) scaleX(0.98) scaleY(1.08) rotateZ(-0.7deg);
+  }
+
+  20% {
+    transform: translateZ(0) skewY(5.2deg) scaleX(1.02) scaleY(0.91) rotateZ(1.05deg);
+  }
+
+  42% {
+    transform: translateZ(0) skewY(-6.4deg) scaleX(0.97) scaleY(1.11) rotateZ(-1.3deg);
+  }
+
+  64% {
+    transform: translateZ(0) skewY(5.6deg) scaleX(1.025) scaleY(0.92) rotateZ(1.1deg);
+  }
+
+  82% {
+    transform: translateZ(0) skewY(-3.8deg) scaleX(0.985) scaleY(1.065) rotateZ(-0.65deg);
+  }
+
+  100% {
+    transform: translateZ(0) skewY(0deg) scaleX(1) scaleY(1) rotateZ(0deg);
+  }
+}
+
 @keyframes energy-aura {
   0% {
-    opacity: 1;
+    opacity: 0.5;
   }
 
   75% {
-    opacity: 0.88;
+    opacity: 0.44;
   }
 
   100% {
@@ -558,11 +587,11 @@ body {
 
 @keyframes energy-surface {
   0% {
-    opacity: 0.82;
+    opacity: 0.5;
   }
 
   75% {
-    opacity: 0.62;
+    opacity: 0.38;
   }
 
   100% {

@@ -1,11 +1,11 @@
-// Ryuki v42: bg4 spins 1 turn per 0.5s and completes merge in 1.2s; stage two back-face hold remains 1.5s
-const CACHE_NAME = "ryuki-pwa-v42-bg4-fast-merge";
+// Ryuki v44: stronger stage-two belt distortion; 50% gradient; bg4 timing unchanged
+const CACHE_NAME = "ryuki-pwa-v44-stage2-wave-warp";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=42",
-  "./script.js?v=42",
+  "./style.css?v=43",
+  "./script.js?v=43",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
