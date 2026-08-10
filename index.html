@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Ryuki v32: steady ydfg/khfg, hidden when charu ends -->
+<!-- Ryuki v35: instant insertion glow and mirrored bg4 merge -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -18,11 +18,12 @@
     <link rel="preload" href="./assets/audio/ydmusic.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/audio/kaca.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/audio/charu.mp3" as="audio" type="audio/mpeg" />
-    <link rel="stylesheet" href="./style.css?v=32" />
+    <link rel="preload" href="./assets/images/bg4.png" as="image" type="image/png" />
+    <link rel="stylesheet" href="./style.css?v=35" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
-      <filter id="waterRipple" x="-20%" y="-35%" width="140%" height="170%" color-interpolation-filters="sRGB">
+      <filter id="waterRipple" x="-35%" y="-50%" width="170%" height="200%" color-interpolation-filters="sRGB">
         <feTurbulence
           id="waterNoise"
           type="fractalNoise"
@@ -56,6 +57,12 @@
       </div>
 
       <div class="character-stage" aria-hidden="true">
+        <div class="character-merge character-merge-left">
+          <img class="character-merge-image" src="./assets/images/bg4.png" alt="" />
+        </div>
+        <div class="character-merge character-merge-right">
+          <img class="character-merge-image" src="./assets/images/bg4.png" alt="" />
+        </div>
         <div class="character-reveal">
           <img class="character-image" src="./assets/images/bg3.png" alt="" />
         </div>
@@ -91,6 +98,6 @@
 
     </main>
 
-    <script src="./script.js?v=32"></script>
+    <script src="./script.js?v=35"></script>
   </body>
 </html>

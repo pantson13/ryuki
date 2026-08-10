@@ -1,4 +1,4 @@
-/* Ryuki v32: steady ydfg/khfg, hidden when charu ends */
+/* Ryuki v35: instant insertion glow and mirrored bg4 merge */
 
 :root {
   color-scheme: dark;
@@ -13,11 +13,14 @@ html,
 body {
   width: 100%;
   height: 100%;
+  min-height: 100%;
   margin: 0;
   overflow: hidden;
 }
 
 body {
+  min-height: 100vh;
+  min-height: 100dvh;
   background: #080808;
   display: grid;
   place-items: center;
@@ -38,6 +41,8 @@ body {
   --bg3-width: 99%;
   --bg3-height-scale: 1;
   --bg3-duration: 1.5s;
+  --bg4-travel: 800px;
+  --bg4-duration: 0.72s;
   --card-start-x: 0px;
   --card-start-y: 500px;
   --card-drag-x: 0px;
@@ -56,26 +61,20 @@ body {
   --khzd-x: 0px;
   --khzd-y: 0px;
   --khzd-width: 485px;
-  position: relative;
+  position: fixed;
+  inset: 0;
   width: 100vw;
-  height: auto;
-  aspect-ratio: 440 / 956;
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   isolation: isolate;
   background: #080808;
 }
 
 /*
- * 目标画布：iPhone 16 Pro Max 竖屏 440 × 956 CSS px。
- * 更宽的电脑屏幕只负责居中预览，不参与前景坐标计算。
+ * 背景始终覆盖 Safari / PWA 的完整动态视口。
+ * 腰带和卡盒仍由 JavaScript 按 440 × 956 坐标等比缩放并居中。
  */
-@media (min-aspect-ratio: 440 / 956) {
-  .scene {
-    width: auto;
-    height: 100dvh;
-  }
-}
-
 .scene-backgrounds,
 .scene-background {
   position: absolute;
@@ -116,20 +115,28 @@ body {
   height: 0;
   transform: translate(-50%, -50%) translate3d(var(--final-x), var(--final-y), 0);
   pointer-events: none;
+  perspective: 1200px;
+  perspective-origin: 50% 50%;
 }
 
+.character-merge,
 .character-reveal {
   position: absolute;
   top: var(--bg3-y);
   left: calc(50% + var(--bg3-x));
   width: var(--bg3-width);
-  opacity: 0;
-  clip-path: inset(0 0 100% 0);
   transform: translateX(-50%) scaleY(var(--bg3-height-scale));
   transform-origin: 50% 0;
-  will-change: clip-path, opacity;
 }
 
+.character-merge {
+  opacity: 0;
+  transform-style: preserve-3d;
+  backface-visibility: visible;
+  will-change: transform, opacity;
+}
+
+.character-merge-image,
 .character-image {
   display: block;
   width: 100%;
@@ -138,16 +145,31 @@ body {
   -webkit-user-drag: none;
 }
 
+.character-reveal {
+  opacity: 0;
+  will-change: opacity;
+}
+
+.scene.show-bg4 .character-merge-left {
+  animation: bg4-merge-left var(--bg4-duration) cubic-bezier(0.18, 0.78, 0.24, 1) both;
+}
+
+.scene.show-bg4 .character-merge-right {
+  animation: bg4-merge-right var(--bg4-duration) cubic-bezier(0.18, 0.78, 0.24, 1) both;
+}
+
 .scene.show-bg3 .character-reveal {
-  animation: bg3-reveal var(--bg3-duration) linear both;
+  opacity: 1;
 }
 
 .scene.is-resetting .scene-background-final {
   transition: none;
 }
 
+.scene.is-resetting .character-merge,
 .scene.is-resetting .character-reveal {
   animation: none;
+  opacity: 0;
 }
 
 .scene.is-resetting .card-unit {
@@ -555,14 +577,46 @@ body {
   }
 }
 
-@keyframes bg3-reveal {
+@keyframes bg4-merge-left {
   0% {
+    opacity: 0;
+    transform:
+      translateX(calc(-50% - var(--bg4-travel)))
+      rotateY(-540deg)
+      scaleY(var(--bg3-height-scale));
+  }
+
+  10% {
     opacity: 1;
-    clip-path: inset(0 0 100% 0);
   }
 
   100% {
     opacity: 1;
-    clip-path: inset(0 0 0 0);
+    transform:
+      translateX(-50%)
+      rotateY(0deg)
+      scaleY(var(--bg3-height-scale));
+  }
+}
+
+@keyframes bg4-merge-right {
+  0% {
+    opacity: 0;
+    transform:
+      translateX(calc(-50% + var(--bg4-travel)))
+      rotateY(540deg)
+      scaleY(var(--bg3-height-scale));
+  }
+
+  10% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 1;
+    transform:
+      translateX(-50%)
+      rotateY(0deg)
+      scaleY(var(--bg3-height-scale));
   }
 }

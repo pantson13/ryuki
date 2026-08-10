@@ -1,4 +1,4 @@
-/* Ryuki v32: steady ydfg/khfg, hidden when charu ends */
+/* Ryuki v35: instant insertion glow and mirrored bg4 merge */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -21,6 +21,10 @@ const ANIMATION_CONFIG = {
     width: 99,
     height: 100,
     duration: 1.5,
+  },
+  bg4: {
+    travel: 800,
+    duration: 0.72,
   },
   beltLayers: {
     up: { x: -20, y: 0 },
@@ -62,12 +66,15 @@ const PHONE_VIEWPORT = { width: 440, height: 956 };
 const SOURCE_SCENE = { width: 1179, height: 2556 };
 const SOURCE_BELT_WIDTH = 1115;
 const WATER_PHASE_RATIO = 0.2;
+// 第二阶段水波位移峰值；v33 为 30，在 iPhone 上过弱。v34 提高至 72。
+const WATER_MAX_DISPLACEMENT = 72;
 
 const scene = document.querySelector("#scene");
 const belt = document.querySelector("#belt");
 const beltEffect = document.querySelector("#beltEffect");
 const cardBox = document.querySelector("#cardBox");
 const cardTrigger = document.querySelector("#cardTrigger");
+const bg4Right = document.querySelector(".character-merge-right");
 const sceneImages = [...scene.querySelectorAll("img")];
 const waterNoise = document.querySelector("#waterNoise");
 const waterDisplacement = document.querySelector("#waterDisplacement");
@@ -87,6 +94,7 @@ let stageTwoAudioFallback = 0;
 let insertionAudioFallback = 0;
 let insertionTimer = 0;
 let charuFinished = true;
+let bg4MergeStarted = false;
 let pointerStart = { x: 0, y: 0 };
 let dragOrigin = { x: 0, y: 0 };
 let cardDragPosition = { x: ANIMATION_CONFIG.card.start.x, y: ANIMATION_CONFIG.card.start.y };
@@ -102,8 +110,8 @@ charuAudio.preload = "auto";
 [kh1Audio, ydMusicAudio, kacaAudio, charuAudio].forEach((audio) => audio.load());
 
 function applyPhoneLayout() {
-  // scene 始终保持 iPhone 16 Pro Max 的 440:956 比例。
-  // 前景与 object-fit: cover 背景共用同一缩放值，避免 Safari 上错位。
+  // 背景覆盖完整动态视口；前景继续按 iPhone 16 Pro Max 的 440:956
+  // 设计坐标等比缩放并居中，避免 Safari 地址栏改变高度时被拉伸。
   const targetRatio = PHONE_VIEWPORT.width / PHONE_VIEWPORT.height;
   const currentRatio = scene.clientWidth / scene.clientHeight;
 
@@ -111,13 +119,13 @@ function applyPhoneLayout() {
     console.warn("当前画布比例偏离 iPhone 16 Pro Max：", currentRatio);
   }
 
-  const scale = Math.max(
+  const scale = Math.min(
     scene.clientWidth / SOURCE_SCENE.width,
     scene.clientHeight / SOURCE_SCENE.height,
   );
   sceneScale = scale;
 
-  const { sequenceDuration, move, bg3, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
+  const { sequenceDuration, move, bg3, bg4, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
 
   scene.style.setProperty("--belt-width", `${SOURCE_BELT_WIDTH * scale}px`);
   scene.style.setProperty("--final-x", `${move.x * scale}px`);
@@ -127,6 +135,8 @@ function applyPhoneLayout() {
   scene.style.setProperty("--bg3-width", `${bg3.width}%`);
   scene.style.setProperty("--bg3-height-scale", String(bg3.height / 100));
   scene.style.setProperty("--bg3-duration", `${bg3.duration}s`);
+  scene.style.setProperty("--bg4-travel", `${bg4.travel * scale}px`);
+  scene.style.setProperty("--bg4-duration", `${bg4.duration}s`);
   scene.style.setProperty("--card-start-x", `${card.start.x * scale}px`);
   scene.style.setProperty("--card-start-y", `${card.start.y * scale}px`);
   scene.style.setProperty("--card-drag-x", `${cardDragPosition.x * scale}px`);
@@ -176,7 +186,7 @@ function runWaterRipple(startTime) {
     const progress = Math.min(1, (now - startTime) / waterPhaseDuration);
     const fade = 1 - progress;
     const pulse = 0.72 + Math.sin(progress * Math.PI * 10) * 0.28;
-    const strength = Math.max(0, 30 * fade * pulse);
+    const strength = Math.max(0, WATER_MAX_DISPLACEMENT * fade * pulse);
     const horizontalFrequency = 0.007 + Math.sin(progress * Math.PI * 5) * 0.0022;
     const verticalFrequency = 0.023 + Math.cos(progress * Math.PI * 6) * 0.006;
 
@@ -273,11 +283,12 @@ function resetToCard() {
   ydMusicInUse = false;
   insertionAudioInUse = false;
   charuFinished = true;
+  bg4MergeStarted = false;
   flowStarted = false;
   resetCardGesture();
 
   scene.classList.add("is-resetting");
-  scene.classList.remove("show-final-background", "show-bg3");
+  scene.classList.remove("show-final-background", "show-bg4", "show-bg3");
   belt.classList.remove("is-ready", "is-stage-two", "is-moving", "is-card-powered");
   cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted", "is-card-powered");
   cardTrigger.classList.remove("is-waiting", "is-hidden");
@@ -320,17 +331,39 @@ function completeCardInsertion(pointerId) {
     scene.classList.add("show-final-background");
     cardBox.classList.remove("is-handoff");
     cardBox.classList.add("is-inserting");
+    // 插入位移开始的同一帧立即显示 ydfg / khfg，不再等待插入动画完成。
+    cardBox.classList.add("is-card-powered");
+    belt.classList.add("is-card-powered");
+    startBg4Merge();
     insertionAudioFallback = setTimeout(playInsertionAudio, 80);
 
     insertionTimer = setTimeout(() => {
       cardBox.classList.remove("is-inserting");
       cardBox.classList.add("is-inserted");
-      if (!charuFinished) {
-        cardBox.classList.add("is-card-powered");
-        belt.classList.add("is-card-powered");
-      }
     }, ANIMATION_CONFIG.card.duration * 1000);
   });
+}
+
+function startBg4Merge() {
+  if (!flowStarted || bg4MergeStarted) return;
+
+  bg4MergeStarted = true;
+  scene.classList.remove("show-bg3");
+  scene.classList.add("show-bg4");
+
+  // Safari 极少数情况下不派发 animationend，按同一时长保底完成换图。
+  sceneTimers.push(
+    setTimeout(finishBg4Merge, ANIMATION_CONFIG.bg4.duration * 1000 + 80),
+  );
+}
+
+function finishBg4Merge(event) {
+  if (event && event.animationName !== "bg4-merge-right") return;
+  if (!flowStarted || !bg4MergeStarted || scene.classList.contains("show-bg3")) return;
+
+  // 两张 bg4 到达卡盒中心的同一帧隐藏，并立即显示合成后的 bg3。
+  scene.classList.remove("show-bg4");
+  scene.classList.add("show-bg3");
 }
 
 function hideInsertionGlows() {
@@ -567,12 +600,14 @@ beltEffect.addEventListener("animationstart", handleBeltAnimationStart);
 beltEffect.addEventListener("webkitAnimationStart", handleBeltAnimationStart);
 cardBox.addEventListener("transitionstart", handleCardTransitionStart);
 cardBox.addEventListener("webkitTransitionStart", handleCardTransitionStart);
+bg4Right.addEventListener("animationend", finishBg4Merge);
+bg4Right.addEventListener("webkitAnimationEnd", finishBg4Merge);
 applyPhoneLayout();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=32", { updateViaCache: "none" })
+      .register("./sw.js?v=35", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

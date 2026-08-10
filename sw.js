@@ -1,14 +1,15 @@
-// Ryuki v32: steady ydfg/khfg, hidden when charu ends
-const CACHE_NAME = "ryuki-pwa-v32-steady-glow-until-charu-end";
+// Ryuki v35: instant insertion glow and mirrored bg4 merge
+const CACHE_NAME = "ryuki-pwa-v35-bg4-merge";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=32",
-  "./script.js?v=32",
+  "./style.css?v=35",
+  "./script.js?v=35",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
+  "./assets/images/bg4.png",
   "./assets/images/ydbg.png",
   "./assets/images/ydup.png",
   "./assets/images/yddown.png",
