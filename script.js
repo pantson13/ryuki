@@ -1,4 +1,4 @@
-/* Ryuki v37: bg4 enters from offscreen, synced to charu 01s20f */
+/* Ryuki v38: bg4 starts at charu 1.0s with faster flip */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -28,8 +28,8 @@ const ANIMATION_CONFIG = {
     // 起始位置放到画面外，左右两张从两侧进入，中间一张从上方进入。
     entryDistance: 1400,
     duration: 3,
-    // charu 时间码：01秒20帧。按 30fps 解释，即 1.6667 秒。
-    startTimecode: { seconds: 1, frames: 20, fps: 30 },
+    // charu 播放到 1.00 秒时启动 bg4。
+    startTimecode: { seconds: 1, frames: 0, fps: 30 },
   },
   beltLayers: {
     up: { x: -20, y: 0 },
@@ -377,7 +377,7 @@ function completeCardInsertion(pointerId) {
     // 插入位移开始的同一帧立即显示 ydfg / khfg，不再等待插入动画完成。
     cardBox.classList.add("is-card-powered");
     belt.classList.add("is-card-powered");
-    // bg4 不在插卡瞬间启动；等 charu 真正播放到 01秒20帧 再进场。
+    // bg4 不在插卡瞬间启动；等 charu 真正播放到 1.00 秒再进场。
     insertionAudioFallback = setTimeout(playInsertionAudio, 80);
 
     insertionTimer = setTimeout(() => {
@@ -427,7 +427,7 @@ function playInsertionAudio() {
   const playCharuImmediately = () => {
     playAudio(charuAudio)
       .then(() => {
-        // 从 charu 的真实播放时间 01秒20帧 开始 bg4 进场。
+        // 从 charu 的真实播放时间 1.00 秒开始 bg4 进场。
         startCharuBg4Sync();
       })
       .catch((error) => {

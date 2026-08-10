@@ -1,11 +1,11 @@
-// Ryuki v37: bg4 offscreen flip-in synced to charu
-const CACHE_NAME = "ryuki-pwa-v37-bg4-charu-sync";
+// Ryuki v38: bg4 starts at charu 1.0s with faster flip
+const CACHE_NAME = "ryuki-pwa-v38-bg4-1s-faster-flip";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=37",
-  "./script.js?v=37",
+  "./style.css?v=38",
+  "./script.js?v=38",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

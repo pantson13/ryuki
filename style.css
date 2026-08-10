@@ -1,4 +1,4 @@
-/* Ryuki v37: bg4 offscreen flip-in synced to charu */
+/* Ryuki v38: bg4 starts at charu 1.0s with faster flip */
 
 :root {
   color-scheme: dark;
@@ -607,7 +607,7 @@ body {
     opacity: 1;
     transform:
       translateX(calc(-50% - var(--bg4-spread)))
-      rotateY(-378deg)
+      rotateY(-504deg)
       scaleY(var(--bg3-height-scale));
   }
 
@@ -615,7 +615,7 @@ body {
     opacity: 0;
     transform:
       translateX(-50%)
-      rotateY(-540deg)
+      rotateY(-720deg)
       scaleY(var(--bg3-height-scale));
   }
 }
@@ -635,7 +635,7 @@ body {
     transform:
       translateX(-50%)
       translateY(0)
-      rotateY(378deg)
+      rotateY(504deg)
       scaleY(var(--bg3-height-scale));
   }
 
@@ -644,7 +644,7 @@ body {
     transform:
       translateX(-50%)
       translateY(0)
-      rotateY(540deg)
+      rotateY(720deg)
       scaleY(var(--bg3-height-scale));
   }
 }
@@ -662,7 +662,7 @@ body {
     opacity: 1;
     transform:
       translateX(calc(-50% + var(--bg4-spread)))
-      rotateY(378deg)
+      rotateY(504deg)
       scaleY(var(--bg3-height-scale));
   }
 
@@ -670,7 +670,7 @@ body {
     opacity: 0;
     transform:
       translateX(-50%)
-      rotateY(540deg)
+      rotateY(720deg)
       scaleY(var(--bg3-height-scale));
   }
 }
