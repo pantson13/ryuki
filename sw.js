@@ -1,11 +1,11 @@
-// Ryuki v51: bg5/lq/chouka feature cache
-const CACHE_NAME = "ryuki-pwa-v51-bg5-lq-chouka";
+// Ryuki v52: right-only extraction + mirror-shatter cache
+const CACHE_NAME = "ryuki-pwa-v52-right-shatter";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=51",
-  "./style.css?v=51",
-  "./script.js?v=51",
+  "./manifest.webmanifest?v=52",
+  "./style.css?v=52",
+  "./script.js?v=52",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

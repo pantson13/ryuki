@@ -1,4 +1,4 @@
-/* Ryuki v51: bg5 flash transition + lq selector + card extraction + kpc draw audio */
+/* Ryuki v52: right-only card extraction + mirror-shatter disappearance for bg3 and belt */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -38,6 +38,10 @@ const ANIMATION_CONFIG = {
   bg5: {
     // bg4 汇合后，bg5 带白色外发光显示 0.5 秒，再切换 bg3。
     duration: 0.5,
+  },
+  shatter: {
+    // 卡盒向右抽出成功时，bg3 + 腰带镜面碎裂并消失。
+    duration: 0.72,
   },
   lq: {
     // 五张 lq 在 charu 结束后从界面左侧进入；上排 1/2/3，下排 4/5。
@@ -97,6 +101,28 @@ const STAGE_TWO_WAVE_DURATION = 1.5;
 // 第二阶段水波位移峰值；v33 为 30，在 iPhone 上过弱。v34 提高至 72。
 const WATER_MAX_DISPLACEMENT = 170;
 
+// 镜面碎裂分片：12 个不规则区域覆盖完整画面，不依赖额外图片素材。
+const SHATTER_POLYGONS = [
+  "polygon(0 0, 28% 0, 25% 28%, 0 38%)",
+  "polygon(28% 0, 55% 0, 50% 32%, 25% 28%)",
+  "polygon(55% 0, 80% 0, 75% 25%, 50% 32%)",
+  "polygon(80% 0, 100% 0, 100% 38%, 75% 25%)",
+  "polygon(0 38%, 25% 28%, 30% 62%, 0 68%)",
+  "polygon(25% 28%, 50% 32%, 48% 66%, 30% 62%)",
+  "polygon(50% 32%, 75% 25%, 70% 62%, 48% 66%)",
+  "polygon(75% 25%, 100% 38%, 100% 68%, 70% 62%)",
+  "polygon(0 68%, 30% 62%, 26% 100%, 0 100%)",
+  "polygon(30% 62%, 48% 66%, 52% 100%, 26% 100%)",
+  "polygon(48% 66%, 70% 62%, 76% 100%, 52% 100%)",
+  "polygon(70% 62%, 100% 68%, 100% 100%, 76% 100%)",
+];
+
+const SHATTER_MOTION = [
+  [-110, -75, -17, -28, 18], [-42, -110, 12, 34, -14], [36, -112, -11, -30, 16], [112, -72, 18, 30, -18],
+  [-128, -18, 14, -36, 12], [-48, -12, -9, 28, -16], [52, 8, 10, -26, 15], [130, -8, -15, 34, -13],
+  [-105, 78, 16, -32, 20], [-38, 105, -12, 26, -18], [44, 108, 13, -28, 16], [108, 76, -18, 34, -20],
+];
+
 const scene = document.querySelector("#scene");
 const belt = document.querySelector("#belt");
 const beltEffect = document.querySelector("#beltEffect");
@@ -106,6 +132,9 @@ const bg4Center = document.querySelector(".character-merge-center");
 const lqPanel = document.querySelector("#lqPanel");
 const lqButtons = [...document.querySelectorAll(".lq-card")];
 const kpcLayer = document.querySelector("#kpcLayer");
+const beltArt = document.querySelector("#beltArt");
+const characterReveal = document.querySelector(".character-reveal");
+const shatterOverlay = document.querySelector("#shatterOverlay");
 const sceneImages = [...scene.querySelectorAll("img")];
 const waterNoise = document.querySelector("#waterNoise");
 const waterDisplacement = document.querySelector("#waterDisplacement");
@@ -130,6 +159,7 @@ let insertionTimer = 0;
 let charuFinished = true;
 let bg4MergeStarted = false;
 let bg5TransitionTimer = 0;
+let shatterCleanupTimer = 0;
 let charuBg4SyncFrame = 0;
 let selectedLq = null;
 let extractReady = false;
@@ -171,7 +201,7 @@ function applyPhoneLayout() {
   );
   sceneScale = scale;
 
-  const { sequenceDuration, stageTwo, move, bg3, bg4, bg5, lq, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
+  const { sequenceDuration, stageTwo, move, bg3, bg4, bg5, shatter, lq, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
 
   scene.style.setProperty("--belt-width", `${SOURCE_BELT_WIDTH * scale}px`);
   scene.style.setProperty("--final-x", `${move.x * scale}px`);
@@ -185,6 +215,7 @@ function applyPhoneLayout() {
   scene.style.setProperty("--bg4-entry", `${bg4.entryDistance * scale}px`);
   scene.style.setProperty("--bg4-duration", `${bg4.duration}s`);
   scene.style.setProperty("--bg5-duration", `${bg5.duration}s`);
+  scene.style.setProperty("--shatter-duration", `${shatter.duration}s`);
   scene.style.setProperty("--lq-x", `${lq.x * scale}px`);
   scene.style.setProperty("--lq-y", `${lq.y * scale}px`);
   scene.style.setProperty("--lq-card-width", `${lq.cardWidth * scale}px`);
@@ -358,6 +389,93 @@ function setCardExtractPosition(x, y) {
   scene.style.setProperty("--card-extract-y", `${y * sceneScale}px`);
 }
 
+function stripCloneIdentity(root) {
+  root.removeAttribute?.("id");
+  root.querySelectorAll?.("[id]").forEach((node) => node.removeAttribute("id"));
+  root.querySelectorAll?.("button").forEach((button) => {
+    button.disabled = true;
+    button.tabIndex = -1;
+  });
+}
+
+function addCrackFlash(rect, sceneRect, kind) {
+  const crack = document.createElement("div");
+  crack.className = `shatter-crack shatter-crack-${kind}`;
+  crack.style.left = `${rect.left - sceneRect.left}px`;
+  crack.style.top = `${rect.top - sceneRect.top}px`;
+  crack.style.width = `${rect.width}px`;
+  crack.style.height = `${rect.height}px`;
+  shatterOverlay.appendChild(crack);
+}
+
+function addShatterFragments(target, kind) {
+  const rect = target.getBoundingClientRect();
+  const sceneRect = scene.getBoundingClientRect();
+  if (rect.width < 1 || rect.height < 1) return;
+
+  const cleanSource = target.cloneNode(true);
+  stripCloneIdentity(cleanSource);
+  cleanSource.classList.add("shatter-source", `shatter-source-${kind}`);
+
+  // 腰带碎裂时卡盒已经被抽出，碎片里不要再复制一个幽灵卡盒。
+  if (kind === "belt") cleanSource.querySelector(".card-box")?.remove();
+
+  SHATTER_POLYGONS.forEach((polygon, index) => {
+    const [dx, dy, rz, ry, rx] = SHATTER_MOTION[index];
+    const fragment = document.createElement("div");
+    fragment.className = `shatter-fragment shatter-fragment-${kind}`;
+    fragment.style.left = `${rect.left - sceneRect.left}px`;
+    fragment.style.top = `${rect.top - sceneRect.top}px`;
+    fragment.style.width = `${rect.width}px`;
+    fragment.style.height = `${rect.height}px`;
+    fragment.style.clipPath = polygon;
+    fragment.style.webkitClipPath = polygon;
+    fragment.style.setProperty("--shatter-dx", `${dx * sceneScale}px`);
+    fragment.style.setProperty("--shatter-dy", `${dy * sceneScale}px`);
+    fragment.style.setProperty("--shatter-rz", `${rz}deg`);
+    fragment.style.setProperty("--shatter-ry", `${ry}deg`);
+    fragment.style.setProperty("--shatter-rx", `${rx}deg`);
+    fragment.style.setProperty("--shatter-delay", `${index * 0.008}s`);
+    fragment.appendChild(cleanSource.cloneNode(true));
+    shatterOverlay.appendChild(fragment);
+  });
+
+  addCrackFlash(rect, sceneRect, kind);
+}
+
+function clearMirrorShatter() {
+  clearTimeout(shatterCleanupTimer);
+  shatterCleanupTimer = 0;
+  shatterOverlay.classList.remove("is-active");
+  shatterOverlay.replaceChildren();
+  scene.classList.remove("is-shattering");
+  belt.classList.remove("is-shatter-hidden");
+}
+
+function startMirrorShatter() {
+  if (!flowStarted || scene.classList.contains("is-shattering")) return;
+
+  clearTimeout(shatterCleanupTimer);
+  shatterOverlay.replaceChildren();
+
+  // 必须先抓取当前真实屏幕位置，再隐藏原图，否则碎片会从错误坐标起飞。
+  if (scene.classList.contains("show-bg3")) addShatterFragments(characterReveal, "bg3");
+  addShatterFragments(beltArt, "belt");
+
+  scene.classList.add("is-shattering");
+  scene.classList.remove("show-bg3");
+  belt.classList.add("is-shatter-hidden");
+  void shatterOverlay.offsetWidth;
+  shatterOverlay.classList.add("is-active");
+
+  shatterCleanupTimer = setTimeout(() => {
+    shatterOverlay.classList.remove("is-active");
+    shatterOverlay.replaceChildren();
+    scene.classList.remove("is-shattering");
+    shatterCleanupTimer = 0;
+  }, ANIMATION_CONFIG.shatter.duration * 1000 + 140);
+}
+
 function hideLqPanel() {
   scene.classList.remove("show-lq");
   lqButtons.forEach((button) => button.classList.remove("is-selected"));
@@ -426,6 +544,10 @@ function resetToCard() {
   insertionAudioFallback = 0;
   clearTimeout(bg5TransitionTimer);
   bg5TransitionTimer = 0;
+  clearTimeout(shatterCleanupTimer);
+  shatterCleanupTimer = 0;
+  shatterOverlay.classList.remove("is-active");
+  shatterOverlay.replaceChildren();
   cancelAnimationFrame(rippleAnimationFrame);
   cancelCharuBg4Sync();
   waterDisplacement.setAttribute("scale", "0");
@@ -448,8 +570,8 @@ function resetToCard() {
   resetCardGesture();
 
   scene.classList.add("is-resetting");
-  scene.classList.remove("show-final-background", "show-bg4", "show-bg5", "show-bg3", "show-lq");
-  belt.classList.remove("is-ready", "is-stage-two", "is-stage-two-front", "is-moving", "is-card-powered");
+  scene.classList.remove("show-final-background", "show-bg4", "show-bg5", "show-bg3", "show-lq", "is-shattering");
+  belt.classList.remove("is-ready", "is-stage-two", "is-stage-two-front", "is-moving", "is-card-powered", "is-shatter-hidden");
   cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted", "is-card-powered", "is-extractable", "is-extracting", "is-detached", "is-kpc-ejected");
   lqButtons.forEach((button) => button.classList.remove("is-selected"));
   cardTrigger.classList.remove("is-waiting", "is-hidden");
@@ -681,7 +803,9 @@ function handleExtractPointerMove(event) {
 
   const deltaX = (event.clientX - extractPointerStart.x) / sceneScale;
   const deltaY = (event.clientY - extractPointerStart.y) / sceneScale;
-  setCardExtractPosition(extractOrigin.x + deltaX, extractOrigin.y + deltaY);
+  // 卡盒只允许向右抽出；往左拖时 X 锁在 0，避免出现反方向抽卡。
+  const nextX = Math.max(0, extractOrigin.x + deltaX);
+  setCardExtractPosition(nextX, extractOrigin.y + deltaY);
 }
 
 function completeCardExtraction(pointerId) {
@@ -707,7 +831,8 @@ function completeCardExtraction(pointerId) {
   parallelReached = false;
   hideLqPanel();
 
-  // 卡盒真正拖出后只恢复开始时的默认背景；角色层不额外改动。
+  // 卡盒向右抽出成功：bg3 + 腰带镜面碎裂消失，同时恢复开始时默认背景。
+  startMirrorShatter();
   scene.classList.remove("show-final-background");
 }
 
@@ -718,12 +843,13 @@ function handleExtractPointerEnd(event) {
     cardBox.releasePointerCapture(event.pointerId);
   }
 
-  const distance = Math.hypot(cardExtractPosition.x, cardExtractPosition.y);
+  const rightDistance = cardExtractPosition.x;
   cardBox.classList.remove("is-extracting");
   isExtracting = false;
   extractPointerId = null;
 
-  if (distance >= ANIMATION_CONFIG.card.extract.threshold) {
+  // 只有向右拖够阈值才算成功，上下位移不参与抽出判定。
+  if (rightDistance >= ANIMATION_CONFIG.card.extract.threshold) {
     completeCardExtraction(event.pointerId);
     return;
   }
@@ -927,7 +1053,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=51", { updateViaCache: "none" })
+      .register("./sw.js?v=52", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
