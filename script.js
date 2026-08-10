@@ -1,4 +1,4 @@
-/* Ryuki v57: PWA/iPhone-first low-memory Canvas shatter + repeatable extract/replay/reinsert loop */
+/* Ryuki v58: fix repeat stage-two ripple/reinsert audio + add BS/LZJ card-processing branch */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -52,6 +52,20 @@ const ANIMATION_CONFIG = {
     gapY: 25,
     entryDistance: 420,
     duration: 0.45,
+  },
+  auxDevice: {
+    // bs：右侧边缘按钮。x / y / width 都可自行调整。
+    bs: { x: 520, y: 330, width: 150 },
+    // lzj 从 bs 位置向左滑出。slideX 为滑出距离，offsetY 为相对 bs 的上下偏移。
+    lzj: { slideX: -310, offsetY: 0, width: 330, duration: 0.42 },
+    // lzj3 是 lzj2 上方遮挡层，可单独微调。
+    lzj3: { x: 0, y: 0, width: 330 },
+    // 卡片自动反转插入 lzj2 的落点，以 lzj2 中心为基准。
+    cardSlot: { x: 0, y: 10, width: 170, duration: 0.62 },
+    // lyfg：绝对位置参数，可自行调整；默认显示 1 秒后消失。
+    lyfg: { x: 210, y: 330, width: 360, duration: 1 },
+    // lzj 滑出期间，下方 lq 区域的虚化强度。
+    lqBlur: 7,
   },
   beltLayers: {
     up: { x: -20, y: 0 },
@@ -132,6 +146,14 @@ const bg4Center = document.querySelector(".character-merge-center");
 const lqPanel = document.querySelector("#lqPanel");
 const lqButtons = [...document.querySelectorAll(".lq-card")];
 const kpcLayer = document.querySelector("#kpcLayer");
+const bsButton = document.querySelector("#bsButton");
+const auxDock = document.querySelector("#auxDock");
+const lzjButton = document.querySelector("#lzjButton");
+const lzjImage = document.querySelector("#lzjImage");
+const lzj2Image = document.querySelector("#lzj2Image");
+const lzj3Image = document.querySelector("#lzj3Image");
+const auxTransferCard = document.querySelector("#auxTransferCard");
+const lyfgImage = document.querySelector("#lyfgImage");
 const beltArt = document.querySelector("#beltArt");
 const characterReveal = document.querySelector(".character-reveal");
 const shatterCanvas = document.querySelector("#shatterCanvas");
@@ -177,6 +199,12 @@ let cardExtractPosition = { x: 0, y: 0 };
 let pointerStart = { x: 0, y: 0 };
 let dragOrigin = { x: 0, y: 0 };
 let cardDragPosition = { x: ANIMATION_CONFIG.card.start.x, y: ANIMATION_CONFIG.card.start.y };
+let auxOpen = false;
+let auxArmed = false;
+let auxCardInserted = false;
+let auxTransferInProgress = false;
+let auxTransferTimer = 0;
+let lyfgTimer = 0;
 
 const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
 const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
@@ -206,7 +234,7 @@ function applyPhoneLayout() {
   );
   sceneScale = scale;
 
-  const { sequenceDuration, stageTwo, move, bg3, bg4, bg5, shatter, lq, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
+  const { sequenceDuration, stageTwo, move, bg3, bg4, bg5, shatter, lq, auxDevice, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
 
   scene.style.setProperty("--belt-width", `${SOURCE_BELT_WIDTH * scale}px`);
   scene.style.setProperty("--final-x", `${move.x * scale}px`);
@@ -228,6 +256,22 @@ function applyPhoneLayout() {
   scene.style.setProperty("--lq-gap-y", `${lq.gapY * scale}px`);
   scene.style.setProperty("--lq-entry", `${lq.entryDistance * scale}px`);
   scene.style.setProperty("--lq-duration", `${lq.duration}s`);
+  scene.style.setProperty("--bs-x", `${auxDevice.bs.x * scale}px`);
+  scene.style.setProperty("--bs-y", `${auxDevice.bs.y * scale}px`);
+  scene.style.setProperty("--bs-width", `${auxDevice.bs.width * scale}px`);
+  scene.style.setProperty("--lzj-slide-x", `${auxDevice.lzj.slideX * scale}px`);
+  scene.style.setProperty("--lzj-offset-y", `${auxDevice.lzj.offsetY * scale}px`);
+  scene.style.setProperty("--lzj-width", `${auxDevice.lzj.width * scale}px`);
+  scene.style.setProperty("--lzj-duration", `${auxDevice.lzj.duration}s`);
+  scene.style.setProperty("--lzj3-x", `${auxDevice.lzj3.x * scale}px`);
+  scene.style.setProperty("--lzj3-y", `${auxDevice.lzj3.y * scale}px`);
+  scene.style.setProperty("--lzj3-width", `${auxDevice.lzj3.width * scale}px`);
+  scene.style.setProperty("--aux-card-duration", `${auxDevice.cardSlot.duration}s`);
+  scene.style.setProperty("--lyfg-x", `${auxDevice.lyfg.x * scale}px`);
+  scene.style.setProperty("--lyfg-y", `${auxDevice.lyfg.y * scale}px`);
+  scene.style.setProperty("--lyfg-width", `${auxDevice.lyfg.width * scale}px`);
+  scene.style.setProperty("--lyfg-duration", `${auxDevice.lyfg.duration}s`);
+  scene.style.setProperty("--aux-lq-blur", `${auxDevice.lqBlur}px`);
   scene.style.setProperty("--card-start-x", `${card.start.x * scale}px`);
   scene.style.setProperty("--card-start-y", `${card.start.y * scale}px`);
   scene.style.setProperty("--card-drag-x", `${cardDragPosition.x * scale}px`);
@@ -680,6 +724,7 @@ function hideLqPanel() {
   lqButtons.forEach((button) => button.classList.remove("is-selected"));
   selectedLq = null;
   cardBox.classList.remove("is-kpc-ejected");
+  if (auxOpen || auxArmed || auxCardInserted || auxTransferInProgress) resetAuxDevice();
 }
 
 function showLqPanel() {
@@ -709,12 +754,144 @@ function selectLqCard(event) {
 }
 
 function playChoukaFromKpc(event) {
+  // lzj2 已展开时，点击 kpc 优先执行“抽出 → 反转 → 插入 lzj2”。
+  if (auxOpen && auxArmed && startAuxCardTransfer(event)) return;
   if (!flowStarted || !cardBox.classList.contains("is-kpc-ejected")) return;
   event.preventDefault();
   event.stopPropagation();
   playAudio(choukaAudio).catch((error) => {
     console.warn("chouka 音效播放失败：", error);
   });
+}
+
+function resetAuxDevice(options = {}) {
+  clearTimeout(auxTransferTimer);
+  auxTransferTimer = 0;
+  clearTimeout(lyfgTimer);
+  lyfgTimer = 0;
+  auxOpen = false;
+  auxArmed = false;
+  auxCardInserted = false;
+  auxTransferInProgress = false;
+  scene.classList.remove("is-aux-open", "is-aux-armed", "is-aux-card-inserted");
+  auxDock?.classList.remove("is-open", "is-armed", "is-card-inserted");
+  auxTransferCard?.classList.remove("is-visible", "is-moving", "is-inserted");
+  lyfgImage?.classList.remove("is-active");
+  if (auxTransferCard) {
+    auxTransferCard.style.removeProperty("left");
+    auxTransferCard.style.removeProperty("top");
+    auxTransferCard.style.removeProperty("width");
+    auxTransferCard.style.removeProperty("height");
+    auxTransferCard.style.removeProperty("--aux-card-dx");
+    auxTransferCard.style.removeProperty("--aux-card-dy");
+    auxTransferCard.style.removeProperty("--aux-card-scale");
+  }
+  if (!options.keepKpcHidden) cardBox.classList.remove("is-kpc-aux-hidden");
+}
+
+function toggleAuxDock(event) {
+  event?.preventDefault();
+  event?.stopPropagation();
+  if (!flowStarted || !scene.classList.contains("show-lq")) return;
+
+  if (auxOpen) {
+    resetAuxDevice();
+    return;
+  }
+
+  auxOpen = true;
+  auxArmed = false;
+  auxCardInserted = false;
+  scene.classList.add("is-aux-open");
+  auxDock?.classList.add("is-open");
+}
+
+function handleLzjClick(event) {
+  event?.preventDefault();
+  event?.stopPropagation();
+  if (!flowStarted || !auxOpen || auxTransferInProgress) return;
+
+  if (!auxArmed) {
+    auxArmed = true;
+    scene.classList.add("is-aux-armed");
+    auxDock?.classList.add("is-armed");
+    return;
+  }
+
+  if (!auxCardInserted) return;
+
+  // 卡片已插入 lzj2 后再次点击：切回 lzj，并触发 lyfg 一秒消失。
+  auxArmed = false;
+  auxCardInserted = false;
+  scene.classList.remove("is-aux-armed", "is-aux-card-inserted");
+  auxDock?.classList.remove("is-armed", "is-card-inserted");
+  auxTransferCard?.classList.remove("is-visible", "is-moving", "is-inserted");
+  cardBox.classList.remove("is-kpc-aux-hidden");
+
+  clearTimeout(lyfgTimer);
+  lyfgImage?.classList.remove("is-active");
+  void lyfgImage?.offsetWidth;
+  lyfgImage?.classList.add("is-active");
+  lyfgTimer = setTimeout(() => {
+    lyfgImage?.classList.remove("is-active");
+    lyfgTimer = 0;
+  }, ANIMATION_CONFIG.auxDevice.lyfg.duration * 1000);
+}
+
+function startAuxCardTransfer(event) {
+  if (!flowStarted || !auxOpen || !auxArmed || auxCardInserted || auxTransferInProgress) return false;
+  if (!cardBox.classList.contains("is-inserted")) return false;
+  if (!auxTransferCard || !lzj2Image) return false;
+
+  event?.preventDefault();
+  event?.stopPropagation();
+  auxTransferInProgress = true;
+
+  // 保留原本“点击 kpc 播放 chouka”的反馈，同时把卡片抽出并自动反转插入 lzj2。
+  playAudio(choukaAudio).catch((error) => {
+    console.warn("chouka 音效播放失败：", error);
+  });
+
+  // auxTransferCard 是 auxDock 的子元素，因此坐标要以 dock 锚点为基准，不能直接拿 scene 坐标。
+  // 这一点在 PWA 动态视口下尤其重要，否则卡片会整体偏移一个 bs 的位置。
+  const dockRect = auxDock.getBoundingClientRect();
+  const startRect = kpcLayer.getBoundingClientRect();
+  const deviceRect = lzj2Image.getBoundingClientRect();
+  const { cardSlot } = ANIMATION_CONFIG.auxDevice;
+
+  const startLeft = startRect.left - dockRect.left;
+  const startTop = startRect.top - dockRect.top;
+  const startCenterX = startLeft + startRect.width / 2;
+  const startCenterY = startTop + startRect.height / 2;
+  const targetCenterX = deviceRect.left - dockRect.left + deviceRect.width / 2 + cardSlot.x * sceneScale;
+  const targetCenterY = deviceRect.top - dockRect.top + deviceRect.height / 2 + cardSlot.y * sceneScale;
+  const targetWidth = Math.max(1, cardSlot.width * sceneScale);
+  const scale = targetWidth / Math.max(1, startRect.width);
+
+  auxTransferCard.style.left = `${startLeft}px`;
+  auxTransferCard.style.top = `${startTop}px`;
+  auxTransferCard.style.width = `${startRect.width}px`;
+  auxTransferCard.style.height = `${startRect.height}px`;
+  auxTransferCard.style.setProperty("--aux-card-dx", `${targetCenterX - startCenterX}px`);
+  auxTransferCard.style.setProperty("--aux-card-dy", `${targetCenterY - startCenterY}px`);
+  auxTransferCard.style.setProperty("--aux-card-scale", String(scale));
+  auxTransferCard.classList.remove("is-moving", "is-inserted");
+  auxTransferCard.classList.add("is-visible");
+  cardBox.classList.add("is-kpc-aux-hidden");
+  void auxTransferCard.offsetWidth;
+
+  requestAnimationFrame(() => auxTransferCard.classList.add("is-moving"));
+
+  clearTimeout(auxTransferTimer);
+  auxTransferTimer = setTimeout(() => {
+    auxTransferInProgress = false;
+    auxCardInserted = true;
+    scene.classList.add("is-aux-card-inserted");
+    auxDock?.classList.add("is-card-inserted");
+    auxTransferCard.classList.add("is-inserted");
+    auxTransferTimer = 0;
+  }, cardSlot.duration * 1000 + 40);
+  return true;
 }
 
 function resetCardGesture() {
@@ -759,6 +936,7 @@ function resetToCard() {
   stopAudio(kacaAudio);
   stopAudio(charuAudio);
   stopAudio(choukaAudio);
+  resetAuxDevice();
   ydMusicInUse = false;
   insertionAudioInUse = false;
   charuFinished = true;
@@ -776,9 +954,9 @@ function resetToCard() {
   resetCardGesture();
 
   scene.classList.add("is-resetting");
-  scene.classList.remove("show-final-background", "show-bg4", "show-bg5", "show-bg3", "show-lq", "is-shattering");
+  scene.classList.remove("show-final-background", "show-bg4", "show-bg5", "show-bg3", "show-lq", "is-shattering", "is-aux-open", "is-aux-armed", "is-aux-card-inserted");
   belt.classList.remove("is-ready", "is-stage-two", "is-stage-two-front", "is-moving", "is-card-powered", "is-shatter-hidden");
-  cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted", "is-card-powered", "is-extractable", "is-extracting", "is-detached", "is-kpc-ejected");
+  cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted", "is-card-powered", "is-extractable", "is-extracting", "is-detached", "is-kpc-ejected", "is-kpc-aux-hidden");
   lqButtons.forEach((button) => button.classList.remove("is-selected"));
   cardTrigger.classList.remove("is-waiting", "is-hidden", "is-replay-waiting");
   void scene.offsetWidth;
@@ -795,6 +973,10 @@ function completeCardInsertion(pointerId) {
   reinsertReady = false;
   extractedStageTwoReplayActive = false;
   bg4MergeStarted = false;
+  insertionAudioInUse = false;
+  cancelCharuBg4Sync();
+  stopAudio(kacaAudio);
+  stopAudio(charuAudio);
   clearTimeout(bg5TransitionTimer);
   bg5TransitionTimer = 0;
   charuFinished = false;
@@ -879,6 +1061,7 @@ function hideInsertionGlows() {
 
 function handleCharuEnded() {
   hideInsertionGlows();
+  insertionAudioInUse = false;
   if (!flowStarted) return;
   // charu 真正结束后，左下方六张 lq 入场，同时允许把卡盒从腰带里拖出来。
   showLqPanel();
@@ -1015,7 +1198,8 @@ function handleCardPointerEnd(event) {
 
 function handleExtractPointerDown(event) {
   if (!extractReady || !cardBox.classList.contains("is-extractable")) return;
-  if (event.target === kpcLayer && cardBox.classList.contains("is-kpc-ejected")) return;
+  if (auxOpen) return;
+  if (event.target === kpcLayer && (cardBox.classList.contains("is-kpc-ejected") || auxArmed)) return;
 
   event.preventDefault();
   event.stopPropagation();
@@ -1175,10 +1359,13 @@ function playStageTwoAudio() {
 function startStageTwo() {
   if (!flowStarted) return;
 
-  // 第二阶段出现时先绝对锁定反面。翻面计时以“画面出现”为 0 秒点，
-  // 不再依赖 ydmusic.currentTime，确保前 1.5 秒没有任何 Y 轴翻转。
+  // PWA 循环关键修复：每次进入第二阶段都先真正移除 is-stage-two，强制重启
+  // belt-materialize / energy-aura / water-roll。否则第二圈 class 没变化，Safari 不会重播波浪 CSS 动画。
   cancelStageTwoAudioSync();
-  belt.classList.remove("is-stage-two-front", "is-moving");
+  cancelAnimationFrame(rippleAnimationFrame);
+  waterDisplacement.setAttribute("scale", "0");
+  belt.classList.remove("is-stage-two", "is-stage-two-front", "is-moving");
+  void belt.offsetWidth;
   belt.classList.add("is-ready", "is-stage-two");
   runWaterRipple(performance.now());
 
@@ -1316,9 +1503,11 @@ cardBox.addEventListener("pointercancel", handleExtractPointerEnd);
 cardBox.addEventListener("contextmenu", (event) => event.preventDefault());
 lqButtons.forEach((button) => button.addEventListener("click", selectLqCard));
 kpcLayer.addEventListener("pointerdown", (event) => {
-  if (cardBox.classList.contains("is-kpc-ejected")) event.stopPropagation();
+  if (cardBox.classList.contains("is-kpc-ejected") || auxArmed) event.stopPropagation();
 });
 kpcLayer.addEventListener("click", playChoukaFromKpc);
+bsButton?.addEventListener("click", toggleAuxDock);
+lzjButton?.addEventListener("click", handleLzjClick);
 bg4Center.addEventListener("animationend", finishBg4Merge);
 bg4Center.addEventListener("webkitAnimationEnd", finishBg4Merge);
 applyPhoneLayout();
@@ -1326,7 +1515,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=57", { updateViaCache: "none" })
+      .register("./sw.js?v=58", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

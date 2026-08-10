@@ -1,11 +1,11 @@
-// Ryuki v57: PWA/iPhone-first Canvas shatter + repeatable extract/replay/reinsert loop
-const CACHE_NAME = "ryuki-pwa-v57-canvas-shatter-loop";
+// Ryuki v58: PWA loop fixes + BS/LZJ auxiliary card-processing branch
+const CACHE_NAME = "ryuki-pwa-v58-loop-aux-device";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=57",
-  "./style.css?v=57",
-  "./script.js?v=57",
+  "./manifest.webmanifest?v=58",
+  "./style.css?v=58",
+  "./script.js?v=58",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -17,6 +17,11 @@ const APP_SHELL = [
   "./assets/images/lq4.png",
   "./assets/images/lq5.png",
   "./assets/images/lq6.png",
+  "./assets/images/bs.png",
+  "./assets/images/lzj.png",
+  "./assets/images/lzj2.png",
+  "./assets/images/lzj3.png",
+  "./assets/images/lyfg.png",
   "./assets/images/ydbg.png",
   "./assets/images/ydup.png",
   "./assets/images/yddown.png",

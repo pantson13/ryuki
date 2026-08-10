@@ -1,4 +1,4 @@
-/* Ryuki v55: LQ6 + extracted card can replay stage two */
+/* Ryuki v58: repeat-stage fixes + BS/LZJ auxiliary card-processing branch */
 
 :root {
   color-scheme: dark;
@@ -54,6 +54,22 @@ body {
   --lq-gap-y: 25px;
   --lq-entry: 420px;
   --lq-duration: 0.45s;
+  --bs-x: 520px;
+  --bs-y: 330px;
+  --bs-width: 150px;
+  --lzj-slide-x: -310px;
+  --lzj-offset-y: 0px;
+  --lzj-width: 330px;
+  --lzj-duration: 0.42s;
+  --lzj3-x: 0px;
+  --lzj3-y: 0px;
+  --lzj3-width: 330px;
+  --aux-card-duration: 0.62s;
+  --lyfg-x: 210px;
+  --lyfg-y: 330px;
+  --lyfg-width: 360px;
+  --lyfg-duration: 1s;
+  --aux-lq-blur: 7px;
   --card-extract-x: 0px;
   --card-extract-y: 0px;
   --kpc-slide-x: -260px;
@@ -479,7 +495,20 @@ body {
   transform:
     translate(-50%, -50%)
     translate3d(var(--kpc-x), var(--kpc-y), 0);
-  transition: transform var(--kpc-slide-duration) cubic-bezier(0.2, 0.72, 0.2, 1);
+  transition:
+    transform var(--kpc-slide-duration) cubic-bezier(0.2, 0.72, 0.2, 1),
+    opacity 0.16s linear;
+}
+
+.scene.is-aux-armed .card-middle {
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.card-box.is-kpc-aux-hidden .card-middle {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .card-box.is-kpc-ejected .card-middle {
@@ -708,6 +737,7 @@ body {
   row-gap: var(--lq-gap-y);
   transform: translate3d(var(--lq-x), var(--lq-y), 0);
   pointer-events: none;
+  transition: filter 0.22s ease-out;
 }
 
 .lq-card {
@@ -758,6 +788,193 @@ body {
 
 .lq-card.is-selected {
   filter: brightness(1.14) drop-shadow(0 0 8px rgb(255 255 255 / 50%));
+}
+
+/* 右侧 BS / LZJ 支线。参数全部由 script.js 顶部 ANIMATION_CONFIG.auxDevice 驱动。 */
+.aux-dock {
+  position: absolute;
+  z-index: 9;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(var(--bs-x), var(--bs-y), 0);
+  transition: opacity 0.2s linear;
+}
+
+.scene.show-lq .aux-dock {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.bs-button,
+.lzj-button {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.bs-button {
+  z-index: 7;
+  top: 0;
+  left: 0;
+  width: var(--bs-width);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+}
+
+.bs-button img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.lzj-image,
+.lzj-cover,
+.lzj-button {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--lzj-width);
+  opacity: 0;
+  pointer-events: none;
+  transform:
+    translate3d(calc(-50% + 0px), calc(-50% + var(--lzj-offset-y)), 0);
+  transition:
+    transform var(--lzj-duration) cubic-bezier(0.2, 0.72, 0.2, 1),
+    opacity 0.16s linear;
+}
+
+.lzj-image { z-index: 2; }
+.lzj-image-active { opacity: 0; }
+
+.lzj-cover {
+  z-index: 5;
+  width: var(--lzj3-width);
+  transform:
+    translate3d(
+      calc(-50% + var(--lzj3-x)),
+      calc(-50% + var(--lzj-offset-y) + var(--lzj3-y)),
+      0
+    );
+}
+
+.lzj-button {
+  z-index: 6;
+  aspect-ratio: 1 / 1;
+  cursor: pointer;
+}
+
+.scene.is-aux-open .lzj-image,
+.scene.is-aux-open .lzj-button {
+  opacity: 1;
+  pointer-events: auto;
+  transform:
+    translate3d(
+      calc(-50% + var(--lzj-slide-x)),
+      calc(-50% + var(--lzj-offset-y)),
+      0
+    );
+}
+
+.scene.is-aux-open .lzj-image-active {
+  opacity: 0;
+}
+
+.scene.is-aux-open .lzj-cover {
+  transform:
+    translate3d(
+      calc(-50% + var(--lzj-slide-x) + var(--lzj3-x)),
+      calc(-50% + var(--lzj-offset-y) + var(--lzj3-y)),
+      0
+    );
+}
+
+.scene.is-aux-armed .lzj-image-default,
+.scene.is-aux-card-inserted .lzj-image-default {
+  opacity: 0;
+}
+
+.scene.is-aux-armed .lzj-image-active,
+.scene.is-aux-card-inserted .lzj-image-active {
+  opacity: 1;
+}
+
+.scene.is-aux-armed .lzj-cover,
+.scene.is-aux-card-inserted .lzj-cover {
+  opacity: 1;
+  pointer-events: none;
+}
+
+.scene.is-aux-open .lq-panel {
+  filter: blur(var(--aux-lq-blur));
+  pointer-events: none;
+}
+
+.scene.is-aux-open .lq-card {
+  pointer-events: none;
+}
+
+.aux-transfer-card {
+  position: absolute;
+  z-index: 4;
+  display: block;
+  opacity: 0;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  transform: translate3d(0, 0, 0) rotateY(0deg) scale(1);
+  transition:
+    transform var(--aux-card-duration) cubic-bezier(0.2, 0.75, 0.2, 1),
+    opacity 0.12s linear;
+  will-change: transform, opacity;
+}
+
+.aux-transfer-card.is-visible {
+  opacity: 1;
+}
+
+.aux-transfer-card.is-moving,
+.aux-transfer-card.is-inserted {
+  transform:
+    translate3d(var(--aux-card-dx), var(--aux-card-dy), 0)
+    rotateY(180deg)
+    scale(var(--aux-card-scale));
+}
+
+.aux-lyfg {
+  position: absolute;
+  z-index: 13;
+  top: 50%;
+  left: 50%;
+  display: block;
+  width: var(--lyfg-width);
+  height: auto;
+  opacity: 0;
+  pointer-events: none;
+  transform:
+    translate(-50%, -50%)
+    translate3d(var(--lyfg-x), var(--lyfg-y), 0);
+}
+
+.aux-lyfg.is-active {
+  animation: lyfg-flash var(--lyfg-duration) linear both;
+}
+
+@keyframes lyfg-flash {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  72% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 @keyframes bg5-white-flash {
