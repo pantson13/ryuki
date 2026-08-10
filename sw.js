@@ -1,11 +1,11 @@
-// Ryuki v52: right-only extraction + mirror-shatter cache
-const CACHE_NAME = "ryuki-pwa-v52-right-shatter";
+// Ryuki v54: right-only extraction + iPhone-safe mirror-shatter cache
+const CACHE_NAME = "ryuki-pwa-v54-ios-safe-shatter";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=52",
-  "./style.css?v=52",
-  "./script.js?v=52",
+  "./manifest.webmanifest?v=54",
+  "./style.css?v=54",
+  "./script.js?v=54",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

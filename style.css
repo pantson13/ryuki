@@ -1,4 +1,4 @@
-/* Ryuki v52: right-only card extraction + mirror-shatter bg3/belt disappearance */
+/* Ryuki v53: right-only extraction + iPhone-safe mirror shatter */
 
 :root {
   color-scheme: dark;
@@ -667,15 +667,17 @@ body {
   transition: none;
 }
 
-/* 卡盒向右抽出成功时：bg3 + 腰带镜面碎裂退场。 */
+/* 卡盒向右抽出成功时：bg3 + 腰带镜面碎裂退场。
+ * iPhone/Safari 稳定版：clip-path 只负责切片，外层只做 2D transform。
+ * 避免 WebKit 对 clip-path + 3D transform + filter 的合成异常。
+ */
 .shatter-overlay {
   position: absolute;
   z-index: 8;
   inset: 0;
-  overflow: hidden;
+  overflow: visible;
   pointer-events: none;
-  perspective: 1100px;
-  perspective-origin: 50% 50%;
+  contain: layout style;
 }
 
 .shatter-fragment,
@@ -684,11 +686,22 @@ body {
   pointer-events: none;
 }
 
+/* 外层只负责飞散动画，不再直接承载 clip-path。 */
 .shatter-fragment {
   opacity: 0;
   transform-origin: 50% 50%;
-  transform-style: preserve-3d;
-  will-change: transform, opacity, filter;
+  will-change: transform, opacity;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* 内层固定切片，避免 clip-path 和 transform 动画落在同一个元素。 */
+.shatter-fragment-clip {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
 }
 
 .shatter-source {
@@ -720,56 +733,58 @@ body {
 }
 
 .shatter-overlay.is-active .shatter-fragment {
-  animation: mirror-shard-fly var(--shatter-duration) cubic-bezier(0.16, 0.72, 0.22, 1) var(--shatter-delay) both;
+  animation: mirror-shard-fly-ios var(--shatter-duration) cubic-bezier(0.16, 0.72, 0.22, 1) var(--shatter-delay) both;
 }
 
 .shatter-crack {
   opacity: 0;
   background:
-    linear-gradient(31deg, transparent 49.4%, rgb(255 255 255 / 88%) 49.8% 50.2%, transparent 50.6%),
-    linear-gradient(-24deg, transparent 49.5%, rgb(255 255 255 / 72%) 49.8% 50.15%, transparent 50.5%),
-    linear-gradient(68deg, transparent 49.55%, rgb(255 255 255 / 55%) 49.85% 50.1%, transparent 50.45%);
+    linear-gradient(31deg, transparent 49.4%, rgb(255 255 255 / 94%) 49.8% 50.2%, transparent 50.6%),
+    linear-gradient(-24deg, transparent 49.5%, rgb(255 255 255 / 80%) 49.8% 50.15%, transparent 50.5%),
+    linear-gradient(68deg, transparent 49.55%, rgb(255 255 255 / 62%) 49.85% 50.1%, transparent 50.45%);
   mix-blend-mode: screen;
-  filter: drop-shadow(0 0 5px rgb(255 255 255 / 72%));
+  will-change: opacity;
 }
 
 .shatter-overlay.is-active .shatter-crack {
-  animation: mirror-crack-flash 0.18s ease-out both;
+  animation: mirror-crack-flash 0.22s ease-out both;
 }
 
-@keyframes mirror-shard-fly {
+@keyframes mirror-shard-fly-ios {
   0% {
     opacity: 1;
-    transform: translate3d(0, 0, 0) rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1);
-    filter: brightness(1.75) drop-shadow(0 0 4px rgb(255 255 255 / 88%));
+    transform: translate(0, 0) rotate(0deg) scale(1);
   }
 
-  14% {
+  12% {
     opacity: 1;
     transform:
-      translate3d(calc(var(--shatter-dx) * 0.08), calc(var(--shatter-dy) * 0.08), 18px)
-      rotateX(calc(var(--shatter-rx) * 0.08))
-      rotateY(calc(var(--shatter-ry) * 0.08))
-      rotateZ(calc(var(--shatter-rz) * 0.08))
-      scale(0.995);
-    filter: brightness(1.35) drop-shadow(0 0 3px rgb(255 255 255 / 64%));
+      translate(calc(var(--shatter-dx) * 0.06), calc(var(--shatter-dy) * 0.06))
+      rotate(calc(var(--shatter-rz) * 0.06))
+      scale(1.015);
+  }
+
+  45% {
+    opacity: 0.88;
+    transform:
+      translate(calc(var(--shatter-dx) * 0.46), calc(var(--shatter-dy) * 0.46))
+      rotate(calc(var(--shatter-rz) * 0.46))
+      scale(0.96);
   }
 
   100% {
     opacity: 0;
     transform:
-      translate3d(var(--shatter-dx), var(--shatter-dy), -90px)
-      rotateX(var(--shatter-rx))
-      rotateY(var(--shatter-ry))
-      rotateZ(var(--shatter-rz))
-      scale(0.84);
-    filter: brightness(0.78) drop-shadow(0 0 1px rgb(255 255 255 / 0%));
+      translate(var(--shatter-dx), var(--shatter-dy))
+      rotate(var(--shatter-rz))
+      scale(0.78);
   }
 }
 
 @keyframes mirror-crack-flash {
   0% { opacity: 0; }
-  22% { opacity: 0.95; }
+  18% { opacity: 1; }
+  58% { opacity: 0.82; }
   100% { opacity: 0; }
 }
 

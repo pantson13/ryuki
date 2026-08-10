@@ -1,4 +1,4 @@
-/* Ryuki v52: right-only card extraction + mirror-shatter disappearance for bg3 and belt */
+/* Ryuki v53: right-only extraction + iPhone-safe 2D mirror shatter for bg3 and belt */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -45,9 +45,9 @@ const ANIMATION_CONFIG = {
   },
   lq: {
     // 五张 lq 在 charu 结束后从界面左侧进入；上排 1/2/3，下排 4/5。
-    x: -500,
+    x: -400,
     y: 420,
-    cardWidth: 180,
+    cardWidth: 280,
     gapX: 25,
     gapY: 25,
     entryDistance: 420,
@@ -421,22 +421,27 @@ function addShatterFragments(target, kind) {
   if (kind === "belt") cleanSource.querySelector(".card-box")?.remove();
 
   SHATTER_POLYGONS.forEach((polygon, index) => {
-    const [dx, dy, rz, ry, rx] = SHATTER_MOTION[index];
+    const [dx, dy, rz] = SHATTER_MOTION[index];
+
+    // WebKit 稳定结构：外层只做 transform，内层只做 clip-path。
     const fragment = document.createElement("div");
     fragment.className = `shatter-fragment shatter-fragment-${kind}`;
     fragment.style.left = `${rect.left - sceneRect.left}px`;
     fragment.style.top = `${rect.top - sceneRect.top}px`;
     fragment.style.width = `${rect.width}px`;
     fragment.style.height = `${rect.height}px`;
-    fragment.style.clipPath = polygon;
-    fragment.style.webkitClipPath = polygon;
     fragment.style.setProperty("--shatter-dx", `${dx * sceneScale}px`);
     fragment.style.setProperty("--shatter-dy", `${dy * sceneScale}px`);
     fragment.style.setProperty("--shatter-rz", `${rz}deg`);
-    fragment.style.setProperty("--shatter-ry", `${ry}deg`);
-    fragment.style.setProperty("--shatter-rx", `${rx}deg`);
     fragment.style.setProperty("--shatter-delay", `${index * 0.008}s`);
-    fragment.appendChild(cleanSource.cloneNode(true));
+
+    const clipLayer = document.createElement("div");
+    clipLayer.className = "shatter-fragment-clip";
+    clipLayer.style.clipPath = polygon;
+    clipLayer.style.webkitClipPath = polygon;
+    clipLayer.appendChild(cleanSource.cloneNode(true));
+
+    fragment.appendChild(clipLayer);
     shatterOverlay.appendChild(fragment);
   });
 
@@ -1053,7 +1058,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=52", { updateViaCache: "none" })
+      .register("./sw.js?v=53", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
