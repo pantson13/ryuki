@@ -1,11 +1,11 @@
-// Ryuki v49: left/right/front bg4 render above belt; animation timing unchanged
-const CACHE_NAME = "ryuki-pwa-v49-bg4-foreground-layers";
+// Ryuki v50: force-refresh Home Screen/PWA icons; animation/layering unchanged
+const CACHE_NAME = "ryuki-pwa-v50-icon-refresh";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest",
-  "./style.css?v=49",
-  "./script.js?v=49",
+  "./manifest.webmanifest?v=50",
+  "./style.css?v=50",
+  "./script.js?v=50",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -18,10 +18,10 @@ const APP_SHELL = [
   "./assets/images/khzd.png",
   "./assets/images/khfg.png",
   "./assets/images/ydfg.png",
-  "./assets/icons/icon-192.png",
-  "./assets/icons/icon-512.png",
-  "./assets/icons/icon-maskable-512.png",
-  "./assets/icons/apple-touch-icon.png"
+  "./assets/icons/icon-192.png?v=50",
+  "./assets/icons/icon-512.png?v=50",
+  "./assets/icons/icon-maskable-512.png?v=50",
+  "./assets/icons/apple-touch-icon.png?v=50"
 ];
 
 const scopedUrl = (path) => new URL(path, self.location.href).href;

@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Ryuki v49: left/right/front bg4 render above belt; center bg4 and bg3 remain behind belt -->
+<!-- Ryuki v50: PWA/Home Screen icon cache busting; bg4 foreground layering unchanged -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -12,14 +12,14 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="Ryuki 腰带变身动画演示" />
     <title>Ryuki</title>
-    <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="./manifest.webmanifest?v=50" />
+    <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png?v=50" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=50" />
     <link rel="preload" href="./assets/audio/ydmusic.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/audio/kaca.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/audio/charu.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/images/bg4.png" as="image" type="image/png" />
-    <link rel="stylesheet" href="./style.css?v=49" />
+    <link rel="stylesheet" href="./style.css?v=50" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -107,6 +107,6 @@
 
     </main>
 
-    <script src="./script.js?v=49"></script>
+    <script src="./script.js?v=50"></script>
   </body>
 </html>

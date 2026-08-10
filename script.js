@@ -1,4 +1,4 @@
-/* Ryuki v49: left/right/front bg4 are foreground layers above the belt; animation timing unchanged */
+/* Ryuki v50: icon/manifest/SW cache busting; animation logic unchanged */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -16,7 +16,7 @@ const ANIMATION_CONFIG = {
   },
   move: {
     x: 0,
-    y: -950,
+    y: -800,
     duration: 1.2,
   },
   bg3: {
@@ -722,7 +722,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=40", { updateViaCache: "none" })
+      .register("./sw.js?v=50", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
