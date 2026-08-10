@@ -1,11 +1,11 @@
-// Ryuki v36: triple bg4 flip converge
-const CACHE_NAME = "ryuki-pwa-v36-bg4-triple-merge";
+// Ryuki v37: bg4 offscreen flip-in synced to charu
+const CACHE_NAME = "ryuki-pwa-v37-bg4-charu-sync";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=36",
-  "./script.js?v=36",
+  "./style.css?v=37",
+  "./script.js?v=37",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

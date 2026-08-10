@@ -1,4 +1,4 @@
-/* Ryuki v36: triple bg4 flip converge */
+/* Ryuki v37: bg4 offscreen flip-in synced to charu */
 
 :root {
   color-scheme: dark;
@@ -42,6 +42,7 @@ body {
   --bg3-height-scale: 1;
   --bg3-duration: 1.5s;
   --bg4-spread: 360px;
+  --bg4-entry: 520px;
   --bg4-duration: 3s;
   --card-start-x: 0px;
   --card-start-y: 500px;
@@ -597,7 +598,7 @@ body {
   0% {
     opacity: 1;
     transform:
-      translateX(calc(-50% - var(--bg4-spread)))
+      translateX(calc(-50% - var(--bg4-entry)))
       rotateY(0deg)
       scaleY(var(--bg3-height-scale));
   }
@@ -624,6 +625,7 @@ body {
     opacity: 1;
     transform:
       translateX(-50%)
+      translateY(calc(-1 * var(--bg4-entry)))
       rotateY(0deg)
       scaleY(var(--bg3-height-scale));
   }
@@ -632,6 +634,7 @@ body {
     opacity: 1;
     transform:
       translateX(-50%)
+      translateY(0)
       rotateY(378deg)
       scaleY(var(--bg3-height-scale));
   }
@@ -640,6 +643,7 @@ body {
     opacity: 0;
     transform:
       translateX(-50%)
+      translateY(0)
       rotateY(540deg)
       scaleY(var(--bg3-height-scale));
   }
@@ -649,7 +653,7 @@ body {
   0% {
     opacity: 1;
     transform:
-      translateX(calc(-50% + var(--bg4-spread)))
+      translateX(calc(-50% + var(--bg4-entry)))
       rotateY(0deg)
       scaleY(var(--bg3-height-scale));
   }

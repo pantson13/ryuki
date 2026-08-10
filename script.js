@@ -1,4 +1,4 @@
-/* Ryuki v36: triple bg4 flip converge */
+/* Ryuki v37: bg4 enters from offscreen, synced to charu 01s20f */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -23,8 +23,13 @@ const ANIMATION_CONFIG = {
     duration: 1.5,
   },
   bg4: {
+    // 三张 bg4 的画面内分布位置；最后再向中心汇合。
     spread: 360,
+    // 起始位置放到画面外，左右两张从两侧进入，中间一张从上方进入。
+    entryDistance: 1400,
     duration: 3,
+    // charu 时间码：01秒20帧。按 30fps 解释，即 1.6667 秒。
+    startTimecode: { seconds: 1, frames: 20, fps: 30 },
   },
   beltLayers: {
     up: { x: -20, y: 0 },
@@ -95,6 +100,7 @@ let insertionAudioFallback = 0;
 let insertionTimer = 0;
 let charuFinished = true;
 let bg4MergeStarted = false;
+let charuBg4SyncFrame = 0;
 let pointerStart = { x: 0, y: 0 };
 let dragOrigin = { x: 0, y: 0 };
 let cardDragPosition = { x: ANIMATION_CONFIG.card.start.x, y: ANIMATION_CONFIG.card.start.y };
@@ -136,6 +142,7 @@ function applyPhoneLayout() {
   scene.style.setProperty("--bg3-height-scale", String(bg3.height / 100));
   scene.style.setProperty("--bg3-duration", `${bg3.duration}s`);
   scene.style.setProperty("--bg4-spread", `${bg4.spread * scale}px`);
+  scene.style.setProperty("--bg4-entry", `${bg4.entryDistance * scale}px`);
   scene.style.setProperty("--bg4-duration", `${bg4.duration}s`);
   scene.style.setProperty("--card-start-x", `${card.start.x * scale}px`);
   scene.style.setProperty("--card-start-y", `${card.start.y * scale}px`);
@@ -226,6 +233,41 @@ function playAudio(audio) {
   return playPromise instanceof Promise ? playPromise : Promise.resolve();
 }
 
+function cancelCharuBg4Sync() {
+  if (charuBg4SyncFrame) {
+    cancelAnimationFrame(charuBg4SyncFrame);
+    charuBg4SyncFrame = 0;
+  }
+}
+
+function getBg4CharuStartTime() {
+  const { seconds, frames, fps } = ANIMATION_CONFIG.bg4.startTimecode;
+  return seconds + frames / fps;
+}
+
+function startCharuBg4Sync() {
+  cancelCharuBg4Sync();
+  const triggerTime = getBg4CharuStartTime();
+
+  const syncToCharu = () => {
+    if (!flowStarted || bg4MergeStarted || charuAudio.ended) {
+      charuBg4SyncFrame = 0;
+      return;
+    }
+
+    // 直接读取 charu 的真实播放进度，避免 setTimeout 因音频启动延迟而导致画面抢跑。
+    if (!charuAudio.paused && charuAudio.currentTime >= triggerTime) {
+      charuBg4SyncFrame = 0;
+      startBg4Merge();
+      return;
+    }
+
+    charuBg4SyncFrame = requestAnimationFrame(syncToCharu);
+  };
+
+  charuBg4SyncFrame = requestAnimationFrame(syncToCharu);
+}
+
 function primeAudio(audio, isInUse) {
   audio.muted = true;
   const playPromise = audio.play();
@@ -275,6 +317,7 @@ function resetToCard() {
   clearTimeout(insertionAudioFallback);
   insertionAudioFallback = 0;
   cancelAnimationFrame(rippleAnimationFrame);
+  cancelCharuBg4Sync();
   waterDisplacement.setAttribute("scale", "0");
   stopAudio(kh1Audio);
   stopAudio(ydMusicAudio);
@@ -334,7 +377,7 @@ function completeCardInsertion(pointerId) {
     // 插入位移开始的同一帧立即显示 ydfg / khfg，不再等待插入动画完成。
     cardBox.classList.add("is-card-powered");
     belt.classList.add("is-card-powered");
-    startBg4Merge();
+    // bg4 不在插卡瞬间启动；等 charu 真正播放到 01秒20帧 再进场。
     insertionAudioFallback = setTimeout(playInsertionAudio, 80);
 
     insertionTimer = setTimeout(() => {
@@ -382,10 +425,15 @@ function playInsertionAudio() {
   charuAudio.muted = false;
 
   const playCharuImmediately = () => {
-    playAudio(charuAudio).catch((error) => {
-      console.warn("charu 音效播放失败：", error);
-      hideInsertionGlows();
-    });
+    playAudio(charuAudio)
+      .then(() => {
+        // 从 charu 的真实播放时间 01秒20帧 开始 bg4 进场。
+        startCharuBg4Sync();
+      })
+      .catch((error) => {
+        console.warn("charu 音效播放失败：", error);
+        hideInsertionGlows();
+      });
   };
 
   // 插卡位移开始时先同步启动 kaca；kaca 确认开始后立刻启动 charu，不等待 kaca 播完。
