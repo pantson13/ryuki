@@ -24,7 +24,7 @@ const ANIMATION_CONFIG = {
   },
   bg4: {
     travel: 800,
-    duration: 1.25,
+    duration: 3,
   },
   beltLayers: {
     up: { x: -20, y: 0 },
