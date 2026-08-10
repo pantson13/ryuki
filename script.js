@@ -1,4 +1,4 @@
-/* Ryuki v29: insert-synced kaca, then immediate charu */
+/* Ryuki v30: keep the original background until card insertion starts */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -312,6 +312,8 @@ function completeCardInsertion(pointerId) {
   requestAnimationFrame(() => {
     if (!flowStarted) return;
 
+    // 卡盒确认进入凹槽后，背景与插卡位移在同一绘制帧开始变化。
+    scene.classList.add("show-final-background");
     cardBox.classList.remove("is-handoff");
     cardBox.classList.add("is-inserting");
     insertionAudioFallback = setTimeout(playInsertionAudio, 80);
@@ -462,8 +464,7 @@ function startStageTwo() {
 
       sceneTimers.push(
         setTimeout(() => {
-          scene.classList.add("show-final-background");
-          // 腰带上移完成后即可直接按住拖动卡盒。
+          // 腰带上移完成后只解锁拖动；背景保持不变，等待卡盒插入。
           enableCardDrag();
         }, move.duration * 1000),
       );
@@ -547,7 +548,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=29", { updateViaCache: "none" })
+      .register("./sw.js?v=30", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

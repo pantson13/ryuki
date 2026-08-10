@@ -1,11 +1,11 @@
-// Ryuki v29: insert-synced kaca, then immediate charu
-const CACHE_NAME = "ryuki-pwa-v29-kaca-then-charu-sync";
+// Ryuki v30: keep the original background until card insertion starts
+const CACHE_NAME = "ryuki-pwa-v30-background-on-insert";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=29",
-  "./script.js?v=29",
+  "./style.css?v=30",
+  "./script.js?v=30",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
