@@ -22,11 +22,21 @@ const ANIMATION_CONFIG = {
     down: { x: -25, y: 0 },
   },
   card: {
-    start: { x: 0, y: 1700 },
+    start: { x: 0, y: 500 },
     insert: { x: 0, y: 0 },
     width: 485,
     duration: 1.25,
+    layers: {
+      // kpc：正数向右/向下，width 控制大小（原图宽 437）。
+      middle: { x: 0, y: 0, width: 437 },
+      // khfg：正数向右/向下，width 控制大小（原图宽 339）。
+      glow: { x: 0, y: 0, width: 339 },
+      // khzd：正数向右/向下，width 控制大小（原图宽 485）。
+      cover: { x: 0, y: 0, width: 485 },
+    },
   },
+  // ydfg：正数向右/向下，width 控制大小（原图宽 777）。
+  beltGlow: { x: -25, y: -80, width: 777 },
 };
 
 const PHONE_VIEWPORT = { width: 440, height: 956 };
@@ -61,7 +71,7 @@ function applyPhoneLayout() {
     scene.clientHeight / SOURCE_SCENE.height,
   );
 
-  const { sequenceDuration, move, bg3, beltLayers, card } = ANIMATION_CONFIG;
+  const { sequenceDuration, move, bg3, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
 
   scene.style.setProperty("--belt-width", `${SOURCE_BELT_WIDTH * scale}px`);
   scene.style.setProperty("--final-x", `${move.x * scale}px`);
@@ -77,6 +87,18 @@ function applyPhoneLayout() {
   scene.style.setProperty("--card-insert-y", `${card.insert.y * scale}px`);
   scene.style.setProperty("--card-width", `${card.width * scale}px`);
   scene.style.setProperty("--card-insert-duration", `${card.duration}s`);
+  scene.style.setProperty("--kpc-x", `${card.layers.middle.x * scale}px`);
+  scene.style.setProperty("--kpc-y", `${card.layers.middle.y * scale}px`);
+  scene.style.setProperty("--kpc-width", `${card.layers.middle.width * scale}px`);
+  scene.style.setProperty("--khfg-x", `${card.layers.glow.x * scale}px`);
+  scene.style.setProperty("--khfg-y", `${card.layers.glow.y * scale}px`);
+  scene.style.setProperty("--khfg-width", `${card.layers.glow.width * scale}px`);
+  scene.style.setProperty("--khzd-x", `${card.layers.cover.x * scale}px`);
+  scene.style.setProperty("--khzd-y", `${card.layers.cover.y * scale}px`);
+  scene.style.setProperty("--khzd-width", `${card.layers.cover.width * scale}px`);
+  scene.style.setProperty("--ydfg-x", `${beltGlow.x * scale}px`);
+  scene.style.setProperty("--ydfg-y", `${beltGlow.y * scale}px`);
+  scene.style.setProperty("--ydfg-width", `${beltGlow.width * scale}px`);
 
   belt.style.setProperty("--sequence-duration", `${sequenceDuration}s`);
   belt.style.setProperty("--move-delay", `${sequenceDuration * MOVE_START_RATIO}s`);

@@ -1,10 +1,10 @@
-const CACHE_NAME = "ryuki-pwa-v18-card-box-insert-glow";
+const CACHE_NAME = "ryuki-pwa-v21-khfg-top-layer";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=18",
-  "./script.js?v=18",
+  "./style.css?v=21",
+  "./script.js?v=21",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

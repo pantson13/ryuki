@@ -42,6 +42,12 @@ body {
   --card-insert-y: 0px;
   --card-width: 485px;
   --card-insert-duration: 1.25s;
+  --kpc-x: 0px;
+  --kpc-y: 0px;
+  --kpc-width: 437px;
+  --khzd-x: 0px;
+  --khzd-y: 0px;
+  --khzd-width: 485px;
   position: relative;
   width: 100vw;
   height: auto;
@@ -304,30 +310,36 @@ body {
   transform: translate(-50%, -50%);
 }
 
-.card-bottom,
-.card-cover {
-  width: 100%;
-}
-
 .card-bottom {
+  width: 100%;
   z-index: 1;
 }
 
 .card-middle {
   z-index: 2;
-  width: 90.103%;
+  width: var(--kpc-width);
+  transform:
+    translate(-50%, -50%)
+    translate3d(var(--kpc-x), var(--kpc-y), 0);
 }
 
 .card-glow {
-  z-index: 3;
-  width: 69.897%;
+  z-index: 5;
+  width: var(--khfg-width);
   opacity: 0;
+  transform:
+    translate(-50%, -50%)
+    translate3d(var(--khfg-x), var(--khfg-y), 0);
   mix-blend-mode: screen;
   filter: saturate(1.3) brightness(1.08);
 }
 
 .card-cover {
   z-index: 4;
+  width: var(--khzd-width);
+  transform:
+    translate(-50%, -50%)
+    translate3d(var(--khzd-x), var(--khzd-y), 0);
 }
 
 .card-box.is-inserted .card-glow {
@@ -347,10 +359,12 @@ body {
   z-index: 5;
   top: 50%;
   left: 50%;
-  width: 69.686%;
+  width: var(--ydfg-width);
   height: auto;
   opacity: 0;
-  transform: translate(-50%, -50%);
+  transform:
+    translate(-50%, -50%)
+    translate3d(var(--ydfg-x), var(--ydfg-y), 0);
   mix-blend-mode: screen;
   filter: saturate(1.18) brightness(1.04);
   pointer-events: none;
