@@ -1,4 +1,4 @@
-/* Ryuki v46: based on v12, stage-two wave amplitude increased and energy gradient opacity reduced to 20% */
+/* Ryuki v47: based on v12, stage-two wave amplitude kept at 170 and energy gradient opacity reduced to 2% */
 
 /*
  * iPhone 16 Pro Max 参数区

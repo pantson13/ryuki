@@ -1,11 +1,11 @@
-// Ryuki v46: based on v12; stage-two wave amplitude increased and gradient opacity reduced to 20%
-const CACHE_NAME = "ryuki-pwa-v46-wave170-opacity20";
+// Ryuki v47: based on v12; stage-two wave amplitude kept at 170 and gradient opacity reduced to 2%
+const CACHE_NAME = "ryuki-pwa-v47-wave170-opacity002";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=46",
-  "./script.js?v=46",
+  "./style.css?v=47",
+  "./script.js?v=47",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
