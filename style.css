@@ -1,4 +1,4 @@
-/* Ryuki v41: stage two holds back face for 1.5s, then flips front until ydmusic ends */
+/* Ryuki v48: adds a fourth bg4 flipping from the foreground into the common merge point */
 
 :root {
   color-scheme: dark;
@@ -43,6 +43,7 @@ body {
   --bg3-duration: 1.5s;
   --bg4-spread: 360px;
   --bg4-entry: 520px;
+  --bg4-front-depth: 650px;
   --bg4-duration: 1.2s;
   --stage-two-wave-duration: 1s;
   --stage-two-flip-duration: 0.42s;
@@ -161,6 +162,10 @@ body {
   z-index: 2;
 }
 
+.character-merge-front {
+  z-index: 3;
+}
+
 .character-merge-right {
   z-index: 1;
 }
@@ -171,6 +176,10 @@ body {
 
 .scene.show-bg4 .character-merge-center {
   animation: bg4-merge-center var(--bg4-duration) linear both;
+}
+
+.scene.show-bg4 .character-merge-front {
+  animation: bg4-merge-front var(--bg4-duration) linear both;
 }
 
 .scene.show-bg4 .character-merge-right {
@@ -631,6 +640,36 @@ body {
       translateX(-50%)
       translateY(0)
       rotateY(864deg)
+      scaleY(var(--bg3-height-scale));
+  }
+}
+
+
+@keyframes bg4-merge-front {
+  0% {
+    opacity: 1;
+    transform:
+      translateX(-50%)
+      translateZ(var(--bg4-front-depth))
+      rotateY(0deg)
+      scaleY(var(--bg3-height-scale));
+  }
+
+  70% {
+    opacity: 1;
+    transform:
+      translateX(-50%)
+      translateZ(0)
+      rotateY(-604.8deg)
+      scaleY(var(--bg3-height-scale));
+  }
+
+  100% {
+    opacity: 0;
+    transform:
+      translateX(-50%)
+      translateZ(0)
+      rotateY(-864deg)
       scaleY(var(--bg3-height-scale));
   }
 }

@@ -1,11 +1,11 @@
-// Ryuki v47: based on v12; stage-two wave amplitude kept at 170 and gradient opacity reduced to 2%
-const CACHE_NAME = "ryuki-pwa-v47-wave170-opacity002";
+// Ryuki v48: adds fourth foreground bg4 depth-flip route; keeps wave170 and gradient opacity 2%
+const CACHE_NAME = "ryuki-pwa-v48-bg4-front-depth";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=47",
-  "./script.js?v=47",
+  "./style.css?v=48",
+  "./script.js?v=48",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

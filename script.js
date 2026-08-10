@@ -1,4 +1,4 @@
-/* Ryuki v47: based on v12, stage-two wave amplitude kept at 170 and energy gradient opacity reduced to 2% */
+/* Ryuki v48: adds a fourth foreground bg4 depth-flip route; merge timing stays 1.2s */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -27,7 +27,7 @@ const ANIMATION_CONFIG = {
     duration: 1.5,
   },
   bg4: {
-    // 三张 bg4 的画面内分布位置；最后再向中心汇合。
+    // 四张 bg4：左/上/右 + 一张从屏幕正前方沿深度方向反转进入；最后向中心汇合。
     spread: 360,
     // 起始位置放到画面外，左右两张从两侧进入，中间一张从上方进入。
     entryDistance: 1400,
@@ -419,7 +419,7 @@ function finishBg4Merge(event) {
   if (event && event.animationName !== "bg4-merge-center") return;
   if (!flowStarted || !bg4MergeStarted || scene.classList.contains("show-bg3")) return;
 
-  // 三张 bg4 完成反转并在中心收拢消失后，立即显示合成后的 bg3。
+  // 四张 bg4 完成反转并在中心收拢消失后，立即显示合成后的 bg3。
   scene.classList.remove("show-bg4");
   scene.classList.add("show-bg3");
 }
