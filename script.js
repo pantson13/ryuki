@@ -1,4 +1,4 @@
-/* Ryuki v53: right-only extraction + iPhone-safe 2D mirror shatter for bg3 and belt */
+/* Ryuki v55: LQ6 + extracted card tap replays stage two, keeping extracted card position */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -44,7 +44,7 @@ const ANIMATION_CONFIG = {
     duration: 0.72,
   },
   lq: {
-    // 五张 lq 在 charu 结束后从界面左侧进入；上排 1/2/3，下排 4/5。
+    // 六张 lq 在 charu 结束后从界面左侧进入；上排 1/2/3，下排 4/5/6。
     x: -400,
     y: 420,
     cardWidth: 280,
@@ -166,6 +166,9 @@ let extractReady = false;
 let isExtracting = false;
 let extractPointerId = null;
 let cardWasExtracted = false;
+let extractedStageTwoReplayActive = false;
+let suppressExtractedCardClick = false;
+let externalCardPointerTravel = 0;
 let extractPointerStart = { x: 0, y: 0 };
 let extractOrigin = { x: 0, y: 0 };
 let cardExtractPosition = { x: 0, y: 0 };
@@ -570,6 +573,8 @@ function resetToCard() {
   isExtracting = false;
   extractPointerId = null;
   cardWasExtracted = false;
+  extractedStageTwoReplayActive = false;
+  suppressExtractedCardClick = false;
   setCardExtractPosition(0, 0);
   flowStarted = false;
   resetCardGesture();
@@ -674,7 +679,7 @@ function hideInsertionGlows() {
 function handleCharuEnded() {
   hideInsertionGlows();
   if (!flowStarted) return;
-  // charu 真正结束后，左下方五张 lq 入场，同时允许把卡盒从腰带里拖出来。
+  // charu 真正结束后，左下方六张 lq 入场，同时允许把卡盒从腰带里拖出来。
   showLqPanel();
   enableCardExtraction();
 }
@@ -714,14 +719,20 @@ function handleCardTransitionStart(event) {
   }
 }
 
-function enableCardDrag() {
+function enableCardDrag(options = {}) {
+  const preservePosition = options.preservePosition ?? cardWasExtracted;
   dragReady = true;
   isDragging = false;
   parallelReached = false;
-  setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
+  if (!preservePosition) {
+    setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
+  }
   cardTrigger.classList.remove("is-waiting");
   cardTrigger.classList.add("is-draggable");
-  cardTrigger.setAttribute("aria-label", "按住并拖动卡盒至腰带右侧，再插入凹槽");
+  cardTrigger.setAttribute(
+    "aria-label",
+    cardWasExtracted ? "点击卡盒重新启动第二阶段；也可继续拖动" : "按住并拖动卡盒至腰带右侧，再插入凹槽",
+  );
 }
 
 function handleCardPointerDown(event) {
@@ -731,6 +742,7 @@ function handleCardPointerDown(event) {
   event.stopPropagation();
   activePointerId = event.pointerId;
   pointerStart = { x: event.clientX, y: event.clientY };
+  externalCardPointerTravel = 0;
   dragOrigin = { ...cardDragPosition };
   isDragging = true;
   cardTrigger.classList.add("is-dragging");
@@ -742,6 +754,7 @@ function handleCardPointerMove(event) {
 
   const deltaX = event.clientX - pointerStart.x;
   const deltaY = event.clientY - pointerStart.y;
+  externalCardPointerTravel = Math.max(externalCardPointerTravel, Math.hypot(deltaX, deltaY));
 
   event.preventDefault();
   const nextX = Math.max(
@@ -785,6 +798,14 @@ function handleCardPointerEnd(event) {
   isDragging = false;
   activePointerId = null;
   cardTrigger.classList.remove("is-dragging");
+
+  // 抽出后的卡盒既可拖又可点：明显拖动后抑制紧跟着产生的 click，避免误启动第二阶段。
+  if (cardWasExtracted && externalCardPointerTravel > 8) {
+    suppressExtractedCardClick = true;
+    setTimeout(() => {
+      suppressExtractedCardClick = false;
+    }, 0);
+  }
 }
 
 function handleExtractPointerDown(event) {
@@ -817,6 +838,7 @@ function completeCardExtraction(pointerId) {
   extractReady = false;
   isExtracting = false;
   cardWasExtracted = true;
+  extractedStageTwoReplayActive = false;
 
   if (pointerId !== null && cardBox.hasPointerCapture?.(pointerId)) {
     cardBox.releasePointerCapture(pointerId);
@@ -831,6 +853,7 @@ function completeCardExtraction(pointerId) {
   cardBox.classList.add("is-detached");
   cardTrigger.classList.remove("is-hidden", "is-ready", "is-waiting", "is-dragging");
   cardTrigger.classList.add("is-draggable");
+  cardTrigger.setAttribute("aria-label", "点击卡盒重新启动第二阶段；也可继续拖动");
   dragReady = true;
   activePointerId = null;
   parallelReached = false;
@@ -890,7 +913,9 @@ function finishStageTwo() {
   sceneTimers.push(
     setTimeout(() => {
       // ydmusic 真正结束后完成上移，再解锁卡盒拖动。
-      enableCardDrag();
+      // 若这是抽出卡盒后的第二阶段重播，保持卡盒当前坐标，不把它瞬移回初始位置。
+      enableCardDrag({ preservePosition: cardWasExtracted });
+      extractedStageTwoReplayActive = false;
     }, move.duration * 1000),
   );
 }
@@ -968,8 +993,35 @@ function finishFirstStage() {
   startStageTwo();
 }
 
+function replayStageTwoFromExtractedCard(event) {
+  if (!flowStarted || !cardWasExtracted || extractedStageTwoReplayActive) return;
+  if (suppressExtractedCardClick) return;
+
+  event?.preventDefault();
+  event?.stopPropagation();
+  extractedStageTwoReplayActive = true;
+
+  // 清掉上一次碎裂的残留并重新显示腰带。默认背景保持不变，抽出的卡盒留在当前位置。
+  clearMirrorShatter();
+  hideLqPanel();
+  scene.classList.remove("show-bg4", "show-bg5", "show-bg3", "show-final-background", "is-shattering");
+  belt.classList.remove("is-moving", "is-card-powered", "is-stage-two-front", "is-shatter-hidden");
+  cardBox.classList.remove("is-card-powered", "is-kpc-ejected");
+
+  stopAudio(ydMusicAudio);
+  ydMusicInUse = false;
+  startStageTwo();
+}
+
 function startFromCard(event) {
   event?.stopPropagation();
+
+  // 卡盒已经从腰带抽出后，再点击同一张卡盒，直接重新播放第二阶段。
+  if (cardWasExtracted && cardTrigger.classList.contains("is-draggable")) {
+    replayStageTwoFromExtractedCard(event);
+    return;
+  }
+
   if (flowStarted || !cardTrigger.classList.contains("is-ready")) {
     return;
   }
@@ -1058,7 +1110,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=53", { updateViaCache: "none" })
+      .register("./sw.js?v=55", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

@@ -1,11 +1,11 @@
-// Ryuki v54: right-only extraction + iPhone-safe mirror-shatter cache
-const CACHE_NAME = "ryuki-pwa-v54-ios-safe-shatter";
+// Ryuki v55: LQ6 + extracted-card stage-two replay cache
+const CACHE_NAME = "ryuki-pwa-v55-lq6-stage2-replay";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest?v=54",
-  "./style.css?v=54",
-  "./script.js?v=54",
+  "./style.css?v=55",
+  "./script.js?v=55",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -16,6 +16,7 @@ const APP_SHELL = [
   "./assets/images/lq3.png",
   "./assets/images/lq4.png",
   "./assets/images/lq5.png",
+  "./assets/images/lq6.png",
   "./assets/images/ydbg.png",
   "./assets/images/ydup.png",
   "./assets/images/yddown.png",
