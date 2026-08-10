@@ -1,4 +1,4 @@
-/* Ryuki v45: removed belt-body warp; stronger stage-two water ripple; 50% gradient and 1.5s back hold preserved */
+/* Ryuki v41: stage two holds back face for 1.5s, then flips front until ydmusic ends */
 
 :root {
   color-scheme: dark;
@@ -544,11 +544,11 @@ body {
 
 @keyframes energy-aura {
   0% {
-    opacity: 0.5;
+    opacity: 0.2;
   }
 
   75% {
-    opacity: 0.44;
+    opacity: 0.16;
   }
 
   100% {
@@ -558,11 +558,11 @@ body {
 
 @keyframes energy-surface {
   0% {
-    opacity: 0.5;
+    opacity: 0.2;
   }
 
   75% {
-    opacity: 0.38;
+    opacity: 0.15;
   }
 
   100% {

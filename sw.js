@@ -1,11 +1,11 @@
-// Ryuki v45: belt-body warp removed; stronger stage-two water ripple; 50% gradient; bg4 timing unchanged
-const CACHE_NAME = "ryuki-pwa-v45-stage2-stronger-wave";
+// Ryuki v46: based on v12; stage-two wave amplitude increased and gradient opacity reduced to 20%
+const CACHE_NAME = "ryuki-pwa-v46-wave170-opacity20";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=43",
-  "./script.js?v=43",
+  "./style.css?v=46",
+  "./script.js?v=46",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
