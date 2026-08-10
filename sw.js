@@ -1,10 +1,11 @@
-const CACHE_NAME = "ryuki-pwa-v22-card-first-stage-two-audio";
+// Ryuki v26: synced stage-two audio + direct card drag
+const CACHE_NAME = "ryuki-pwa-v26-synced-stage-two-direct-drag";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=22",
-  "./script.js?v=22",
+  "./style.css?v=26",
+  "./script.js?v=26",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
