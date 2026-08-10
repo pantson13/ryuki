@@ -1,4 +1,4 @@
-/* Ryuki v40: stage two holds back face for 1s, then flips front until ydmusic ends */
+/* Ryuki v41: stage two holds back face for 1.5s from visual appearance, then flips front until ydmusic ends */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -11,7 +11,7 @@ const ANIMATION_CONFIG = {
   // 第二阶段音效异常时的保底总时长；正常流程以 ydmusic ended 为结束点。
   sequenceDuration: 3.5,
   stageTwo: {
-    backHold: 1,
+    backHold: 1.5,
     flipDuration: 0.42,
   },
   move: {
@@ -31,7 +31,7 @@ const ANIMATION_CONFIG = {
     spread: 360,
     // 起始位置放到画面外，左右两张从两侧进入，中间一张从上方进入。
     entryDistance: 1400,
-    duration: 2,
+    duration: 1.2,
     // charu 播放到 1.00 秒时启动 bg4。
     startTimecode: { seconds: 1, frames: 0, fps: 30 },
   },
@@ -74,7 +74,7 @@ const AUDIO_CONFIG = {
 const PHONE_VIEWPORT = { width: 440, height: 956 };
 const SOURCE_SCENE = { width: 1179, height: 2556 };
 const SOURCE_BELT_WIDTH = 1115;
-const STAGE_TWO_WAVE_DURATION = 1;
+const STAGE_TWO_WAVE_DURATION = 1.5;
 // 第二阶段水波位移峰值；v33 为 30，在 iPhone 上过弱。v34 提高至 72。
 const WATER_MAX_DISPLACEMENT = 72;
 
@@ -601,16 +601,14 @@ function playStageTwoAudio() {
 
   playAudio(ydMusicAudio)
     .then(() => {
-      // 以前一进入第二阶段就开始翻。现在严格读取 ydmusic 的真实进度：
-      // 前 1 秒锁定反面，1.00 秒时才翻到正面。
-      startStageTwoAudioSync();
+      // 翻面时间不再读取 ydmusic.currentTime。
+      // 视觉第二阶段从出现那一刻独立计时，避免音频预解锁造成 currentTime 竞态而提前翻面。
     })
     .catch((error) => {
       console.warn("ydmusic 音效播放失败：", error);
       ydMusicInUse = false;
 
-      // 音效失败时仍给视觉流程一个保底，避免界面永远卡在反面。
-      stageTwoFlipFallback = setTimeout(showStageTwoFront, ANIMATION_CONFIG.stageTwo.backHold * 1000);
+      // 翻面计时已经由 startStageTwo() 启动；这里只保留流程结束兜底。
       stageTwoFinishFallback = setTimeout(finishStageTwo, ANIMATION_CONFIG.sequenceDuration * 1000);
     });
 }
@@ -618,12 +616,19 @@ function playStageTwoAudio() {
 function startStageTwo() {
   if (!flowStarted) return;
 
-  // 第二阶段一开始固定展示反面，只播放 1 秒水波效果。
+  // 第二阶段出现时先绝对锁定反面。翻面计时以“画面出现”为 0 秒点，
+  // 不再依赖 ydmusic.currentTime，确保前 1.5 秒没有任何 Y 轴翻转。
+  cancelStageTwoAudioSync();
   belt.classList.remove("is-stage-two-front", "is-moving");
   belt.classList.add("is-ready", "is-stage-two");
   runWaterRipple(performance.now());
 
-  // 音频已在用户点击时预解锁，这里直接启动，让画面 0 秒点与 ydmusic 尽量一致。
+  stageTwoFlipFallback = setTimeout(
+    showStageTwoFront,
+    ANIMATION_CONFIG.stageTwo.backHold * 1000,
+  );
+
+  // 音效仍在第二阶段出现时启动，但只负责声音和结束点，不再决定翻面起点。
   playStageTwoAudio();
 
   // Safari 极端情况下 play 调用没有正常推进时的启动保底。

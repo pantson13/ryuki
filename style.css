@@ -1,4 +1,4 @@
-/* Ryuki v40: stage two holds back face for 1s, then flips front until ydmusic ends */
+/* Ryuki v41: stage two holds back face for 1.5s, then flips front until ydmusic ends */
 
 :root {
   color-scheme: dark;
@@ -43,7 +43,7 @@ body {
   --bg3-duration: 1.5s;
   --bg4-spread: 360px;
   --bg4-entry: 520px;
-  --bg4-duration: 2s;
+  --bg4-duration: 1.2s;
   --stage-two-wave-duration: 1s;
   --stage-two-flip-duration: 0.42s;
   --card-start-x: 0px;
@@ -486,13 +486,13 @@ body {
 }
 
 .belt.is-stage-two .belt-effect {
-  /* 前 1 秒必须锁死反面，不允许一进入第二阶段就开始翻。 */
+  /* 前 1.5 秒必须锁死反面，不允许一进入第二阶段就开始翻。 */
   transform: rotateY(-180deg);
   transition: none;
 }
 
 .belt.is-stage-two.is-stage-two-front .belt-effect {
-  /* ydmusic 到 1.00 秒时只翻一次到正面，之后保持到音效结束。 */
+  /* 第二阶段画面出现满 1.5 秒后只翻一次到正面，之后保持到音效结束。 */
   transform: rotateY(0deg);
   transition: transform var(--stage-two-flip-duration) cubic-bezier(0.42, 0, 0.22, 1);
 }
@@ -593,7 +593,7 @@ body {
     opacity: 1;
     transform:
       translateX(calc(-50% - var(--bg4-spread)))
-      rotateY(-504deg)
+      rotateY(-604.8deg)
       scaleY(var(--bg3-height-scale));
   }
 
@@ -601,7 +601,7 @@ body {
     opacity: 0;
     transform:
       translateX(-50%)
-      rotateY(-720deg)
+      rotateY(-864deg)
       scaleY(var(--bg3-height-scale));
   }
 }
@@ -621,7 +621,7 @@ body {
     transform:
       translateX(-50%)
       translateY(0)
-      rotateY(504deg)
+      rotateY(604.8deg)
       scaleY(var(--bg3-height-scale));
   }
 
@@ -630,7 +630,7 @@ body {
     transform:
       translateX(-50%)
       translateY(0)
-      rotateY(720deg)
+      rotateY(864deg)
       scaleY(var(--bg3-height-scale));
   }
 }
@@ -648,7 +648,7 @@ body {
     opacity: 1;
     transform:
       translateX(calc(-50% + var(--bg4-spread)))
-      rotateY(504deg)
+      rotateY(604.8deg)
       scaleY(var(--bg3-height-scale));
   }
 
@@ -656,7 +656,7 @@ body {
     opacity: 0;
     transform:
       translateX(-50%)
-      rotateY(720deg)
+      rotateY(864deg)
       scaleY(var(--bg3-height-scale));
   }
 }
