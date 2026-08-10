@@ -1,10 +1,10 @@
-const CACHE_NAME = "ryuki-pwa-v23-ydmusic-audio";
+const CACHE_NAME = "ryuki-pwa-v24-long-press-card-drag";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=22",
-  "./script.js?v=22",
+  "./style.css?v=24",
+  "./script.js?v=24",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

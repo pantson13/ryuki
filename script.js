@@ -4,6 +4,8 @@
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
 const ANIMATION_CONFIG = {
+  // 第一阶段：点击卡盒、播放 kh1，到第二阶段开始前，固定为 3 秒。
+  firstStageDuration: 3,
   // 第二阶段：腰带出现到翻转结束。上移不包含在这 5 秒内。
   sequenceDuration: 5,
   move: {
@@ -27,6 +29,16 @@ const ANIMATION_CONFIG = {
     insert: { x: 0, y: 0 },
     width: 485,
     duration: 1.25,
+    drag: {
+      // 长按达到此时间后，卡盒才开始跟随手指。
+      longPressDuration: 500,
+      cancelDistance: 18,
+      // 先经过腰带右侧的平行位置，再允许插入凹槽。
+      parallel: { x: 360, y: -950, toleranceX: 100, toleranceY: 220 },
+      // 凹槽中心沿用 move + card.insert，只在此范围内判定插入成功。
+      slotTolerance: { x: 140, y: 130 },
+      returnDuration: 0.35,
+    },
     layers: {
       // kpc：正数向右/向下，width 控制大小（原图宽 437）。
       middle: { x: 0, y: 0, width: 437 },
@@ -44,6 +56,7 @@ const ANIMATION_CONFIG = {
 const AUDIO_CONFIG = {
   kh1: "./assets/audio/kh1.mp3",
   ydmusic: "./assets/audio/ydmusic.mp3",
+  charu: "./assets/audio/charu.mp3",
 };
 
 const PHONE_VIEWPORT = { width: 440, height: 956 };
@@ -63,11 +76,24 @@ let rippleAnimationFrame = 0;
 let sceneTimers = [];
 let flowStarted = false;
 let ydMusicInUse = false;
+let charuInUse = false;
+let sceneScale = 1;
+let dragReady = false;
+let isDragging = false;
+let parallelReached = false;
+let activePointerId = null;
+let longPressTimer = 0;
+let returnTimer = 0;
+let pointerStart = { x: 0, y: 0 };
+let dragOrigin = { x: 0, y: 0 };
+let cardDragPosition = { x: ANIMATION_CONFIG.card.start.x, y: ANIMATION_CONFIG.card.start.y };
 
 const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
 const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
+const charuAudio = new Audio(AUDIO_CONFIG.charu);
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
+charuAudio.preload = "auto";
 
 function applyPhoneLayout() {
   // scene 始终保持 iPhone 16 Pro Max 的 440:956 比例。
@@ -83,6 +109,7 @@ function applyPhoneLayout() {
     scene.clientWidth / SOURCE_SCENE.width,
     scene.clientHeight / SOURCE_SCENE.height,
   );
+  sceneScale = scale;
 
   const { sequenceDuration, move, bg3, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
 
@@ -96,6 +123,8 @@ function applyPhoneLayout() {
   scene.style.setProperty("--bg3-duration", `${bg3.duration}s`);
   scene.style.setProperty("--card-start-x", `${card.start.x * scale}px`);
   scene.style.setProperty("--card-start-y", `${card.start.y * scale}px`);
+  scene.style.setProperty("--card-drag-x", `${cardDragPosition.x * scale}px`);
+  scene.style.setProperty("--card-drag-y", `${cardDragPosition.y * scale}px`);
   // 内层卡盒在腰带上移后接棒；减去 move 可让接棒前后保持同一屏幕坐标。
   scene.style.setProperty("--card-nested-start-x", `${(card.start.x - move.x) * scale}px`);
   scene.style.setProperty("--card-nested-start-y", `${(card.start.y - move.y) * scale}px`);
@@ -103,6 +132,7 @@ function applyPhoneLayout() {
   scene.style.setProperty("--card-insert-y", `${card.insert.y * scale}px`);
   scene.style.setProperty("--card-width", `${card.width * scale}px`);
   scene.style.setProperty("--card-insert-duration", `${card.duration}s`);
+  scene.style.setProperty("--card-return-duration", `${card.drag.returnDuration}s`);
   scene.style.setProperty("--kpc-x", `${card.layers.middle.x * scale}px`);
   scene.style.setProperty("--kpc-y", `${card.layers.middle.y * scale}px`);
   scene.style.setProperty("--kpc-width", `${card.layers.middle.width * scale}px`);
@@ -173,29 +203,52 @@ function playAudio(audio) {
   return playPromise instanceof Promise ? playPromise : Promise.resolve();
 }
 
-function primeKh2Audio() {
-  ydMusicInUse = false;
-  ydMusicAudio.muted = true;
-  const playPromise = ydMusicAudio.play();
+function primeAudio(audio, isInUse) {
+  audio.muted = true;
+  const playPromise = audio.play();
 
   if (!(playPromise instanceof Promise)) {
-    ydMusicAudio.pause();
-    ydMusicAudio.currentTime = 0;
-    ydMusicAudio.muted = false;
+    audio.pause();
+    audio.currentTime = 0;
+    audio.muted = false;
     return;
   }
 
   playPromise
     .then(() => {
-      if (!ydMusicInUse) {
-        ydMusicAudio.pause();
-        ydMusicAudio.currentTime = 0;
+      if (!isInUse()) {
+        audio.pause();
+        audio.currentTime = 0;
       }
-      ydMusicAudio.muted = false;
+      audio.muted = false;
     })
     .catch(() => {
-      ydMusicAudio.muted = false;
+      audio.muted = false;
     });
+}
+
+function setCardDragPosition(x, y) {
+  cardDragPosition = { x, y };
+  scene.style.setProperty("--card-drag-x", `${x * sceneScale}px`);
+  scene.style.setProperty("--card-drag-y", `${y * sceneScale}px`);
+}
+
+function clearLongPressTimer() {
+  clearTimeout(longPressTimer);
+  longPressTimer = 0;
+}
+
+function resetCardGesture() {
+  clearLongPressTimer();
+  clearTimeout(returnTimer);
+  returnTimer = 0;
+  dragReady = false;
+  isDragging = false;
+  parallelReached = false;
+  activePointerId = null;
+  cardTrigger.classList.remove("is-draggable", "is-pressing", "is-dragging", "is-returning");
+  cardTrigger.setAttribute("aria-label", "启动卡盒与腰带动画");
+  setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
 }
 
 function resetToCard() {
@@ -204,8 +257,11 @@ function resetToCard() {
   waterDisplacement.setAttribute("scale", "0");
   stopAudio(kh1Audio);
   stopAudio(ydMusicAudio);
+  stopAudio(charuAudio);
   ydMusicInUse = false;
+  charuInUse = false;
   flowStarted = false;
+  resetCardGesture();
 
   scene.classList.add("is-resetting");
   scene.classList.remove("show-final-background", "show-bg3");
@@ -217,22 +273,134 @@ function resetToCard() {
   cardTrigger.classList.add("is-ready");
 }
 
-function insertCard() {
-  // 外层卡盒与腰带内部卡盒在同一屏幕位置无缝接棒，之后才向插槽移动。
-  cardTrigger.classList.remove("is-waiting");
+function completeCardInsertion(pointerId) {
+  if (!dragReady || !isDragging || !parallelReached) return;
+
+  dragReady = false;
+  isDragging = false;
+  clearLongPressTimer();
+
+  if (pointerId !== null && cardTrigger.hasPointerCapture?.(pointerId)) {
+    cardTrigger.releasePointerCapture(pointerId);
+  }
+
+  // 拖到凹槽后，外层卡盒与腰带内部卡盒在同一位置无缝接棒。
+  cardTrigger.classList.remove("is-draggable", "is-pressing", "is-dragging", "is-waiting");
   cardTrigger.classList.add("is-hidden");
-  cardBox.classList.add("is-handoff");
+  cardBox.classList.add("is-handoff", "is-inserted");
   void cardBox.offsetWidth;
   cardBox.classList.remove("is-handoff");
-  cardBox.classList.add("is-inserting");
+  belt.classList.add("is-card-powered");
+  activePointerId = null;
 
-  sceneTimers.push(
-    setTimeout(() => {
-      cardBox.classList.remove("is-inserting");
-      cardBox.classList.add("is-inserted");
-      belt.classList.add("is-card-powered");
-    }, ANIMATION_CONFIG.card.duration * 1000),
+  charuInUse = true;
+  charuAudio.muted = false;
+  playAudio(charuAudio).catch((error) => {
+    console.warn("charu 音效播放失败：", error);
+  });
+}
+
+function enableCardDrag() {
+  dragReady = true;
+  isDragging = false;
+  parallelReached = false;
+  setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
+  cardTrigger.classList.remove("is-waiting");
+  cardTrigger.classList.add("is-draggable");
+  cardTrigger.setAttribute("aria-label", "长按并拖动卡盒至腰带右侧，再插入凹槽");
+}
+
+function returnCardToStart() {
+  isDragging = false;
+  parallelReached = false;
+  activePointerId = null;
+  cardTrigger.classList.remove("is-pressing", "is-dragging");
+  cardTrigger.classList.add("is-returning");
+  setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
+  returnTimer = setTimeout(() => {
+    cardTrigger.classList.remove("is-returning");
+  }, ANIMATION_CONFIG.card.drag.returnDuration * 1000);
+}
+
+function handleCardPointerDown(event) {
+  if (!dragReady || !cardTrigger.classList.contains("is-draggable")) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  clearLongPressTimer();
+  activePointerId = event.pointerId;
+  pointerStart = { x: event.clientX, y: event.clientY };
+  dragOrigin = { ...cardDragPosition };
+  cardTrigger.classList.remove("is-returning");
+  cardTrigger.classList.add("is-pressing");
+
+  longPressTimer = setTimeout(() => {
+    if (!dragReady || activePointerId !== event.pointerId) return;
+    isDragging = true;
+    parallelReached = false;
+    cardTrigger.classList.remove("is-pressing");
+    cardTrigger.classList.add("is-dragging");
+    cardTrigger.setPointerCapture?.(event.pointerId);
+    navigator.vibrate?.(20);
+  }, ANIMATION_CONFIG.card.drag.longPressDuration);
+}
+
+function handleCardPointerMove(event) {
+  if (!dragReady || activePointerId !== event.pointerId) return;
+
+  const deltaX = event.clientX - pointerStart.x;
+  const deltaY = event.clientY - pointerStart.y;
+
+  if (!isDragging) {
+    if (Math.hypot(deltaX, deltaY) > ANIMATION_CONFIG.card.drag.cancelDistance) {
+      clearLongPressTimer();
+      activePointerId = null;
+      cardTrigger.classList.remove("is-pressing");
+    }
+    return;
+  }
+
+  event.preventDefault();
+  const nextX = Math.max(
+    -SOURCE_SCENE.width / 2,
+    Math.min(SOURCE_SCENE.width / 2, dragOrigin.x + deltaX / sceneScale),
   );
+  const nextY = Math.max(
+    -SOURCE_SCENE.height / 2,
+    Math.min(SOURCE_SCENE.height / 2, dragOrigin.y + deltaY / sceneScale),
+  );
+  setCardDragPosition(nextX, nextY);
+
+  const { parallel, slotTolerance } = ANIMATION_CONFIG.card.drag;
+  if (
+    nextX >= parallel.x - parallel.toleranceX &&
+    Math.abs(nextY - parallel.y) <= parallel.toleranceY
+  ) {
+    parallelReached = true;
+  }
+
+  const slotX = ANIMATION_CONFIG.move.x + ANIMATION_CONFIG.card.insert.x;
+  const slotY = ANIMATION_CONFIG.move.y + ANIMATION_CONFIG.card.insert.y;
+  if (
+    parallelReached &&
+    Math.abs(nextX - slotX) <= slotTolerance.x &&
+    Math.abs(nextY - slotY) <= slotTolerance.y
+  ) {
+    setCardDragPosition(slotX, slotY);
+    completeCardInsertion(event.pointerId);
+  }
+}
+
+function handleCardPointerEnd(event) {
+  if (activePointerId !== event.pointerId) return;
+
+  clearLongPressTimer();
+  cardTrigger.classList.remove("is-pressing");
+  if (isDragging && dragReady) {
+    returnCardToStart();
+  } else {
+    activePointerId = null;
+  }
 }
 
 function startStageTwo() {
@@ -257,7 +425,8 @@ function startStageTwo() {
       sceneTimers.push(
         setTimeout(() => {
           scene.classList.add("show-final-background");
-          insertCard();
+          // 腰带上移完成后等待用户长按拖动卡盒，不再自动插入。
+          enableCardDrag();
         }, move.duration * 1000),
       );
     }, sequenceDuration * 1000),
@@ -274,23 +443,23 @@ function startFromCard(event) {
   cardTrigger.classList.remove("is-ready");
   cardTrigger.classList.add("is-waiting");
 
-  // 在 iPhone 的真实点击手势中预解锁 ydmusic，确保 kh1 播放完后仍能自动播放。
-  primeKh2Audio();
-
-  let stageStarted = false;
-  const beginStageOnce = () => {
-    if (stageStarted) return;
-    stageStarted = true;
-    startStageTwo();
-  };
-
-  kh1Audio.addEventListener("ended", beginStageOnce, { once: true });
-  kh1Audio.addEventListener("error", beginStageOnce, { once: true });
+  // 在 iPhone 的真实点击手势中预解锁后续自动音效。
+  ydMusicInUse = false;
+  charuInUse = false;
+  primeAudio(ydMusicAudio, () => ydMusicInUse);
+  primeAudio(charuAudio, () => charuInUse);
 
   playAudio(kh1Audio).catch((error) => {
     console.warn("kh1 音效播放失败：", error);
-    beginStageOnce();
   });
+
+  sceneTimers.push(
+    setTimeout(() => {
+      // 第一阶段严格固定为 3 秒，不受 kh1 文件本身时长影响。
+      stopAudio(kh1Audio);
+      startStageTwo();
+    }, ANIMATION_CONFIG.firstStageDuration * 1000),
+  );
 }
 
 async function waitForSceneImages() {
@@ -311,6 +480,11 @@ waitForSceneImages().then(() => {
 });
 
 cardTrigger.addEventListener("click", startFromCard);
+cardTrigger.addEventListener("pointerdown", handleCardPointerDown);
+cardTrigger.addEventListener("pointermove", handleCardPointerMove);
+cardTrigger.addEventListener("pointerup", handleCardPointerEnd);
+cardTrigger.addEventListener("pointercancel", handleCardPointerEnd);
+cardTrigger.addEventListener("contextmenu", (event) => event.preventDefault());
 belt.addEventListener("click", (event) => {
   if (event.target.closest("#cardBox")) return;
   resetToCard();
