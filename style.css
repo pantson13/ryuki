@@ -1,4 +1,4 @@
-/* Ryuki v44: stronger stage-two belt body distortion; 50% gradient and 1.5s back hold preserved */
+/* Ryuki v45: removed belt-body warp; stronger stage-two water ripple; 50% gradient and 1.5s back hold preserved */
 
 :root {
   color-scheme: dark;
@@ -502,9 +502,7 @@ body {
 }
 
 .belt.is-stage-two .belt-art {
-  animation:
-    belt-materialize var(--stage-two-wave-duration) linear both,
-    belt-wave-warp var(--stage-two-wave-duration) ease-in-out both;
+  animation: belt-materialize var(--stage-two-wave-duration) linear both;
 }
 
 .belt.is-stage-two .belt-effect::before {
@@ -541,33 +539,6 @@ body {
   100% {
     opacity: 1;
     filter: none;
-  }
-}
-
-/* 前 1.5 秒让腰带本体随水波明显扭曲，结束时回到完全正常形态。 */
-@keyframes belt-wave-warp {
-  0% {
-    transform: translateZ(0) skewY(-4deg) scaleX(0.98) scaleY(1.08) rotateZ(-0.7deg);
-  }
-
-  20% {
-    transform: translateZ(0) skewY(5.2deg) scaleX(1.02) scaleY(0.91) rotateZ(1.05deg);
-  }
-
-  42% {
-    transform: translateZ(0) skewY(-6.4deg) scaleX(0.97) scaleY(1.11) rotateZ(-1.3deg);
-  }
-
-  64% {
-    transform: translateZ(0) skewY(5.6deg) scaleX(1.025) scaleY(0.92) rotateZ(1.1deg);
-  }
-
-  82% {
-    transform: translateZ(0) skewY(-3.8deg) scaleX(0.985) scaleY(1.065) rotateZ(-0.65deg);
-  }
-
-  100% {
-    transform: translateZ(0) skewY(0deg) scaleX(1) scaleY(1) rotateZ(0deg);
   }
 }
 

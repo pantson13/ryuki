@@ -1,5 +1,5 @@
-// Ryuki v44: stronger stage-two belt distortion; 50% gradient; bg4 timing unchanged
-const CACHE_NAME = "ryuki-pwa-v44-stage2-wave-warp";
+// Ryuki v45: belt-body warp removed; stronger stage-two water ripple; 50% gradient; bg4 timing unchanged
+const CACHE_NAME = "ryuki-pwa-v45-stage2-stronger-wave";
 const APP_SHELL = [
   "./",
   "./index.html",
