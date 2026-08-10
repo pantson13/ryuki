@@ -1,4 +1,4 @@
-/* Ryuki v35: instant insertion glow and mirrored bg4 merge */
+/* Ryuki v36: triple bg4 flip converge */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -23,7 +23,7 @@ const ANIMATION_CONFIG = {
     duration: 1.5,
   },
   bg4: {
-    travel: 800,
+    spread: 360,
     duration: 3,
   },
   beltLayers: {
@@ -74,7 +74,7 @@ const belt = document.querySelector("#belt");
 const beltEffect = document.querySelector("#beltEffect");
 const cardBox = document.querySelector("#cardBox");
 const cardTrigger = document.querySelector("#cardTrigger");
-const bg4Right = document.querySelector(".character-merge-right");
+const bg4Center = document.querySelector(".character-merge-center");
 const sceneImages = [...scene.querySelectorAll("img")];
 const waterNoise = document.querySelector("#waterNoise");
 const waterDisplacement = document.querySelector("#waterDisplacement");
@@ -135,7 +135,7 @@ function applyPhoneLayout() {
   scene.style.setProperty("--bg3-width", `${bg3.width}%`);
   scene.style.setProperty("--bg3-height-scale", String(bg3.height / 100));
   scene.style.setProperty("--bg3-duration", `${bg3.duration}s`);
-  scene.style.setProperty("--bg4-travel", `${bg4.travel * scale}px`);
+  scene.style.setProperty("--bg4-spread", `${bg4.spread * scale}px`);
   scene.style.setProperty("--bg4-duration", `${bg4.duration}s`);
   scene.style.setProperty("--card-start-x", `${card.start.x * scale}px`);
   scene.style.setProperty("--card-start-y", `${card.start.y * scale}px`);
@@ -358,10 +358,10 @@ function startBg4Merge() {
 }
 
 function finishBg4Merge(event) {
-  if (event && event.animationName !== "bg4-merge-right") return;
+  if (event && event.animationName !== "bg4-merge-center") return;
   if (!flowStarted || !bg4MergeStarted || scene.classList.contains("show-bg3")) return;
 
-  // 两张 bg4 到达卡盒中心的同一帧隐藏，并立即显示合成后的 bg3。
+  // 三张 bg4 完成反转并在中心收拢消失后，立即显示合成后的 bg3。
   scene.classList.remove("show-bg4");
   scene.classList.add("show-bg3");
 }
@@ -600,14 +600,14 @@ beltEffect.addEventListener("animationstart", handleBeltAnimationStart);
 beltEffect.addEventListener("webkitAnimationStart", handleBeltAnimationStart);
 cardBox.addEventListener("transitionstart", handleCardTransitionStart);
 cardBox.addEventListener("webkitTransitionStart", handleCardTransitionStart);
-bg4Right.addEventListener("animationend", finishBg4Merge);
-bg4Right.addEventListener("webkitAnimationEnd", finishBg4Merge);
+bg4Center.addEventListener("animationend", finishBg4Merge);
+bg4Center.addEventListener("webkitAnimationEnd", finishBg4Merge);
 applyPhoneLayout();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=35", { updateViaCache: "none" })
+      .register("./sw.js?v=36", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

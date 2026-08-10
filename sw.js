@@ -1,11 +1,11 @@
-// Ryuki v35: instant insertion glow and mirrored bg4 merge
-const CACHE_NAME = "ryuki-pwa-v35-bg4-merge";
+// Ryuki v36: triple bg4 flip converge
+const CACHE_NAME = "ryuki-pwa-v36-bg4-triple-merge";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=35",
-  "./script.js?v=35",
+  "./style.css?v=36",
+  "./script.js?v=36",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

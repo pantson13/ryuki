@@ -1,4 +1,4 @@
-/* Ryuki v35: instant insertion glow and mirrored bg4 merge */
+/* Ryuki v36: triple bg4 flip converge */
 
 :root {
   color-scheme: dark;
@@ -41,8 +41,8 @@ body {
   --bg3-width: 99%;
   --bg3-height-scale: 1;
   --bg3-duration: 1.5s;
-  --bg4-travel: 800px;
-  --bg4-duration: 0.72s;
+  --bg4-spread: 360px;
+  --bg4-duration: 3s;
   --card-start-x: 0px;
   --card-start-y: 500px;
   --card-drag-x: 0px;
@@ -150,12 +150,28 @@ body {
   will-change: opacity;
 }
 
+.character-merge-left {
+  z-index: 1;
+}
+
+.character-merge-center {
+  z-index: 2;
+}
+
+.character-merge-right {
+  z-index: 1;
+}
+
 .scene.show-bg4 .character-merge-left {
-  animation: bg4-merge-left var(--bg4-duration) cubic-bezier(0.18, 0.78, 0.24, 1) both;
+  animation: bg4-merge-left var(--bg4-duration) linear both;
+}
+
+.scene.show-bg4 .character-merge-center {
+  animation: bg4-merge-center var(--bg4-duration) linear both;
 }
 
 .scene.show-bg4 .character-merge-right {
-  animation: bg4-merge-right var(--bg4-duration) cubic-bezier(0.18, 0.78, 0.24, 1) both;
+  animation: bg4-merge-right var(--bg4-duration) linear both;
 }
 
 .scene.show-bg3 .character-reveal {
@@ -579,44 +595,78 @@ body {
 
 @keyframes bg4-merge-left {
   0% {
-    opacity: 0;
+    opacity: 1;
     transform:
-      translateX(calc(-50% - var(--bg4-travel)))
-      rotateY(-540deg)
+      translateX(calc(-50% - var(--bg4-spread)))
+      rotateY(0deg)
       scaleY(var(--bg3-height-scale));
   }
 
-  10% {
+  70% {
     opacity: 1;
+    transform:
+      translateX(calc(-50% - var(--bg4-spread)))
+      rotateY(-378deg)
+      scaleY(var(--bg3-height-scale));
   }
 
   100% {
+    opacity: 0;
+    transform:
+      translateX(-50%)
+      rotateY(-540deg)
+      scaleY(var(--bg3-height-scale));
+  }
+}
+
+@keyframes bg4-merge-center {
+  0% {
     opacity: 1;
     transform:
       translateX(-50%)
       rotateY(0deg)
+      scaleY(var(--bg3-height-scale));
+  }
+
+  70% {
+    opacity: 1;
+    transform:
+      translateX(-50%)
+      rotateY(378deg)
+      scaleY(var(--bg3-height-scale));
+  }
+
+  100% {
+    opacity: 0;
+    transform:
+      translateX(-50%)
+      rotateY(540deg)
       scaleY(var(--bg3-height-scale));
   }
 }
 
 @keyframes bg4-merge-right {
   0% {
-    opacity: 0;
+    opacity: 1;
     transform:
-      translateX(calc(-50% + var(--bg4-travel)))
-      rotateY(540deg)
+      translateX(calc(-50% + var(--bg4-spread)))
+      rotateY(0deg)
       scaleY(var(--bg3-height-scale));
   }
 
-  10% {
+  70% {
     opacity: 1;
+    transform:
+      translateX(calc(-50% + var(--bg4-spread)))
+      rotateY(378deg)
+      scaleY(var(--bg3-height-scale));
   }
 
   100% {
-    opacity: 1;
+    opacity: 0;
     transform:
       translateX(-50%)
-      rotateY(0deg)
+      rotateY(540deg)
       scaleY(var(--bg3-height-scale));
   }
 }
