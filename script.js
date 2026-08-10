@@ -1,4 +1,4 @@
-/* Ryuki v50: icon/manifest/SW cache busting; animation logic unchanged */
+/* Ryuki v51: bg5 flash transition + lq selector + card extraction + kpc draw audio */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -35,6 +35,20 @@ const ANIMATION_CONFIG = {
     // charu 播放到 1.00 秒时启动 bg4。
     startTimecode: { seconds: 1, frames: 0, fps: 30 },
   },
+  bg5: {
+    // bg4 汇合后，bg5 带白色外发光显示 0.5 秒，再切换 bg3。
+    duration: 0.5,
+  },
+  lq: {
+    // 五张 lq 在 charu 结束后从界面左侧进入；上排 1/2/3，下排 4/5。
+    x: -500,
+    y: 420,
+    cardWidth: 180,
+    gapX: 25,
+    gapY: 25,
+    entryDistance: 420,
+    duration: 0.45,
+  },
   beltLayers: {
     up: { x: -20, y: 0 },
     down: { x: -25, y: 0 },
@@ -44,6 +58,10 @@ const ANIMATION_CONFIG = {
     insert: { x: 0, y: 0 },
     width: 485,
     duration: 1.25,
+    // 点击任意 lq 后，kpc 向左滑出的距离。这里就是你以后自己改的参数。
+    kpcSlideOut: { x: -260, duration: 0.42 },
+    // charu 完成后，卡盒从腰带内拖出超过这个距离就算抽出成功。
+    extract: { threshold: 210 },
     drag: {
       // 先经过腰带右侧的平行位置，再允许插入凹槽。
       parallel: { x: 360, y: -950, toleranceX: 100, toleranceY: 220 },
@@ -52,7 +70,7 @@ const ANIMATION_CONFIG = {
     },
     layers: {
       // kpc：正数向右/向下，width 控制大小（原图宽 437）。
-      middle: { x: 0, y: 0, width: 437 },
+      middle: { x: -20, y: 0, width: 437 },
       // khfg：正数向右/向下，width 控制大小（原图宽 339）。
       glow: { x: 0, y: 0, width: 339 },
       // khzd：正数向右/向下，width 控制大小（原图宽 485）。
@@ -69,6 +87,7 @@ const AUDIO_CONFIG = {
   ydmusic: "./assets/audio/ydmusic.mp3",
   kaca: "./assets/audio/kaca.mp3",
   charu: "./assets/audio/charu.mp3",
+  chouka: "./assets/audio/chouka.mp3",
 };
 
 const PHONE_VIEWPORT = { width: 440, height: 956 };
@@ -84,6 +103,9 @@ const beltEffect = document.querySelector("#beltEffect");
 const cardBox = document.querySelector("#cardBox");
 const cardTrigger = document.querySelector("#cardTrigger");
 const bg4Center = document.querySelector(".character-merge-center");
+const lqPanel = document.querySelector("#lqPanel");
+const lqButtons = [...document.querySelectorAll(".lq-card")];
+const kpcLayer = document.querySelector("#kpcLayer");
 const sceneImages = [...scene.querySelectorAll("img")];
 const waterNoise = document.querySelector("#waterNoise");
 const waterDisplacement = document.querySelector("#waterDisplacement");
@@ -107,7 +129,16 @@ let insertionAudioFallback = 0;
 let insertionTimer = 0;
 let charuFinished = true;
 let bg4MergeStarted = false;
+let bg5TransitionTimer = 0;
 let charuBg4SyncFrame = 0;
+let selectedLq = null;
+let extractReady = false;
+let isExtracting = false;
+let extractPointerId = null;
+let cardWasExtracted = false;
+let extractPointerStart = { x: 0, y: 0 };
+let extractOrigin = { x: 0, y: 0 };
+let cardExtractPosition = { x: 0, y: 0 };
 let pointerStart = { x: 0, y: 0 };
 let dragOrigin = { x: 0, y: 0 };
 let cardDragPosition = { x: ANIMATION_CONFIG.card.start.x, y: ANIMATION_CONFIG.card.start.y };
@@ -116,11 +147,13 @@ const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
 const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
 const kacaAudio = new Audio(AUDIO_CONFIG.kaca);
 const charuAudio = new Audio(AUDIO_CONFIG.charu);
+const choukaAudio = new Audio(AUDIO_CONFIG.chouka);
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
 kacaAudio.preload = "auto";
 charuAudio.preload = "auto";
-[kh1Audio, ydMusicAudio, kacaAudio, charuAudio].forEach((audio) => audio.load());
+choukaAudio.preload = "auto";
+[kh1Audio, ydMusicAudio, kacaAudio, charuAudio, choukaAudio].forEach((audio) => audio.load());
 
 function applyPhoneLayout() {
   // 背景覆盖完整动态视口；前景继续按 iPhone 16 Pro Max 的 440:956
@@ -138,7 +171,7 @@ function applyPhoneLayout() {
   );
   sceneScale = scale;
 
-  const { sequenceDuration, stageTwo, move, bg3, bg4, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
+  const { sequenceDuration, stageTwo, move, bg3, bg4, bg5, lq, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
 
   scene.style.setProperty("--belt-width", `${SOURCE_BELT_WIDTH * scale}px`);
   scene.style.setProperty("--final-x", `${move.x * scale}px`);
@@ -151,6 +184,14 @@ function applyPhoneLayout() {
   scene.style.setProperty("--bg4-spread", `${bg4.spread * scale}px`);
   scene.style.setProperty("--bg4-entry", `${bg4.entryDistance * scale}px`);
   scene.style.setProperty("--bg4-duration", `${bg4.duration}s`);
+  scene.style.setProperty("--bg5-duration", `${bg5.duration}s`);
+  scene.style.setProperty("--lq-x", `${lq.x * scale}px`);
+  scene.style.setProperty("--lq-y", `${lq.y * scale}px`);
+  scene.style.setProperty("--lq-card-width", `${lq.cardWidth * scale}px`);
+  scene.style.setProperty("--lq-gap-x", `${lq.gapX * scale}px`);
+  scene.style.setProperty("--lq-gap-y", `${lq.gapY * scale}px`);
+  scene.style.setProperty("--lq-entry", `${lq.entryDistance * scale}px`);
+  scene.style.setProperty("--lq-duration", `${lq.duration}s`);
   scene.style.setProperty("--card-start-x", `${card.start.x * scale}px`);
   scene.style.setProperty("--card-start-y", `${card.start.y * scale}px`);
   scene.style.setProperty("--card-drag-x", `${cardDragPosition.x * scale}px`);
@@ -165,6 +206,10 @@ function applyPhoneLayout() {
   scene.style.setProperty("--kpc-x", `${card.layers.middle.x * scale}px`);
   scene.style.setProperty("--kpc-y", `${card.layers.middle.y * scale}px`);
   scene.style.setProperty("--kpc-width", `${card.layers.middle.width * scale}px`);
+  scene.style.setProperty("--kpc-slide-x", `${card.kpcSlideOut.x * scale}px`);
+  scene.style.setProperty("--kpc-slide-duration", `${card.kpcSlideOut.duration}s`);
+  scene.style.setProperty("--card-extract-x", `${cardExtractPosition.x * scale}px`);
+  scene.style.setProperty("--card-extract-y", `${cardExtractPosition.y * scale}px`);
   scene.style.setProperty("--khfg-x", `${card.layers.glow.x * scale}px`);
   scene.style.setProperty("--khfg-y", `${card.layers.glow.y * scale}px`);
   scene.style.setProperty("--khfg-width", `${card.layers.glow.width * scale}px`);
@@ -307,6 +352,54 @@ function setCardDragPosition(x, y) {
   scene.style.setProperty("--card-drag-y", `${y * sceneScale}px`);
 }
 
+function setCardExtractPosition(x, y) {
+  cardExtractPosition = { x, y };
+  scene.style.setProperty("--card-extract-x", `${x * sceneScale}px`);
+  scene.style.setProperty("--card-extract-y", `${y * sceneScale}px`);
+}
+
+function hideLqPanel() {
+  scene.classList.remove("show-lq");
+  lqButtons.forEach((button) => button.classList.remove("is-selected"));
+  selectedLq = null;
+  cardBox.classList.remove("is-kpc-ejected");
+}
+
+function showLqPanel() {
+  if (!flowStarted) return;
+  scene.classList.add("show-lq");
+}
+
+function enableCardExtraction() {
+  if (!flowStarted || (!cardBox.classList.contains("is-inserted") && !cardBox.classList.contains("is-inserting"))) return;
+  // 即使 charu 极短、刚好早于插卡 transition 的兜底计时结束，也直接把卡盒锁定到卡槽位置。
+  cardBox.classList.remove("is-inserting", "is-handoff");
+  cardBox.classList.add("is-inserted");
+  extractReady = true;
+  isExtracting = false;
+  extractPointerId = null;
+  setCardExtractPosition(0, 0);
+  cardBox.classList.add("is-extractable");
+}
+
+function selectLqCard(event) {
+  if (!flowStarted || !scene.classList.contains("show-lq")) return;
+  const button = event.currentTarget;
+  selectedLq = button.dataset.lq;
+  lqButtons.forEach((item) => item.classList.toggle("is-selected", item === button));
+  // 任何一张 lq 被选中，都让腰带内的 kpc 按配置距离向左滑出。
+  cardBox.classList.add("is-kpc-ejected");
+}
+
+function playChoukaFromKpc(event) {
+  if (!flowStarted || !cardBox.classList.contains("is-kpc-ejected")) return;
+  event.preventDefault();
+  event.stopPropagation();
+  playAudio(choukaAudio).catch((error) => {
+    console.warn("chouka 音效播放失败：", error);
+  });
+}
+
 function resetCardGesture() {
   clearTimeout(insertionTimer);
   insertionTimer = 0;
@@ -331,6 +424,8 @@ function resetToCard() {
   stageTwoFinishFallback = 0;
   clearTimeout(insertionAudioFallback);
   insertionAudioFallback = 0;
+  clearTimeout(bg5TransitionTimer);
+  bg5TransitionTimer = 0;
   cancelAnimationFrame(rippleAnimationFrame);
   cancelCharuBg4Sync();
   waterDisplacement.setAttribute("scale", "0");
@@ -338,17 +433,25 @@ function resetToCard() {
   stopAudio(ydMusicAudio);
   stopAudio(kacaAudio);
   stopAudio(charuAudio);
+  stopAudio(choukaAudio);
   ydMusicInUse = false;
   insertionAudioInUse = false;
   charuFinished = true;
   bg4MergeStarted = false;
+  selectedLq = null;
+  extractReady = false;
+  isExtracting = false;
+  extractPointerId = null;
+  cardWasExtracted = false;
+  setCardExtractPosition(0, 0);
   flowStarted = false;
   resetCardGesture();
 
   scene.classList.add("is-resetting");
-  scene.classList.remove("show-final-background", "show-bg4", "show-bg3");
+  scene.classList.remove("show-final-background", "show-bg4", "show-bg5", "show-bg3", "show-lq");
   belt.classList.remove("is-ready", "is-stage-two", "is-stage-two-front", "is-moving", "is-card-powered");
-  cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted", "is-card-powered");
+  cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted", "is-card-powered", "is-extractable", "is-extracting", "is-detached", "is-kpc-ejected");
+  lqButtons.forEach((button) => button.classList.remove("is-selected"));
   cardTrigger.classList.remove("is-waiting", "is-hidden");
   void scene.offsetWidth;
   scene.classList.remove("is-resetting");
@@ -360,6 +463,7 @@ function completeCardInsertion(pointerId) {
 
   dragReady = false;
   isDragging = false;
+  cardWasExtracted = false;
   charuFinished = false;
 
   if (pointerId !== null && cardTrigger.hasPointerCapture?.(pointerId)) {
@@ -372,7 +476,9 @@ function completeCardInsertion(pointerId) {
   scene.style.setProperty("--card-handoff-x", `${handoffX * sceneScale}px`);
   scene.style.setProperty("--card-handoff-y", `${handoffY * sceneScale}px`);
 
-  cardBox.classList.remove("is-inserting", "is-inserted", "is-card-powered");
+  cardBox.classList.remove("is-inserting", "is-inserted", "is-card-powered", "is-extractable", "is-extracting", "is-detached", "is-kpc-ejected");
+  setCardExtractPosition(0, 0);
+  hideLqPanel();
   belt.classList.remove("is-card-powered");
   cardBox.classList.add("is-handoff");
   void cardBox.offsetWidth;
@@ -415,19 +521,35 @@ function startBg4Merge() {
   );
 }
 
+function finishBg5Transition() {
+  if (!flowStarted || !scene.classList.contains("show-bg5")) return;
+  scene.classList.remove("show-bg5");
+  scene.classList.add("show-bg3");
+}
+
 function finishBg4Merge(event) {
   if (event && event.animationName !== "bg4-merge-center") return;
-  if (!flowStarted || !bg4MergeStarted || scene.classList.contains("show-bg3")) return;
+  if (!flowStarted || !bg4MergeStarted || scene.classList.contains("show-bg5") || scene.classList.contains("show-bg3")) return;
 
-  // 四张 bg4 完成反转并在中心收拢消失后，立即显示合成后的 bg3。
-  scene.classList.remove("show-bg4");
-  scene.classList.add("show-bg3");
+  // 四张 bg4 完成汇合后先显示腰带后方的 bg5，并带白色外发光 0.5 秒。
+  scene.classList.remove("show-bg4", "show-bg3");
+  scene.classList.add("show-bg5");
+  clearTimeout(bg5TransitionTimer);
+  bg5TransitionTimer = setTimeout(finishBg5Transition, ANIMATION_CONFIG.bg5.duration * 1000);
 }
 
 function hideInsertionGlows() {
   charuFinished = true;
   cardBox.classList.remove("is-card-powered");
   belt.classList.remove("is-card-powered");
+}
+
+function handleCharuEnded() {
+  hideInsertionGlows();
+  if (!flowStarted) return;
+  // charu 真正结束后，左下方五张 lq 入场，同时允许把卡盒从腰带里拖出来。
+  showLqPanel();
+  enableCardExtraction();
 }
 
 function playInsertionAudio() {
@@ -516,6 +638,7 @@ function handleCardPointerMove(event) {
   const slotX = ANIMATION_CONFIG.move.x + ANIMATION_CONFIG.card.insert.x;
   const slotY = ANIMATION_CONFIG.move.y + ANIMATION_CONFIG.card.insert.y;
   if (
+    !cardWasExtracted &&
     parallelReached &&
     Math.abs(nextX - slotX) <= slotTolerance.x &&
     Math.abs(nextY - slotY) <= slotTolerance.y
@@ -535,6 +658,78 @@ function handleCardPointerEnd(event) {
   isDragging = false;
   activePointerId = null;
   cardTrigger.classList.remove("is-dragging");
+}
+
+function handleExtractPointerDown(event) {
+  if (!extractReady || !cardBox.classList.contains("is-extractable")) return;
+  if (event.target === kpcLayer && cardBox.classList.contains("is-kpc-ejected")) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  extractPointerId = event.pointerId;
+  extractPointerStart = { x: event.clientX, y: event.clientY };
+  extractOrigin = { ...cardExtractPosition };
+  isExtracting = true;
+  cardBox.classList.add("is-extracting");
+  cardBox.setPointerCapture?.(event.pointerId);
+}
+
+function handleExtractPointerMove(event) {
+  if (!extractReady || !isExtracting || extractPointerId !== event.pointerId) return;
+  event.preventDefault();
+  event.stopPropagation();
+
+  const deltaX = (event.clientX - extractPointerStart.x) / sceneScale;
+  const deltaY = (event.clientY - extractPointerStart.y) / sceneScale;
+  setCardExtractPosition(extractOrigin.x + deltaX, extractOrigin.y + deltaY);
+}
+
+function completeCardExtraction(pointerId) {
+  extractReady = false;
+  isExtracting = false;
+  cardWasExtracted = true;
+
+  if (pointerId !== null && cardBox.hasPointerCapture?.(pointerId)) {
+    cardBox.releasePointerCapture(pointerId);
+  }
+
+  // 把腰带内部卡盒当前屏幕位置交接给外层 cardTrigger，避免抽出完成时跳位。
+  const externalX = ANIMATION_CONFIG.move.x + ANIMATION_CONFIG.card.insert.x + cardExtractPosition.x;
+  const externalY = ANIMATION_CONFIG.move.y + ANIMATION_CONFIG.card.insert.y + cardExtractPosition.y;
+  setCardDragPosition(externalX, externalY);
+
+  cardBox.classList.remove("is-extracting", "is-extractable", "is-kpc-ejected");
+  cardBox.classList.add("is-detached");
+  cardTrigger.classList.remove("is-hidden", "is-ready", "is-waiting", "is-dragging");
+  cardTrigger.classList.add("is-draggable");
+  dragReady = true;
+  activePointerId = null;
+  parallelReached = false;
+  hideLqPanel();
+
+  // 卡盒真正拖出后只恢复开始时的默认背景；角色层不额外改动。
+  scene.classList.remove("show-final-background");
+}
+
+function handleExtractPointerEnd(event) {
+  if (extractPointerId !== event.pointerId) return;
+
+  if (cardBox.hasPointerCapture?.(event.pointerId)) {
+    cardBox.releasePointerCapture(event.pointerId);
+  }
+
+  const distance = Math.hypot(cardExtractPosition.x, cardExtractPosition.y);
+  cardBox.classList.remove("is-extracting");
+  isExtracting = false;
+  extractPointerId = null;
+
+  if (distance >= ANIMATION_CONFIG.card.extract.threshold) {
+    completeCardExtraction(event.pointerId);
+    return;
+  }
+
+  // 未拖够距离则回到腰带卡槽。
+  setCardExtractPosition(0, 0);
 }
 
 function cancelStageTwoAudioSync() {
@@ -701,7 +896,7 @@ cardTrigger.addEventListener("pointercancel", handleCardPointerEnd);
 cardTrigger.addEventListener("contextmenu", (event) => event.preventDefault());
 kh1Audio.addEventListener("ended", finishFirstStage);
 ydMusicAudio.addEventListener("ended", finishStageTwo);
-charuAudio.addEventListener("ended", hideInsertionGlows);
+charuAudio.addEventListener("ended", handleCharuEnded);
 belt.addEventListener("click", (event) => {
   if (event.target.closest("#cardBox")) return;
   resetToCard();
@@ -715,6 +910,16 @@ window.addEventListener("resize", applyPhoneLayout);
 window.visualViewport?.addEventListener("resize", applyPhoneLayout);
 cardBox.addEventListener("transitionstart", handleCardTransitionStart);
 cardBox.addEventListener("webkitTransitionStart", handleCardTransitionStart);
+cardBox.addEventListener("pointerdown", handleExtractPointerDown);
+cardBox.addEventListener("pointermove", handleExtractPointerMove);
+cardBox.addEventListener("pointerup", handleExtractPointerEnd);
+cardBox.addEventListener("pointercancel", handleExtractPointerEnd);
+cardBox.addEventListener("contextmenu", (event) => event.preventDefault());
+lqButtons.forEach((button) => button.addEventListener("click", selectLqCard));
+kpcLayer.addEventListener("pointerdown", (event) => {
+  if (cardBox.classList.contains("is-kpc-ejected")) event.stopPropagation();
+});
+kpcLayer.addEventListener("click", playChoukaFromKpc);
 bg4Center.addEventListener("animationend", finishBg4Merge);
 bg4Center.addEventListener("webkitAnimationEnd", finishBg4Merge);
 applyPhoneLayout();
@@ -722,7 +927,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=50", { updateViaCache: "none" })
+      .register("./sw.js?v=51", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

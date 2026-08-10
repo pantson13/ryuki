@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Ryuki v50: PWA/Home Screen icon cache busting; bg4 foreground layering unchanged -->
+<!-- Ryuki v51: bg5 flash transition + lq selector + card extraction + kpc draw audio -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -12,14 +12,16 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="Ryuki 腰带变身动画演示" />
     <title>Ryuki</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=50" />
+    <link rel="manifest" href="./manifest.webmanifest?v=51" />
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png?v=50" />
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=50" />
     <link rel="preload" href="./assets/audio/ydmusic.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/audio/kaca.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/audio/charu.mp3" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/chouka.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/images/bg4.png" as="image" type="image/png" />
-    <link rel="stylesheet" href="./style.css?v=50" />
+    <link rel="preload" href="./assets/images/bg5.png" as="image" type="image/png" />
+    <link rel="stylesheet" href="./style.css?v=51" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -60,6 +62,9 @@
         <div class="character-merge character-merge-center">
           <img class="character-merge-image" src="./assets/images/bg4.png" alt="" />
         </div>
+        <div class="character-flash">
+          <img class="character-image character-flash-image" src="./assets/images/bg5.png" alt="" />
+        </div>
         <div class="character-reveal">
           <img class="character-image" src="./assets/images/bg3.png" alt="" />
         </div>
@@ -73,7 +78,7 @@
 
               <button class="card-unit card-box" id="cardBox" type="button" aria-label="卡盒插入腰带">
                 <img class="card-layer card-bottom" src="./assets/images/khdc.png" alt="" />
-                <img class="card-layer card-middle" src="./assets/images/kpc.png" alt="" />
+                <img class="card-layer card-middle" id="kpcLayer" src="./assets/images/kpc.png" alt="" />
                 <img class="card-layer card-glow" src="./assets/images/khfg.png" alt="" />
                 <img class="card-layer card-cover" src="./assets/images/khzd.png" alt="" />
               </button>
@@ -98,6 +103,14 @@
         </div>
       </div>
 
+      <div class="lq-panel" id="lqPanel" aria-label="抽卡选择">
+        <button class="lq-card" type="button" data-lq="1" aria-label="选择 LQ1"><img src="./assets/images/lq1.png" alt="" /></button>
+        <button class="lq-card" type="button" data-lq="2" aria-label="选择 LQ2"><img src="./assets/images/lq2.png" alt="" /></button>
+        <button class="lq-card" type="button" data-lq="3" aria-label="选择 LQ3"><img src="./assets/images/lq3.png" alt="" /></button>
+        <button class="lq-card" type="button" data-lq="4" aria-label="选择 LQ4"><img src="./assets/images/lq4.png" alt="" /></button>
+        <button class="lq-card" type="button" data-lq="5" aria-label="选择 LQ5"><img src="./assets/images/lq5.png" alt="" /></button>
+      </div>
+
       <button class="card-unit card-trigger" id="cardTrigger" type="button" aria-label="启动卡盒与腰带动画">
         <img class="card-layer card-bottom" src="./assets/images/khdc.png" alt="" />
         <img class="card-layer card-middle" src="./assets/images/kpc.png" alt="" />
@@ -107,6 +120,6 @@
 
     </main>
 
-    <script src="./script.js?v=50"></script>
+    <script src="./script.js?v=51"></script>
   </body>
 </html>

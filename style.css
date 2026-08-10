@@ -1,4 +1,4 @@
-/* Ryuki v48: adds a fourth bg4 flipping from the foreground into the common merge point */
+/* Ryuki v51: bg5 flash transition + lq selector + card extraction + kpc draw interaction */
 
 :root {
   color-scheme: dark;
@@ -45,6 +45,18 @@ body {
   --bg4-entry: 520px;
   --bg4-front-depth: 650px;
   --bg4-duration: 1.2s;
+  --bg5-duration: 0.5s;
+  --lq-x: -500px;
+  --lq-y: 420px;
+  --lq-card-width: 180px;
+  --lq-gap-x: 25px;
+  --lq-gap-y: 25px;
+  --lq-entry: 420px;
+  --lq-duration: 0.45s;
+  --card-extract-x: 0px;
+  --card-extract-y: 0px;
+  --kpc-slide-x: -260px;
+  --kpc-slide-duration: 0.42s;
   --stage-two-wave-duration: 1s;
   --stage-two-flip-duration: 0.42s;
   --card-start-x: 0px;
@@ -131,6 +143,7 @@ body {
 }
 
 .character-merge,
+.character-flash,
 .character-reveal {
   position: absolute;
   top: var(--bg3-y);
@@ -156,9 +169,19 @@ body {
   -webkit-user-drag: none;
 }
 
+.character-flash,
 .character-reveal {
   opacity: 0;
-  will-change: opacity;
+  will-change: opacity, filter;
+}
+
+.character-flash {
+  z-index: 3;
+  pointer-events: none;
+}
+
+.scene.show-bg5 .character-flash {
+  animation: bg5-white-flash var(--bg5-duration) linear both;
 }
 
 .character-merge-left {
@@ -202,6 +225,7 @@ body {
 }
 
 .scene.is-resetting .character-merge,
+.scene.is-resetting .character-flash,
 .scene.is-resetting .character-reveal {
   animation: none;
   opacity: 0;
@@ -436,6 +460,16 @@ body {
   transform:
     translate(-50%, -50%)
     translate3d(var(--kpc-x), var(--kpc-y), 0);
+  transition: transform var(--kpc-slide-duration) cubic-bezier(0.2, 0.72, 0.2, 1);
+}
+
+.card-box.is-kpc-ejected .card-middle {
+  transform:
+    translate(-50%, -50%)
+    translate3d(calc(var(--kpc-x) + var(--kpc-slide-x)), var(--kpc-y), 0);
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .card-glow {
@@ -593,6 +627,122 @@ body {
 
   to {
     background-position: -80% 50%, -80% 50%;
+  }
+}
+
+/* charu 完成后，腰带内卡盒可直接拖出。 */
+.card-box.is-extractable {
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  transform:
+    translate(-50%, -50%)
+    translate3d(
+      calc(var(--card-insert-x) + var(--card-extract-x)),
+      calc(var(--card-insert-y) + var(--card-extract-y)),
+      0
+    );
+  transition: transform 0.2s ease-out;
+}
+
+.card-box.is-extracting {
+  cursor: grabbing;
+  transition: none;
+}
+
+.card-box.is-detached {
+  pointer-events: none;
+  opacity: 0;
+  transition: none;
+}
+
+/* 五张 lq：左下方两排，上 1/2/3，下 4/5。 */
+.lq-panel {
+  position: absolute;
+  z-index: 6;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  grid-template-columns: repeat(3, var(--lq-card-width));
+  grid-auto-rows: auto;
+  column-gap: var(--lq-gap-x);
+  row-gap: var(--lq-gap-y);
+  transform: translate3d(var(--lq-x), var(--lq-y), 0);
+  pointer-events: none;
+}
+
+.lq-card {
+  display: block;
+  width: var(--lq-card-width);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  appearance: none;
+  opacity: 0;
+  transform: translate3d(calc(-1 * var(--lq-entry)), 0, 0);
+  transition:
+    opacity var(--lq-duration) ease-out,
+    transform var(--lq-duration) cubic-bezier(0.18, 0.78, 0.24, 1),
+    filter 0.18s linear;
+  cursor: pointer;
+  pointer-events: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lq-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.scene.show-lq .lq-panel {
+  pointer-events: auto;
+}
+
+.scene.show-lq .lq-card {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  pointer-events: auto;
+}
+
+.scene.show-lq .lq-card:nth-child(1) { transition-delay: 0s; }
+.scene.show-lq .lq-card:nth-child(2) { transition-delay: 0.05s; }
+.scene.show-lq .lq-card:nth-child(3) { transition-delay: 0.10s; }
+.scene.show-lq .lq-card:nth-child(4) { transition-delay: 0.15s; }
+.scene.show-lq .lq-card:nth-child(5) { transition-delay: 0.20s; }
+
+.lq-card.is-selected {
+  filter: brightness(1.14) drop-shadow(0 0 8px rgb(255 255 255 / 50%));
+}
+
+@keyframes bg5-white-flash {
+  0% {
+    opacity: 1;
+    filter:
+      drop-shadow(0 0 8px rgb(255 255 255 / 100%))
+      drop-shadow(0 0 24px rgb(255 255 255 / 95%))
+      drop-shadow(0 0 54px rgb(255 255 255 / 72%));
+  }
+
+  72% {
+    opacity: 1;
+    filter:
+      drop-shadow(0 0 14px rgb(255 255 255 / 100%))
+      drop-shadow(0 0 34px rgb(255 255 255 / 92%))
+      drop-shadow(0 0 72px rgb(255 255 255 / 64%));
+  }
+
+  100% {
+    opacity: 0;
+    filter:
+      drop-shadow(0 0 22px rgb(255 255 255 / 55%))
+      drop-shadow(0 0 58px rgb(255 255 255 / 28%));
   }
 }
 

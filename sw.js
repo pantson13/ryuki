@@ -1,15 +1,21 @@
-// Ryuki v50: force-refresh Home Screen/PWA icons; animation/layering unchanged
-const CACHE_NAME = "ryuki-pwa-v50-icon-refresh";
+// Ryuki v51: bg5/lq/chouka feature cache
+const CACHE_NAME = "ryuki-pwa-v51-bg5-lq-chouka";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=50",
-  "./style.css?v=50",
-  "./script.js?v=50",
+  "./manifest.webmanifest?v=51",
+  "./style.css?v=51",
+  "./script.js?v=51",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
   "./assets/images/bg4.png",
+  "./assets/images/bg5.png",
+  "./assets/images/lq1.png",
+  "./assets/images/lq2.png",
+  "./assets/images/lq3.png",
+  "./assets/images/lq4.png",
+  "./assets/images/lq5.png",
   "./assets/images/ydbg.png",
   "./assets/images/ydup.png",
   "./assets/images/yddown.png",
@@ -18,6 +24,7 @@ const APP_SHELL = [
   "./assets/images/khzd.png",
   "./assets/images/khfg.png",
   "./assets/images/ydfg.png",
+  "./assets/audio/chouka.mp3",
   "./assets/icons/icon-192.png?v=50",
   "./assets/icons/icon-512.png?v=50",
   "./assets/icons/icon-maskable-512.png?v=50",
