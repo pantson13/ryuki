@@ -1,11 +1,11 @@
-// Ryuki v27: smooth stage two + retained drag position + synced insertion
-const CACHE_NAME = "ryuki-pwa-v27-smooth-stage-two-synced-insertion";
+// Ryuki v29: insert-synced kaca, then immediate charu
+const CACHE_NAME = "ryuki-pwa-v29-kaca-then-charu-sync";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=27",
-  "./script.js?v=27",
+  "./style.css?v=29",
+  "./script.js?v=29",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

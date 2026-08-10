@@ -1,4 +1,4 @@
-/* Ryuki v27: smooth stage two + retained drag position + synced insertion */
+/* Ryuki v29: insert-synced kaca, then immediate charu */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -8,8 +8,8 @@
 const ANIMATION_CONFIG = {
   // 第一阶段：点击卡盒、播放 kh1，到第二阶段开始前，固定为 3 秒。
   firstStageDuration: 3,
-  // 第二阶段：腰带出现到翻转结束。上移不包含在这 5 秒内。
-  sequenceDuration: 5,
+  // 第二阶段：腰带出现到翻转结束。上移不包含在内；由 5 秒加快至 3.5 秒。
+  sequenceDuration: 3.5,
   move: {
     x: 0,
     y: -950,
@@ -54,6 +54,7 @@ const ANIMATION_CONFIG = {
 const AUDIO_CONFIG = {
   kh1: "./assets/audio/kh1.mp3",
   ydmusic: "./assets/audio/ydmusic.mp3",
+  kaca: "./assets/audio/kaca.mp3",
   charu: "./assets/audio/charu.mp3",
 };
 
@@ -76,7 +77,7 @@ let lastRippleUpdate = 0;
 let sceneTimers = [];
 let flowStarted = false;
 let ydMusicInUse = false;
-let charuInUse = false;
+let insertionAudioInUse = false;
 let sceneScale = 1;
 let dragReady = false;
 let isDragging = false;
@@ -91,11 +92,13 @@ let cardDragPosition = { x: ANIMATION_CONFIG.card.start.x, y: ANIMATION_CONFIG.c
 
 const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
 const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
+const kacaAudio = new Audio(AUDIO_CONFIG.kaca);
 const charuAudio = new Audio(AUDIO_CONFIG.charu);
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
+kacaAudio.preload = "auto";
 charuAudio.preload = "auto";
-[kh1Audio, ydMusicAudio, charuAudio].forEach((audio) => audio.load());
+[kh1Audio, ydMusicAudio, kacaAudio, charuAudio].forEach((audio) => audio.load());
 
 function applyPhoneLayout() {
   // scene 始终保持 iPhone 16 Pro Max 的 440:956 比例。
@@ -264,9 +267,10 @@ function resetToCard() {
   waterDisplacement.setAttribute("scale", "0");
   stopAudio(kh1Audio);
   stopAudio(ydMusicAudio);
+  stopAudio(kacaAudio);
   stopAudio(charuAudio);
   ydMusicInUse = false;
-  charuInUse = false;
+  insertionAudioInUse = false;
   flowStarted = false;
   resetCardGesture();
 
@@ -304,7 +308,7 @@ function completeCardInsertion(pointerId) {
   cardTrigger.classList.add("is-hidden");
   activePointerId = null;
 
-  // 下一绘制帧启动“吸入卡槽”的位移；charu 由 transitionstart 精确跟随。
+  // 下一绘制帧启动“吸入卡槽”的位移；kaca → charu 由 transitionstart 精确跟随。
   requestAnimationFrame(() => {
     if (!flowStarted) return;
 
@@ -321,20 +325,30 @@ function completeCardInsertion(pointerId) {
 }
 
 function playInsertionAudio() {
-  if (!flowStarted || !cardBox.classList.contains("is-inserting") || charuInUse) return;
+  if (!flowStarted || !cardBox.classList.contains("is-inserting") || insertionAudioInUse) return;
 
   clearTimeout(insertionAudioFallback);
   insertionAudioFallback = 0;
-  charuInUse = true;
+  insertionAudioInUse = true;
+  kacaAudio.muted = false;
   charuAudio.muted = false;
-  playAudio(charuAudio).catch((error) => {
-    console.warn("charu 音效播放失败：", error);
+
+  const playCharuImmediately = () => {
+    playAudio(charuAudio).catch((error) => {
+      console.warn("charu 音效播放失败：", error);
+    });
+  };
+
+  // 插卡位移开始时先同步启动 kaca；kaca 确认开始后立刻启动 charu，不等待 kaca 播完。
+  playAudio(kacaAudio).then(playCharuImmediately, (error) => {
+    console.warn("kaca 音效播放失败：", error);
+    playCharuImmediately();
   });
 }
 
 function handleCardTransitionStart(event) {
   if (event.propertyName === "transform" && cardBox.classList.contains("is-inserting")) {
-    // 浏览器确认卡盒位移真正开始的同一时刻启动 charu。
+    // 浏览器确认卡盒位移真正开始的同一时刻启动 kaca，再立即启动 charu。
     playInsertionAudio();
   }
 }
@@ -469,9 +483,10 @@ function startFromCard(event) {
 
   // 在 iPhone 的真实点击手势中预解锁后续自动音效。
   ydMusicInUse = false;
-  charuInUse = false;
+  insertionAudioInUse = false;
   primeAudio(ydMusicAudio, () => ydMusicInUse);
-  primeAudio(charuAudio, () => charuInUse);
+  primeAudio(kacaAudio, () => insertionAudioInUse);
+  primeAudio(charuAudio, () => insertionAudioInUse);
 
   playAudio(kh1Audio).catch((error) => {
     console.warn("kh1 音效播放失败：", error);
@@ -532,7 +547,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=27", { updateViaCache: "none" })
+      .register("./sw.js?v=29", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

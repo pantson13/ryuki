@@ -1,4 +1,4 @@
-/* Ryuki v27: smooth stage two + retained drag position + synced insertion */
+/* Ryuki v29: insert-synced kaca, then immediate charu */
 
 :root {
   color-scheme: dark;
@@ -334,7 +334,6 @@ body {
 .card-trigger.is-dragging {
   cursor: grabbing;
   transition: none;
-  filter: brightness(1.08) drop-shadow(0 0 14px rgb(70 255 155 / 46%));
 }
 
 .card-trigger.is-hidden {
