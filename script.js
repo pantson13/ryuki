@@ -1,4 +1,4 @@
-/* Ryuki v39: bg4 starts at charu 1.0s and merges in 2s */
+/* Ryuki v40: stage two holds back face for 1s, then flips front until ydmusic ends */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -8,8 +8,12 @@
 const ANIMATION_CONFIG = {
   // 第一阶段最长 3 秒；kh1 提前播完时立即进入第二阶段，不再空等。
   firstStageDuration: 3,
-  // 第二阶段：腰带出现到翻转结束。上移不包含在内；由 5 秒加快至 3.5 秒。
+  // 第二阶段音效异常时的保底总时长；正常流程以 ydmusic ended 为结束点。
   sequenceDuration: 3.5,
+  stageTwo: {
+    backHold: 1,
+    flipDuration: 0.42,
+  },
   move: {
     x: 0,
     y: -950,
@@ -70,7 +74,7 @@ const AUDIO_CONFIG = {
 const PHONE_VIEWPORT = { width: 440, height: 956 };
 const SOURCE_SCENE = { width: 1179, height: 2556 };
 const SOURCE_BELT_WIDTH = 1115;
-const WATER_PHASE_RATIO = 0.2;
+const STAGE_TWO_WAVE_DURATION = 1;
 // 第二阶段水波位移峰值；v33 为 30，在 iPhone 上过弱。v34 提高至 72。
 const WATER_MAX_DISPLACEMENT = 72;
 
@@ -96,6 +100,9 @@ let isDragging = false;
 let parallelReached = false;
 let activePointerId = null;
 let stageTwoAudioFallback = 0;
+let stageTwoSyncFrame = 0;
+let stageTwoFlipFallback = 0;
+let stageTwoFinishFallback = 0;
 let insertionAudioFallback = 0;
 let insertionTimer = 0;
 let charuFinished = true;
@@ -131,7 +138,7 @@ function applyPhoneLayout() {
   );
   sceneScale = scale;
 
-  const { sequenceDuration, move, bg3, bg4, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
+  const { sequenceDuration, stageTwo, move, bg3, bg4, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
 
   scene.style.setProperty("--belt-width", `${SOURCE_BELT_WIDTH * scale}px`);
   scene.style.setProperty("--final-x", `${move.x * scale}px`);
@@ -169,6 +176,8 @@ function applyPhoneLayout() {
   scene.style.setProperty("--ydfg-width", `${beltGlow.width * scale}px`);
 
   belt.style.setProperty("--sequence-duration", `${sequenceDuration}s`);
+  belt.style.setProperty("--stage-two-wave-duration", `${stageTwo.backHold}s`);
+  belt.style.setProperty("--stage-two-flip-duration", `${stageTwo.flipDuration}s`);
   belt.style.setProperty("--move-x", `${move.x * scale}px`);
   belt.style.setProperty("--move-y", `${move.y * scale}px`);
   belt.style.setProperty("--move-duration", `${move.duration}s`);
@@ -179,7 +188,7 @@ function applyPhoneLayout() {
 }
 
 function runWaterRipple(startTime) {
-  const waterPhaseDuration = ANIMATION_CONFIG.sequenceDuration * WATER_PHASE_RATIO * 1000;
+  const waterPhaseDuration = STAGE_TWO_WAVE_DURATION * 1000;
   lastRippleUpdate = 0;
 
   function update(now) {
@@ -314,6 +323,12 @@ function resetToCard() {
   clearSceneTimers();
   clearTimeout(stageTwoAudioFallback);
   stageTwoAudioFallback = 0;
+  cancelAnimationFrame(stageTwoSyncFrame);
+  stageTwoSyncFrame = 0;
+  clearTimeout(stageTwoFlipFallback);
+  stageTwoFlipFallback = 0;
+  clearTimeout(stageTwoFinishFallback);
+  stageTwoFinishFallback = 0;
   clearTimeout(insertionAudioFallback);
   insertionAudioFallback = 0;
   cancelAnimationFrame(rippleAnimationFrame);
@@ -332,7 +347,7 @@ function resetToCard() {
 
   scene.classList.add("is-resetting");
   scene.classList.remove("show-final-background", "show-bg4", "show-bg3");
-  belt.classList.remove("is-ready", "is-stage-two", "is-moving", "is-card-powered");
+  belt.classList.remove("is-ready", "is-stage-two", "is-stage-two-front", "is-moving", "is-card-powered");
   cardBox.classList.remove("is-handoff", "is-inserting", "is-inserted", "is-card-powered");
   cardTrigger.classList.remove("is-waiting", "is-hidden");
   void scene.offsetWidth;
@@ -522,6 +537,60 @@ function handleCardPointerEnd(event) {
   cardTrigger.classList.remove("is-dragging");
 }
 
+function cancelStageTwoAudioSync() {
+  if (stageTwoSyncFrame) {
+    cancelAnimationFrame(stageTwoSyncFrame);
+    stageTwoSyncFrame = 0;
+  }
+  clearTimeout(stageTwoFlipFallback);
+  stageTwoFlipFallback = 0;
+  clearTimeout(stageTwoFinishFallback);
+  stageTwoFinishFallback = 0;
+}
+
+function showStageTwoFront() {
+  if (!flowStarted || !belt.classList.contains("is-stage-two")) return;
+  belt.classList.add("is-stage-two-front");
+}
+
+function finishStageTwo() {
+  if (!flowStarted || !belt.classList.contains("is-stage-two") || belt.classList.contains("is-moving")) return;
+
+  cancelStageTwoAudioSync();
+  ydMusicInUse = false;
+  belt.classList.add("is-moving");
+
+  const { move } = ANIMATION_CONFIG;
+  sceneTimers.push(
+    setTimeout(() => {
+      // ydmusic 真正结束后完成上移，再解锁卡盒拖动。
+      enableCardDrag();
+    }, move.duration * 1000),
+  );
+}
+
+function startStageTwoAudioSync() {
+  cancelStageTwoAudioSync();
+  const flipAt = ANIMATION_CONFIG.stageTwo.backHold;
+
+  const syncToYdMusic = () => {
+    if (!flowStarted || !belt.classList.contains("is-stage-two") || ydMusicAudio.ended) {
+      stageTwoSyncFrame = 0;
+      return;
+    }
+
+    if (!ydMusicAudio.paused && ydMusicAudio.currentTime >= flipAt) {
+      stageTwoSyncFrame = 0;
+      showStageTwoFront();
+      return;
+    }
+
+    stageTwoSyncFrame = requestAnimationFrame(syncToYdMusic);
+  };
+
+  stageTwoSyncFrame = requestAnimationFrame(syncToYdMusic);
+}
+
 function playStageTwoAudio() {
   if (!flowStarted || !belt.classList.contains("is-stage-two") || ydMusicInUse) return;
 
@@ -529,42 +598,36 @@ function playStageTwoAudio() {
   stageTwoAudioFallback = 0;
   ydMusicInUse = true;
   ydMusicAudio.muted = false;
-  playAudio(ydMusicAudio).catch((error) => {
-    console.warn("ydmusic 音效播放失败：", error);
-  });
-}
 
-function handleBeltAnimationStart(event) {
-  if (event.animationName === "belt-sequence") {
-    // 浏览器确认腰带动画真实开始的同一时刻启动 ydmusic。
-    playStageTwoAudio();
-  }
+  playAudio(ydMusicAudio)
+    .then(() => {
+      // 以前一进入第二阶段就开始翻。现在严格读取 ydmusic 的真实进度：
+      // 前 1 秒锁定反面，1.00 秒时才翻到正面。
+      startStageTwoAudioSync();
+    })
+    .catch((error) => {
+      console.warn("ydmusic 音效播放失败：", error);
+      ydMusicInUse = false;
+
+      // 音效失败时仍给视觉流程一个保底，避免界面永远卡在反面。
+      stageTwoFlipFallback = setTimeout(showStageTwoFront, ANIMATION_CONFIG.stageTwo.backHold * 1000);
+      stageTwoFinishFallback = setTimeout(finishStageTwo, ANIMATION_CONFIG.sequenceDuration * 1000);
+    });
 }
 
 function startStageTwo() {
   if (!flowStarted) return;
 
-  // kh1 结束（或最长 3 秒保护到点）后立即启动，不再额外等待绘制帧。
+  // 第二阶段一开始固定展示反面，只播放 1 秒水波效果。
+  belt.classList.remove("is-stage-two-front", "is-moving");
   belt.classList.add("is-ready", "is-stage-two");
   runWaterRipple(performance.now());
 
-  // 极少数旧版 Safari 不派发 animationstart 时的保底，不影响正常同步路径。
+  // 音频已在用户点击时预解锁，这里直接启动，让画面 0 秒点与 ydmusic 尽量一致。
+  playStageTwoAudio();
+
+  // Safari 极端情况下 play 调用没有正常推进时的启动保底。
   stageTwoAudioFallback = setTimeout(playStageTwoAudio, 80);
-
-  const { sequenceDuration, move } = ANIMATION_CONFIG;
-  sceneTimers.push(
-    setTimeout(() => {
-      // 第二阶段结束后，才单独执行腰带上移。
-      belt.classList.add("is-moving");
-
-      sceneTimers.push(
-        setTimeout(() => {
-          // 腰带上移完成后只解锁拖动；背景保持不变，等待卡盒插入。
-          enableCardDrag();
-        }, move.duration * 1000),
-      );
-    }, sequenceDuration * 1000),
-  );
 }
 
 function finishFirstStage() {
@@ -632,6 +695,7 @@ cardTrigger.addEventListener("pointerup", handleCardPointerEnd);
 cardTrigger.addEventListener("pointercancel", handleCardPointerEnd);
 cardTrigger.addEventListener("contextmenu", (event) => event.preventDefault());
 kh1Audio.addEventListener("ended", finishFirstStage);
+ydMusicAudio.addEventListener("ended", finishStageTwo);
 charuAudio.addEventListener("ended", hideInsertionGlows);
 belt.addEventListener("click", (event) => {
   if (event.target.closest("#cardBox")) return;
@@ -644,8 +708,6 @@ belt.addEventListener("keydown", (event) => {
 });
 window.addEventListener("resize", applyPhoneLayout);
 window.visualViewport?.addEventListener("resize", applyPhoneLayout);
-beltEffect.addEventListener("animationstart", handleBeltAnimationStart);
-beltEffect.addEventListener("webkitAnimationStart", handleBeltAnimationStart);
 cardBox.addEventListener("transitionstart", handleCardTransitionStart);
 cardBox.addEventListener("webkitTransitionStart", handleCardTransitionStart);
 bg4Center.addEventListener("animationend", finishBg4Merge);
@@ -655,7 +717,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=36", { updateViaCache: "none" })
+      .register("./sw.js?v=40", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

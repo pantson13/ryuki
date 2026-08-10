@@ -1,11 +1,11 @@
-// Ryuki v38: bg4 starts at charu 1.0s with faster flip
-const CACHE_NAME = "ryuki-pwa-v38-bg4-1s-faster-flip";
+// Ryuki v40: stage two back-face wave for 1s, then front until ydmusic ends
+const CACHE_NAME = "ryuki-pwa-v40-stage2-audio-sync";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=38",
-  "./script.js?v=38",
+  "./style.css?v=40",
+  "./script.js?v=40",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

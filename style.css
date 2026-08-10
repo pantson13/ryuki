@@ -1,4 +1,4 @@
-/* Ryuki v39: bg4 starts at charu 1.0s and merges in 2s */
+/* Ryuki v40: stage two holds back face for 1s, then flips front until ydmusic ends */
 
 :root {
   color-scheme: dark;
@@ -44,6 +44,8 @@ body {
   --bg4-spread: 360px;
   --bg4-entry: 520px;
   --bg4-duration: 2s;
+  --stage-two-wave-duration: 1s;
+  --stage-two-flip-duration: 0.42s;
   --card-start-x: 0px;
   --card-start-y: 500px;
   --card-drag-x: 0px;
@@ -484,7 +486,15 @@ body {
 }
 
 .belt.is-stage-two .belt-effect {
-  animation: belt-sequence var(--sequence-duration) linear both;
+  /* 前 1 秒必须锁死反面，不允许一进入第二阶段就开始翻。 */
+  transform: rotateY(-180deg);
+  transition: none;
+}
+
+.belt.is-stage-two.is-stage-two-front .belt-effect {
+  /* ydmusic 到 1.00 秒时只翻一次到正面，之后保持到音效结束。 */
+  transform: rotateY(0deg);
+  transition: transform var(--stage-two-flip-duration) cubic-bezier(0.42, 0, 0.22, 1);
 }
 
 .belt.is-moving {
@@ -492,32 +502,17 @@ body {
 }
 
 .belt.is-stage-two .belt-art {
-  animation: belt-materialize var(--sequence-duration) linear both;
+  animation: belt-materialize var(--stage-two-wave-duration) linear both;
 }
 
 .belt.is-stage-two .belt-effect::before {
-  animation: energy-aura var(--sequence-duration) ease-out both;
+  animation: energy-aura var(--stage-two-wave-duration) ease-out both;
 }
 
 .belt.is-stage-two .belt-effect::after {
   animation:
-    energy-surface var(--sequence-duration) ease-out both,
-    water-roll calc(var(--sequence-duration) * 0.2) linear infinite;
-}
-
-@keyframes belt-sequence {
-  0% {
-    transform: rotateY(-180deg);
-  }
-
-  35% {
-    transform: rotateY(-90deg);
-  }
-
-  70%,
-  100% {
-    transform: rotateY(0deg);
-  }
+    energy-surface var(--stage-two-wave-duration) ease-out both,
+    water-roll var(--stage-two-wave-duration) linear infinite;
 }
 
 @keyframes belt-move-up {
@@ -536,18 +531,11 @@ body {
     filter: url(#waterRipple) saturate(1.35) brightness(1.12);
   }
 
-  20% {
-    opacity: 0.55;
+  82% {
+    opacity: 0.72;
     filter: url(#waterRipple) saturate(1.08) brightness(1.03);
   }
 
-  20.01%,
-  70% {
-    opacity: 0.55;
-    filter: none;
-  }
-
-  74%,
   100% {
     opacity: 1;
     filter: none;
@@ -559,11 +547,10 @@ body {
     opacity: 1;
   }
 
-  12% {
-    opacity: 0.94;
+  75% {
+    opacity: 0.88;
   }
 
-  20%,
   100% {
     opacity: 0;
   }
@@ -574,11 +561,10 @@ body {
     opacity: 0.82;
   }
 
-  12% {
-    opacity: 0.68;
+  75% {
+    opacity: 0.62;
   }
 
-  20%,
   100% {
     opacity: 0;
   }
