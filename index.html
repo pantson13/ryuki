@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Ryuki v48: four bg4 routes; added foreground/depth flip into the same 1.2s merge -->
+<!-- Ryuki v49: left/right/front bg4 render above belt; center bg4 and bg3 remain behind belt -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -19,7 +19,7 @@
     <link rel="preload" href="./assets/audio/kaca.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/audio/charu.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/images/bg4.png" as="image" type="image/png" />
-    <link rel="stylesheet" href="./style.css?v=42" />
+    <link rel="stylesheet" href="./style.css?v=49" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -56,17 +56,8 @@
         <img class="scene-background scene-background-final" src="./assets/images/bg.png" alt="" />
       </div>
 
-      <div class="character-stage" aria-hidden="true">
-        <div class="character-merge character-merge-left">
-          <img class="character-merge-image" src="./assets/images/bg4.png" alt="" />
-        </div>
+      <div class="character-stage character-stage-back" aria-hidden="true">
         <div class="character-merge character-merge-center">
-          <img class="character-merge-image" src="./assets/images/bg4.png" alt="" />
-        </div>
-        <div class="character-merge character-merge-front">
-          <img class="character-merge-image" src="./assets/images/bg4.png" alt="" />
-        </div>
-        <div class="character-merge character-merge-right">
           <img class="character-merge-image" src="./assets/images/bg4.png" alt="" />
         </div>
         <div class="character-reveal">
@@ -95,6 +86,18 @@
         </div>
       </div>
 
+      <div class="character-stage character-stage-front" aria-hidden="true">
+        <div class="character-merge character-merge-left">
+          <img class="character-merge-image" src="./assets/images/bg4.png" alt="" />
+        </div>
+        <div class="character-merge character-merge-front">
+          <img class="character-merge-image" src="./assets/images/bg4.png" alt="" />
+        </div>
+        <div class="character-merge character-merge-right">
+          <img class="character-merge-image" src="./assets/images/bg4.png" alt="" />
+        </div>
+      </div>
+
       <button class="card-unit card-trigger" id="cardTrigger" type="button" aria-label="启动卡盒与腰带动画">
         <img class="card-layer card-bottom" src="./assets/images/khdc.png" alt="" />
         <img class="card-layer card-middle" src="./assets/images/kpc.png" alt="" />
@@ -104,6 +107,6 @@
 
     </main>
 
-    <script src="./script.js?v=42"></script>
+    <script src="./script.js?v=49"></script>
   </body>
 </html>

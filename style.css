@@ -112,7 +112,6 @@ body {
 
 .character-stage {
   position: absolute;
-  z-index: 2;
   top: 50%;
   left: 50%;
   width: var(--belt-width);
@@ -121,6 +120,14 @@ body {
   pointer-events: none;
   perspective: 1200px;
   perspective-origin: 50% 50%;
+}
+
+.character-stage-back {
+  z-index: 2;
+}
+
+.character-stage-front {
+  z-index: 4;
 }
 
 .character-merge,

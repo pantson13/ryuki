@@ -1,4 +1,4 @@
-/* Ryuki v48: adds a fourth foreground bg4 depth-flip route; merge timing stays 1.2s */
+/* Ryuki v49: left/right/front bg4 are foreground layers above the belt; animation timing unchanged */
 
 /*
  * iPhone 16 Pro Max 参数区

@@ -1,11 +1,11 @@
-// Ryuki v48: adds fourth foreground bg4 depth-flip route; keeps wave170 and gradient opacity 2%
-const CACHE_NAME = "ryuki-pwa-v48-bg4-front-depth";
+// Ryuki v49: left/right/front bg4 render above belt; animation timing unchanged
+const CACHE_NAME = "ryuki-pwa-v49-bg4-foreground-layers";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
-  "./style.css?v=48",
-  "./script.js?v=48",
+  "./style.css?v=49",
+  "./script.js?v=49",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
