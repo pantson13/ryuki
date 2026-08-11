@@ -1,11 +1,11 @@
-// Ryuki v66: independently adjustable 4-layer dragon summoner + visible lyfg tuning
-const CACHE_NAME = "ryuki-pwa-v67-kpc-left-extraction-fix";
+// Ryuki v75: KPC front flip + independently adjustable flipped card size
+const CACHE_NAME = "ryuki-pwa-v75-card-slot-debug";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=67",
-  "./style.css?v=67",
-  "./script.js?v=67",
+  "./manifest.webmanifest?v=75",
+  "./style.css?v=75",
+  "./script.js?v=75",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

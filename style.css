@@ -70,6 +70,13 @@ body {
   --lyfg-duration: 1s;
   --lzj-container-x: 0px;
   --lzj-container-y: 0px;
+  --card-slot-x: -38px;
+  --card-slot-y: -26px;
+  --card-slot-width: 316px;
+  --card-slot-height: 163px;
+  --card-slot-card-x: 0px;
+  --card-slot-card-y: 18px;
+  --card-slot-card-width: 280px;
   --aux-lq-blur: 7px;
   --card-extract-x: 0px;
   --card-extract-y: 0px;
@@ -913,13 +920,11 @@ body {
   transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lzj-slide-x) + var(--lyfg-x)), calc(-50% + var(--lzj-container-y) + var(--lyfg-y)), 0);
 }
 
-/* 点击 lzj 后，仅第2层 lzj 下滑；lzj2 / lzj3 / lyfg 位置保持各自参数。 */
+/* 第一次点击 lzj 后，仅第2层 lzj 下滑；第二次点击会清掉 armed/inserted，因此自动回原位。 */
 .scene.is-aux-armed .lzj-image-default,
 .scene.is-aux-card-inserted .lzj-image-default,
-.scene.is-aux-playing .lzj-image-default,
 .scene.is-aux-armed .lzj-button,
-.scene.is-aux-card-inserted .lzj-button,
-.scene.is-aux-playing .lzj-button {
+.scene.is-aux-card-inserted .lzj-button {
   transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lzj-slide-x) + var(--lzj-x)), calc(-50% + var(--lzj-container-y) + var(--lzj-y) + var(--lzj-drop-y)), 0);
 }
 
@@ -929,6 +934,67 @@ body {
 }
 
 .scene.is-aux-open .lq-card {
+  pointer-events: none;
+}
+
+
+/* 调试：直接显示真实的 chaka 命中/裁切区域。位置与 cardSlot 参数完全同步。 */
+.lzj-card-slot-debug {
+  position: absolute;
+  z-index: 7;
+  top: 0;
+  left: 0;
+  width: var(--card-slot-width);
+  height: var(--card-slot-height);
+  box-sizing: border-box;
+  border: 4px solid rgba(255, 56, 56, 0.98);
+  background: rgba(255, 50, 50, 0.12);
+  box-shadow: 0 0 10px rgba(255, 40, 40, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(
+    calc(-50% + var(--lzj-container-x) + var(--lzj-slide-x) + var(--card-slot-x)),
+    calc(-50% + var(--lzj-container-y) + var(--card-slot-y)),
+    0
+  );
+}
+
+.scene.is-aux-open.show-card-slot-debug .lzj-card-slot-debug {
+  opacity: 1;
+}
+
+/* 龙召机有效卡槽：位于 lzj3 与 lzj2 之间，超出红框区域的卡片会被裁切。 */
+.lzj-card-slot-mask {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  width: var(--card-slot-width);
+  height: var(--card-slot-height);
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(
+    calc(-50% + var(--lzj-container-x) + var(--lzj-slide-x) + var(--card-slot-x)),
+    calc(-50% + var(--lzj-container-y) + var(--card-slot-y)),
+    0
+  );
+}
+
+.lzj-card-slot-mask.is-active {
+  opacity: 1;
+}
+
+.lzj-inserted-card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: block;
+  width: var(--card-slot-card-width);
+  height: auto;
+  transform: translate(-50%, -50%) translate3d(var(--card-slot-card-x), var(--card-slot-card-y), 0);
+  user-select: none;
+  -webkit-user-drag: none;
   pointer-events: none;
 }
 
@@ -945,7 +1011,18 @@ body {
   -webkit-user-drag: none;
   user-select: none;
   will-change: left, top, transform, opacity;
-  object-fit: contain;
+}
+
+.aux-transfer-card-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  transform-origin: 50% 50%;
+  backface-visibility: visible;
+  -webkit-backface-visibility: visible;
 }
 
 .aux-transfer-card.is-visible {
@@ -967,21 +1044,13 @@ body {
   pointer-events: none;
 }
 
-/* v65：调位置阶段先强制显示 lyfg。后续把 showForTuning 改 false 即恢复只在读卡时显示。 */
 .scene.show-lyfg-tuning.is-aux-open .aux-lyfg {
   opacity: 1;
 }
 
+/* lyfg 默认隐藏；只由卡片专属音效的真实播放状态控制。 */
 .aux-lyfg.is-active {
   opacity: 1;
-  animation: lyfg-flash var(--lyfg-duration) linear both;
-}
-
-@keyframes lyfg-flash {
-  0% { opacity: 0; }
-  8% { opacity: 1; }
-  92% { opacity: 1; }
-  100% { opacity: 0; }
 }
 
 @keyframes bg5-white-flash {
@@ -1131,6 +1200,12 @@ body {
   pointer-events: none;
 }
 
+/* 卡片确认进入龙召机后，第二次点击必须可靠接收 pointer/click。 */
+.scene.is-aux-card-inserted .lzj-button,
+.lzj-button.is-result-ready {
+  pointer-events: auto !important;
+}
+
 
 /* v63：抽卡阶段不再复制 khzd 到外部高层级。
  * KPC 在完全抽出前始终使用腰带内部原 card-middle，因此原 card-cover / belt layer 的遮挡关系不变。
@@ -1140,23 +1215,22 @@ body {
   display: none !important;
 }
 
-.aux-transfer-card.is-flipping {
-  pointer-events: none;
+.aux-transfer-card-image.is-flip-running {
   animation: aux-kpc-card-flip var(--kpc-flip-duration) cubic-bezier(0.42, 0, 0.2, 1) both;
 }
 
 @keyframes aux-kpc-card-flip {
-  /* 先完成一次翻面，再单独旋转 90° 变成竖向。 */
-  0% { transform: rotateY(0deg) rotateZ(0deg); }
-  34% { transform: rotateY(90deg) rotateZ(0deg); }
-  36% { transform: rotateY(-90deg) rotateZ(0deg); }
-  70% { transform: rotateY(0deg) rotateZ(0deg); }
-  100% { transform: rotateY(0deg) rotateZ(90deg); }
+  0% { transform: rotateY(0deg); }
+  49% { transform: rotateY(90deg); }
+  51% { transform: rotateY(-90deg); }
+  100% { transform: rotateY(0deg); }
 }
 
 .aux-transfer-card.is-flipped {
-  transform: rotateZ(90deg);
+  /* v72：翻面完成后保持正常横向正面，不做任何 Z 轴旋转。 */
+  transform: none;
 }
+
 
 /* 左下角常驻四颗圆形按钮。位置和大小由 script.js 的 sideButtons 参数控制。 */
 .side-controls {

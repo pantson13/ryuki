@@ -80,10 +80,26 @@ const ANIMATION_CONFIG = {
     // showForTuning=true：当前先常亮显示，方便你调位置；之后改 false 即恢复隐藏逻辑。
     lyfg: { x: 8, y: -160, width: 500, duration: 1, showForTuning: false },
 
-    // KPC 手动拖出参数。
+    // 红框卡槽有效区：相对龙召机容器中心。只有卡片中心进入此区域并松手才算插入成功。
+    // 下面默认值按你提供的红框比例估算，可自行微调。
+    cardSlot: {
+      showDebug: false,
+      x: -10,
+      y: -380,
+      width: 400,
+      height: 530,
+      // 插入后卡片在槽内的大小与位置。超出 cardSlot 的部分会被裁切，不会穿帮。
+      cardX: 0,
+      cardY: 18,
+      cardWidth: 280,
+    },
+
+    // KPC 手动拖出参数：完全抽出后播放 chouka，松手只反转成所选卡片正面。
     kpcDrag: {
       dropHitPadding: 24,
       flipDuration: 0.52,
+      // 翻面成所选卡片正面后的宽度；只影响翻面后的卡，不影响从卡盒抽出时的原始尺寸。
+      flippedWidth: 350,
     },
 
     // 龙召机弹出期间，下方 lq 区域虚化强度。
@@ -184,7 +200,10 @@ const lzjButton = document.querySelector("#lzjButton");
 const lzjImage = document.querySelector("#lzjImage");
 const lzj2Image = document.querySelector("#lzj2Image");
 const lzj3Image = document.querySelector("#lzj3Image");
+const lzjCardSlotMask = document.querySelector("#lzjCardSlotMask");
+const lzjInsertedCard = document.querySelector("#lzjInsertedCard");
 const auxTransferCard = document.querySelector("#auxTransferCard");
+const auxTransferCardImage = document.querySelector("#auxTransferCardImage");
 const auxCardCoverMask = document.querySelector("#auxCardCoverMask");
 const cardCoverLayer = cardBox?.querySelector(".card-cover");
 const sideButtons = [...document.querySelectorAll(".side-control-button")];
@@ -351,6 +370,14 @@ function applyPhoneLayout() {
   scene.style.setProperty("--lyfg-y", `${auxDevice.lyfg.y * scale}px`);
   scene.style.setProperty("--lyfg-width", `${auxDevice.lyfg.width * scale}px`);
   scene.style.setProperty("--lyfg-duration", `${auxDevice.lyfg.duration}s`);
+  scene.style.setProperty("--card-slot-x", `${auxDevice.cardSlot.x * scale}px`);
+  scene.style.setProperty("--card-slot-y", `${auxDevice.cardSlot.y * scale}px`);
+  scene.style.setProperty("--card-slot-width", `${auxDevice.cardSlot.width * scale}px`);
+  scene.style.setProperty("--card-slot-height", `${auxDevice.cardSlot.height * scale}px`);
+  scene.style.setProperty("--card-slot-card-x", `${auxDevice.cardSlot.cardX * scale}px`);
+  scene.style.setProperty("--card-slot-card-y", `${auxDevice.cardSlot.cardY * scale}px`);
+  scene.style.setProperty("--card-slot-card-width", `${auxDevice.cardSlot.cardWidth * scale}px`);
+  scene.classList.toggle("show-card-slot-debug", Boolean(auxDevice.cardSlot.showDebug));
   scene.classList.toggle("show-lyfg-tuning", Boolean(auxDevice.lyfg.showForTuning));
   scene.style.setProperty("--aux-lq-blur", `${auxDevice.lqBlur}px`);
   scene.style.setProperty("--card-start-x", `${card.start.x * scale}px`);
@@ -846,30 +873,34 @@ function playSelectedCardVoice() {
   });
 }
 
-function showLyfgDuringAudio(audio) {
-  if (!lyfgImage) return;
-  clearTimeout(lyfgTimer);
-  lyfgTimer = 0;
-  lyfgImage.classList.remove("is-active");
-  // 强制重启动画。
-  void lyfgImage.offsetWidth;
-  lyfgImage.classList.add("is-active");
-
-  const hideLyfg = () => {
-    lyfgImage.classList.remove("is-active");
-    audio?.removeEventListener?.("ended", hideLyfg);
-    if (lyfgTimer) {
-      clearTimeout(lyfgTimer);
-      lyfgTimer = 0;
-    }
-  };
-
-  if (audio) {
-    audio.addEventListener("ended", hideLyfg, { once: true });
+async function playSelectedCardVoiceWithLyfg() {
+  const audio = getSelectedCardVoiceAudio();
+  if (!audio) {
+    lyfgImage?.classList.remove("is-active");
+    return;
   }
 
-  const fallbackMs = Math.max(800, ((audio?.duration && Number.isFinite(audio.duration)) ? audio.duration * 1000 : 0) + 120);
-  lyfgTimer = setTimeout(hideLyfg, fallbackMs);
+  clearTimeout(lyfgTimer);
+  lyfgTimer = 0;
+  lyfgImage?.classList.remove("is-active");
+
+  const hideLyfg = () => {
+    lyfgImage?.classList.remove("is-active");
+    audio.removeEventListener("ended", hideLyfg);
+    audio.removeEventListener("error", hideLyfg);
+  };
+
+  audio.addEventListener("ended", hideLyfg, { once: true });
+  audio.addEventListener("error", hideLyfg, { once: true });
+
+  try {
+    await playAudio(audio);
+    // 只有卡片专属音效真正开始播放后才显示 lyfg。
+    lyfgImage?.classList.add("is-active");
+  } catch (error) {
+    hideLyfg();
+    console.warn(`LQ${selectedLq} 对应卡片音效播放失败：`, error);
+  }
 }
 
 function setAuxKpcPosition(left, top) {
@@ -919,15 +950,18 @@ function resetAuxDevice(options = {}) {
   scene.classList.remove("is-aux-open", "is-aux-armed", "is-aux-card-inserted", "is-aux-playing");
   auxDock?.classList.remove("is-open", "is-armed", "is-card-inserted", "is-playing");
   auxTransferCard?.classList.remove("is-visible", "is-dragging", "is-inserted", "is-fully-extracted", "is-flipping", "is-flipped", "is-consumed");
+  hideInsertedCardInSlot();
+  auxTransferCardImage?.classList.remove("is-flip-running");
+  lzjButton?.classList.remove("is-result-ready");
   auxCardCoverMask?.classList.remove("is-visible");
-  if (auxTransferCard) auxTransferCard.src = "./assets/images/kpc.png";
+  if (auxTransferCardImage) auxTransferCardImage.src = "./assets/images/kpc.png";
   lyfgImage?.classList.remove("is-active");
   if (auxTransferCard) {
     auxTransferCard.style.removeProperty("left");
     auxTransferCard.style.removeProperty("top");
     auxTransferCard.style.removeProperty("width");
     auxTransferCard.style.removeProperty("height");
-  }
+    }
   if (auxCardCoverMask) {
     auxCardCoverMask.style.removeProperty("left");
     auxCardCoverMask.style.removeProperty("top");
@@ -983,23 +1017,28 @@ function handleLzjClick(event) {
   if (!auxCardInserted || auxResultPlayed) return;
 
   auxResultPlayed = true;
+
+  // 第二次点击：先让第2层 lzj 回到未下滑位置，再进入读卡音效状态。
+  // is-aux-playing 只负责读卡 / lyfg，不再参与 lzj 的位置控制。
+  auxArmed = false;
+  auxCardInserted = false;
+  scene.classList.remove("is-aux-armed", "is-aux-card-inserted");
+  auxDock?.classList.remove("is-armed", "is-card-inserted");
+  lzjButton?.classList.remove("is-result-ready");
   scene.classList.add("is-aux-playing");
   auxDock?.classList.add("is-playing");
+
   playAudio(huagai2Audio).catch((error) => {
     console.warn("huagai2 音效播放失败：", error);
   });
 
-  const selectedVoice = getSelectedCardVoiceAudio();
-  showLyfgDuringAudio(selectedVoice);
-  playSelectedCardVoice();
+  playSelectedCardVoiceWithLyfg();
 
   if (auxTransferCard) {
     auxTransferCard.classList.add("is-consumed");
     auxTransferCard.classList.remove("is-inserted");
   }
-  auxCardInserted = false;
-  scene.classList.remove("is-aux-card-inserted");
-  auxDock?.classList.remove("is-card-inserted");
+  hideInsertedCardInSlot();
 }
 
 function getSelectedLqImageSrc() {
@@ -1016,7 +1055,10 @@ function handoffAuxKpcToFloatingCard(event) {
   const left = cardRect.left - dockRect.left;
   const top = cardRect.top - dockRect.top;
 
-  auxTransferCard.src = "./assets/images/kpc.png";
+  if (auxTransferCardImage) auxTransferCardImage.src = "./assets/images/kpc.png";
+  auxTransferCard.classList.remove("is-flipping", "is-flipped");
+  auxTransferCardImage?.classList.remove("is-flip-running");
+  lzjButton?.classList.remove("is-result-ready");
   auxTransferCard.style.width = `${cardRect.width}px`;
   auxTransferCard.style.height = `${cardRect.height}px`;
   setAuxKpcPosition(left, top);
@@ -1026,6 +1068,14 @@ function handoffAuxKpcToFloatingCard(event) {
   // 抽出过程始终由原 card-middle 在原卡盒层级内移动，khzd / 腰带遮挡关系完全不变。
   cardBox.classList.add("is-kpc-aux-hidden");
   auxKpcFullyExtracted = true;
+
+  // v72：只有整张 KPC 真正离开卡盒后才播放 chouka。
+  if (!auxChoukaPlayed) {
+    auxChoukaPlayed = true;
+    playAudio(choukaAudio).catch((error) => {
+      console.warn("chouka 音效播放失败：", error);
+    });
+  }
 
   // iPhone/PWA：在交接瞬间把 pointer capture 从原 KPC 转给浮动 KPC，
   // 避免原图隐藏后 Safari 把本次拖动手势一起丢掉。
@@ -1083,18 +1133,10 @@ function beginAuxKpcDrag(event, fromTransferCard = false) {
   if (!cardBox.classList.contains("is-inserted")) return;
   if (fromTransferCard && !auxKpcFullyExtracted) return;
 
-  const firstPull = !auxKpcHasBeenPulled;
   if (!prepareAuxKpcCard()) return;
 
   event.preventDefault();
   event.stopPropagation();
-
-  if (firstPull && !auxChoukaPlayed) {
-    auxChoukaPlayed = true;
-    playAudio(choukaAudio).catch((error) => {
-      console.warn("chouka 音效播放失败：", error);
-    });
-  }
 
   auxKpcDragging = true;
   auxKpcPointerId = event.pointerId;
@@ -1127,20 +1169,53 @@ function moveAuxKpcDrag(event) {
   setAuxKpcPosition(auxKpcStartPosition.left + dx, auxKpcStartPosition.top + dy);
 }
 
+function getAuxCardSlotRect() {
+  if (!auxDock) return null;
+  const dockRect = auxDock.getBoundingClientRect();
+  const { cardSlot: slot, container } = ANIMATION_CONFIG.auxDevice;
+  const scale = sceneScale || 1;
+  const width = slot.width * scale;
+  const height = slot.height * scale;
+  // 命中区与 CSS 裁切槽使用同一套容器坐标，调 container / slideX 时不会错位。
+  const centerX = dockRect.left + ((container.x || 0) + (container.slideX || 0) + slot.x) * scale;
+  const centerY = dockRect.top + ((container.y || 0) + slot.y) * scale;
+  return {
+    left: centerX - width / 2,
+    right: centerX + width / 2,
+    top: centerY - height / 2,
+    bottom: centerY + height / 2,
+    width,
+    height,
+  };
+}
+
 function isAuxKpcOverLzj() {
-  if (!auxTransferCard || !lzj2Image) return false;
+  if (!auxTransferCard) return false;
   const cardRect = auxTransferCard.getBoundingClientRect();
-  const targetRect = lzj2Image.getBoundingClientRect();
-  const pad = (ANIMATION_CONFIG.auxDevice.kpcDrag?.dropHitPadding || 0) * sceneScale;
+  const targetRect = getAuxCardSlotRect();
+  if (!targetRect) return false;
 
   const cx = cardRect.left + cardRect.width / 2;
   const cy = cardRect.top + cardRect.height / 2;
   return (
-    cx >= targetRect.left - pad &&
-    cx <= targetRect.right + pad &&
-    cy >= targetRect.top - pad &&
-    cy <= targetRect.bottom + pad
+    cx >= targetRect.left &&
+    cx <= targetRect.right &&
+    cy >= targetRect.top &&
+    cy <= targetRect.bottom
   );
+}
+
+
+function showInsertedCardInSlot() {
+  if (!lzjInsertedCard || !auxTransferCardImage) return;
+  lzjInsertedCard.src = auxTransferCardImage.currentSrc || auxTransferCardImage.src;
+  lzjCardSlotMask?.classList.add("is-active");
+  auxTransferCard?.classList.add("is-consumed");
+}
+
+function hideInsertedCardInSlot() {
+  lzjCardSlotMask?.classList.remove("is-active");
+  if (lzjInsertedCard) lzjInsertedCard.src = "./assets/images/kpc.png";
 }
 
 function shouldFlipAuxKpcOnRelease() {
@@ -1150,27 +1225,48 @@ function shouldFlipAuxKpcOnRelease() {
 }
 
 function flipAuxKpcToSelectedCard() {
-  if (!auxTransferCard || auxKpcFlipped || auxKpcFlipInProgress) return;
+  if (!auxTransferCard || !auxTransferCardImage || auxKpcFlipped || auxKpcFlipInProgress) return;
   const selectedSrc = getSelectedLqImageSrc();
   if (!selectedSrc) return;
 
   auxKpcFlipInProgress = true;
-  auxTransferCard.classList.add("is-flipping");
+  auxTransferCard.classList.remove("is-flipped");
+  auxTransferCardImage.classList.remove("is-flip-running");
+  void auxTransferCardImage.offsetWidth;
+  auxTransferCardImage.classList.add("is-flip-running");
   const duration = (ANIMATION_CONFIG.auxDevice.kpcDrag?.flipDuration || 0.52) * 1000;
 
-  // 先只翻面一次；卡片翻到最薄的位置时切成已选择的 LQ 卡面。
-  // 翻面结束后，CSS 再单独旋转 90°，最终保持竖向。
+  // v72：只做一次正反面翻转。到最薄处切成已选卡片正面，不再有任何 rotateZ 旋转。
   setTimeout(() => {
-    if (!auxKpcFlipInProgress) return;
-    auxTransferCard.src = selectedSrc;
-  }, duration * 0.35);
+    if (!auxKpcFlipInProgress || !auxTransferCardImage) return;
+    auxTransferCardImage.src = selectedSrc;
+  }, duration * 0.5);
 
   setTimeout(() => {
-    if (!auxKpcFlipInProgress) return;
+    if (!auxKpcFlipInProgress || !auxTransferCard || !auxTransferCardImage) return;
     auxKpcFlipInProgress = false;
     auxKpcFlipped = true;
-    auxTransferCard.classList.remove("is-flipping");
+    auxTransferCardImage.classList.remove("is-flip-running");
     auxTransferCard.classList.add("is-flipped");
+
+    // v73：翻面后的卡片大小独立可调，并尽量保持卡片中心不跳位。
+    const flippedWidth = ANIMATION_CONFIG.auxDevice.kpcDrag?.flippedWidth;
+    if (Number.isFinite(flippedWidth) && flippedWidth > 0) {
+      const beforeRect = auxTransferCard.getBoundingClientRect();
+      const beforeCenterX = beforeRect.left + beforeRect.width / 2;
+      const beforeCenterY = beforeRect.top + beforeRect.height / 2;
+
+      auxTransferCard.style.width = `${flippedWidth * sceneScale}px`;
+      auxTransferCard.style.removeProperty("height");
+
+      requestAnimationFrame(() => {
+        if (!auxTransferCard) return;
+        const afterRect = auxTransferCard.getBoundingClientRect();
+        const dx = beforeCenterX - (afterRect.left + afterRect.width / 2);
+        const dy = beforeCenterY - (afterRect.top + afterRect.height / 2);
+        setAuxKpcPosition(auxKpcPosition.left + dx, auxKpcPosition.top + dy);
+      });
+    }
   }, duration + 20);
 }
 
@@ -1183,7 +1279,7 @@ function endAuxKpcDrag(event) {
   if (!auxKpcFullyExtracted) updateAuxKpcExtractionState(event);
   stopAuxKpcDrag(event.pointerId);
 
-  // 完全从左侧抽出后的第一次松手：只翻面一次，再旋转 90° 竖起。
+  // 完全从左侧抽出后的第一次松手：只反转一次，切成所选卡片正面。
   if (shouldFlipAuxKpcOnRelease()) {
     flipAuxKpcToSelectedCard();
     return;
@@ -1197,6 +1293,10 @@ function endAuxKpcDrag(event) {
   scene.classList.add("is-aux-card-inserted");
   auxDock?.classList.add("is-card-inserted");
   auxTransferCard?.classList.add("is-inserted");
+  showInsertedCardInSlot();
+  // v74：卡片中心进入独立 cardSlot 红框后才算插入成功，并用裁切槽位显示，避免穿帮。
+  // v69：卡片确认插入后，明确重新启用下滑后的 LZJ 点击热区。
+  lzjButton?.classList.add("is-result-ready");
   playAudio(chakaAudio).catch((error) => {
     console.warn("chaka 音效播放失败：", error);
   });
