@@ -1,4 +1,4 @@
-/* Ryuki v60: masked KPC extraction + selected-card flip + persistent side buttons */
+/* Ryuki v62: original-layer right-only KPC extraction + 90deg selected-card flip */
 
 :root {
   color-scheme: dark;
@@ -87,6 +87,7 @@ body {
   --card-insert-duration: 1.25s;
   --kpc-x: 0px;
   --kpc-y: 0px;
+  --kpc-pull-x: 0px;
   --kpc-width: 437px;
   --khzd-x: 0px;
   --khzd-y: 0px;
@@ -491,7 +492,7 @@ body {
   width: var(--kpc-width);
   transform:
     translate(-50%, -50%)
-    translate3d(var(--kpc-x), var(--kpc-y), 0);
+    translate3d(calc(var(--kpc-x) + var(--kpc-pull-x)), var(--kpc-y), 0);
   transition: opacity 0.16s linear;
 }
 
@@ -1126,22 +1127,12 @@ body {
 }
 
 
-/* v60：KPC 从卡盒左侧抽出时，khzd 遮挡副本始终压在卡片之上。
- * 它固定在原卡盒位置，直到 KPC 完整离开遮挡区域。
+/* v62：抽卡阶段不再复制 khzd 到外部高层级。
+ * KPC 在完全抽出前始终使用腰带内部原 card-middle，因此原 card-cover / belt layer 的遮挡关系不变。
+ * 该旧节点保留为兼容占位，但永远不显示。
  */
 .aux-card-cover-mask {
-  position: absolute;
-  z-index: 8;
-  display: block;
-  opacity: 0;
-  pointer-events: none;
-  transform: none;
-  -webkit-user-drag: none;
-  user-select: none;
-}
-
-.aux-card-cover-mask.is-visible {
-  opacity: 1;
+  display: none !important;
 }
 
 .aux-transfer-card.is-flipping {
@@ -1150,10 +1141,15 @@ body {
 }
 
 @keyframes aux-kpc-card-flip {
-  0% { transform: perspective(900px) rotateY(0deg); }
-  49% { transform: perspective(900px) rotateY(90deg); }
-  51% { transform: perspective(900px) rotateY(-90deg); }
-  100% { transform: perspective(900px) rotateY(0deg); }
+  0% { transform: rotateZ(0deg) rotateY(0deg); }
+  34% { transform: rotateZ(90deg) rotateY(0deg); }
+  61% { transform: rotateZ(90deg) rotateY(90deg); }
+  64% { transform: rotateZ(90deg) rotateY(-90deg); }
+  100% { transform: rotateZ(90deg) rotateY(0deg); }
+}
+
+.aux-transfer-card.is-flipped {
+  transform: rotateZ(90deg);
 }
 
 /* 左下角常驻四颗圆形按钮。位置和大小由 script.js 的 sideButtons 参数控制。 */

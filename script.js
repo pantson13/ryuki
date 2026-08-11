@@ -1,4 +1,4 @@
-/* Ryuki v61: horizontal-only card-box extraction + KPC masked extraction + side buttons */
+/* Ryuki v62: reliable kaca + right-only KPC extraction + original card layering + 90deg flip */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -231,6 +231,8 @@ let auxKpcPointerId = null;
 let auxKpcPointerStart = { x: 0, y: 0 };
 let auxKpcStartPosition = { left: 0, top: 0 };
 let auxKpcPosition = { left: 0, top: 0 };
+let auxKpcPullX = 0;
+let auxKpcPullStartX = 0;
 let auxKpcHasBeenPulled = false;
 let auxKpcCaptureTarget = null;
 let auxKpcFullyExtracted = false;
@@ -238,6 +240,7 @@ let auxKpcFlipped = false;
 let auxKpcFlipInProgress = false;
 let auxKpcExtractStartCenterY = 0;
 let auxKpcInitialLeft = 0;
+let auxKpcOriginalRect = null;
 let auxChoukaPlayed = false;
 let auxResultPlayed = false;
 let lyfgTimer = 0;
@@ -340,6 +343,7 @@ function applyPhoneLayout() {
   scene.style.setProperty("--card-insert-duration", `${card.duration}s`);
   scene.style.setProperty("--kpc-x", `${card.layers.middle.x * scale}px`);
   scene.style.setProperty("--kpc-y", `${card.layers.middle.y * scale}px`);
+  scene.style.setProperty("--kpc-pull-x", `${auxKpcPullX * scale}px`);
   scene.style.setProperty("--kpc-width", `${card.layers.middle.width * scale}px`);
   scene.style.setProperty("--card-extract-x", `${cardExtractPosition.x * scale}px`);
   scene.style.setProperty("--card-extract-y", `${cardExtractPosition.y * scale}px`);
@@ -821,6 +825,11 @@ function setAuxKpcPosition(left, top) {
   auxTransferCard.style.top = `${top}px`;
 }
 
+function setAuxKpcPullX(x) {
+  auxKpcPullX = Math.max(0, x);
+  scene.style.setProperty("--kpc-pull-x", `${auxKpcPullX * sceneScale}px`);
+}
+
 function stopAuxKpcDrag(pointerId = null) {
   if (!auxKpcDragging) return;
   if (pointerId !== null && auxKpcCaptureTarget?.hasPointerCapture?.(pointerId)) {
@@ -846,6 +855,10 @@ function resetAuxDevice(options = {}) {
   auxKpcFlipInProgress = false;
   auxKpcExtractStartCenterY = 0;
   auxKpcInitialLeft = 0;
+  auxKpcOriginalRect = null;
+  auxKpcPullX = 0;
+  auxKpcPullStartX = 0;
+  setAuxKpcPullX(0);
   auxChoukaPlayed = false;
   auxResultPlayed = false;
   auxKpcPosition = { left: 0, top: 0 };
@@ -886,6 +899,8 @@ function toggleAuxDock(event) {
   auxCardInserted = false;
   auxKpcHasBeenPulled = false;
   auxKpcFullyExtracted = false;
+  auxKpcOriginalRect = null;
+  setAuxKpcPullX(0);
   auxKpcFlipped = false;
   auxKpcFlipInProgress = false;
   auxChoukaPlayed = false;
@@ -927,55 +942,80 @@ function getSelectedLqImageSrc() {
   return button?.querySelector("img")?.getAttribute("src") || null;
 }
 
-function positionAuxCardCoverMask() {
-  if (!auxCardCoverMask || !auxDock || !cardCoverLayer) return;
+function handoffAuxKpcToFloatingCard(event) {
+  if (!auxTransferCard || !auxDock || !kpcLayer || auxKpcFullyExtracted) return false;
+
   const dockRect = auxDock.getBoundingClientRect();
-  const coverRect = cardCoverLayer.getBoundingClientRect();
-  auxCardCoverMask.style.left = `${coverRect.left - dockRect.left}px`;
-  auxCardCoverMask.style.top = `${coverRect.top - dockRect.top}px`;
-  auxCardCoverMask.style.width = `${coverRect.width}px`;
-  auxCardCoverMask.style.height = `${coverRect.height}px`;
-  auxCardCoverMask.classList.add("is-visible");
+  const cardRect = kpcLayer.getBoundingClientRect();
+  const left = cardRect.left - dockRect.left;
+  const top = cardRect.top - dockRect.top;
+
+  auxTransferCard.src = "./assets/images/kpc.png";
+  auxTransferCard.style.width = `${cardRect.width}px`;
+  auxTransferCard.style.height = `${cardRect.height}px`;
+  setAuxKpcPosition(left, top);
+  auxTransferCard.classList.add("is-visible", "is-fully-extracted");
+
+  // 真正完全抽出后才隐藏腰带卡盒里的原 KPC。
+  // 抽出过程始终由原 card-middle 在原卡盒层级内移动，khzd / 腰带遮挡关系完全不变。
+  cardBox.classList.add("is-kpc-aux-hidden");
+  auxKpcFullyExtracted = true;
+
+  // iPhone/PWA：在交接瞬间把 pointer capture 从原 KPC 转给浮动 KPC，
+  // 避免原图隐藏后 Safari 把本次拖动手势一起丢掉。
+  if (kpcLayer.hasPointerCapture?.(event.pointerId)) {
+    kpcLayer.releasePointerCapture(event.pointerId);
+  }
+  auxTransferCard.setPointerCapture?.(event.pointerId);
+  auxKpcCaptureTarget = auxTransferCard;
+
+  // 从当前 pointer 位置重新作为自由拖动起点，避免从原卡盒切到浮动卡时跳位。
+  auxKpcPointerStart = { x: event.clientX, y: event.clientY };
+  auxKpcStartPosition = { ...auxKpcPosition };
+  return true;
 }
 
-function updateAuxKpcExtractionState() {
-  if (!auxTransferCard || !auxCardCoverMask || auxKpcFullyExtracted) return;
-  const cardRect = auxTransferCard.getBoundingClientRect();
-  const coverRect = auxCardCoverMask.getBoundingClientRect();
+function updateAuxKpcExtractionState(event) {
+  if (!kpcLayer || !cardCoverLayer || auxKpcFullyExtracted) return false;
+  const cardRect = kpcLayer.getBoundingClientRect();
+  const coverRect = cardCoverLayer.getBoundingClientRect();
 
-  // KPC 从卡盒左侧完整抽出：整张卡的右边缘已经越过 khzd 左边缘。
-  if (cardRect.right <= coverRect.left + 1) {
-    auxKpcFullyExtracted = true;
-    auxTransferCard.classList.add("is-fully-extracted");
-    auxCardCoverMask.classList.remove("is-visible");
+  // v62：KPC 只能从卡盒右侧水平抽出。
+  // 整张卡的左边缘越过 khzd 的右边缘，才算“完全抽出”。
+  if (cardRect.left >= coverRect.right - 1) {
+    return handoffAuxKpcToFloatingCard(event);
   }
+  return false;
 }
 
 function prepareAuxKpcCard() {
-  if (!auxTransferCard || !auxDock || !kpcLayer) return false;
+  if (!kpcLayer) return false;
   if (auxKpcHasBeenPulled) return true;
 
-  const dockRect = auxDock.getBoundingClientRect();
   const startRect = kpcLayer.getBoundingClientRect();
-  const left = startRect.left - dockRect.left;
-  const top = startRect.top - dockRect.top;
-
-  auxTransferCard.src = "./assets/images/kpc.png";
-  auxTransferCard.style.width = `${startRect.width}px`;
-  auxTransferCard.style.height = `${startRect.height}px`;
-  setAuxKpcPosition(left, top);
-  auxKpcInitialLeft = left;
-  positionAuxCardCoverMask();
-  auxTransferCard.classList.add("is-visible");
-  cardBox.classList.add("is-kpc-aux-hidden");
+  auxKpcOriginalRect = {
+    left: startRect.left,
+    top: startRect.top,
+    width: startRect.width,
+    height: startRect.height,
+  };
   auxKpcExtractStartCenterY = startRect.top + startRect.height / 2;
   auxKpcHasBeenPulled = true;
+  auxKpcFullyExtracted = false;
+  setAuxKpcPullX(0);
+
+  // 不再提前生成浮动 KPC，也不再复制 khzd 到高层级。
+  // 这样插入腰带后卡盒/遮挡/腰带层级从头到尾保持原样。
+  auxTransferCard?.classList.remove("is-visible", "is-fully-extracted");
+  auxCardCoverMask?.classList.remove("is-visible");
+  cardBox.classList.remove("is-kpc-aux-hidden");
   return true;
 }
 
 function beginAuxKpcDrag(event, fromTransferCard = false) {
   if (!flowStarted || !auxOpen || !auxArmed || auxCardInserted || auxKpcFlipInProgress) return;
   if (!cardBox.classList.contains("is-inserted")) return;
+  if (fromTransferCard && !auxKpcFullyExtracted) return;
 
   const firstPull = !auxKpcHasBeenPulled;
   if (!prepareAuxKpcCard()) return;
@@ -994,10 +1034,10 @@ function beginAuxKpcDrag(event, fromTransferCard = false) {
   auxKpcPointerId = event.pointerId;
   auxKpcPointerStart = { x: event.clientX, y: event.clientY };
   auxKpcStartPosition = { ...auxKpcPosition };
+  auxKpcPullStartX = auxKpcPullX;
   auxTransferCard?.classList.add("is-dragging");
 
-  // 第一次从卡盒 KPC 开始拖时保持原 KPC 的 pointer capture；之后直接由浮动 KPC 捕获。
-  const captureTarget = fromTransferCard ? auxTransferCard : kpcLayer;
+  const captureTarget = auxKpcFullyExtracted || fromTransferCard ? auxTransferCard : kpcLayer;
   auxKpcCaptureTarget = captureTarget || null;
   captureTarget?.setPointerCapture?.(event.pointerId);
 }
@@ -1007,16 +1047,18 @@ function moveAuxKpcDrag(event) {
   event.preventDefault();
   event.stopPropagation();
 
+  // 卡还在卡盒里：只能水平向右抽，Y 轴完全锁死。
+  if (!auxKpcFullyExtracted) {
+    const dx = (event.clientX - auxKpcPointerStart.x) / sceneScale;
+    setAuxKpcPullX(auxKpcPullStartX + Math.max(0, dx));
+    updateAuxKpcExtractionState(event);
+    return;
+  }
+
+  // 完全离开卡盒后才切换为自由拖动，便于往下拖到翻卡位置和 LZJ2。
   const dx = event.clientX - auxKpcPointerStart.x;
   const dy = event.clientY - auxKpcPointerStart.y;
-  // 从卡盒阶段只允许从左侧抽出；完全抽出后恢复自由拖动。
-  let nextLeft = auxKpcStartPosition.left + dx;
-  if (!auxKpcFullyExtracted && !auxKpcFlipped) {
-    nextLeft = Math.min(nextLeft, auxKpcInitialLeft);
-  }
-  // 放手不回弹；当前位置会作为下一次拖动的起点。
-  setAuxKpcPosition(nextLeft, auxKpcStartPosition.top + dy);
-  updateAuxKpcExtractionState();
+  setAuxKpcPosition(auxKpcStartPosition.left + dx, auxKpcStartPosition.top + dy);
 }
 
 function isAuxKpcOverLzj() {
@@ -1052,10 +1094,11 @@ function flipAuxKpcToSelectedCard() {
   auxTransferCard.classList.add("is-flipping");
   const duration = (ANIMATION_CONFIG.auxDevice.kpcDrag?.flipDuration || 0.52) * 1000;
 
+  // 先在平面内旋转 90°，再以 Y 轴翻到侧面；最薄的位置切成已选择的 LQ 卡面。
   setTimeout(() => {
     if (!auxKpcFlipInProgress) return;
     auxTransferCard.src = selectedSrc;
-  }, duration * 0.5);
+  }, duration * 0.62);
 
   setTimeout(() => {
     if (!auxKpcFlipInProgress) return;
@@ -1071,8 +1114,9 @@ function endAuxKpcDrag(event) {
   event.preventDefault();
   event.stopPropagation();
 
+  // 先更新最后一个 pointer 位置，再结束 capture，避免 iPhone pointerup 前最后一帧没被计入。
+  if (!auxKpcFullyExtracted) updateAuxKpcExtractionState(event);
   stopAuxKpcDrag(event.pointerId);
-  updateAuxKpcExtractionState();
 
   // 完全抽出后拖到更下方再松手：只翻一次，并在半程切成刚才选择的 LQ 卡面。
   if (shouldFlipAuxKpcOnRelease()) {
@@ -1276,31 +1320,47 @@ function handleCharuEnded() {
 
 function playInsertionAudio() {
   if (!flowStarted || insertionAudioInUse) return;
-  if (!cardBox.classList.contains("is-inserting") && !cardBox.classList.contains("is-handoff")) return;
 
   clearTimeout(insertionAudioFallback);
   insertionAudioFallback = 0;
   insertionAudioInUse = true;
+
+  // v62：kaca 与 charu 都直接在“卡盒进入插槽”的同一个 pointermove 用户手势中发起 play()。
+  // 不再等待 kaca.play() 的 Promise 再启动 charu，避免 iPhone/PWA 丢失用户激活或吞掉第一声 kaca。
+  stopAudio(kacaAudio);
+  stopAudio(charuAudio);
   kacaAudio.muted = false;
   charuAudio.muted = false;
+  kacaAudio.volume = 1;
+  charuAudio.volume = 1;
 
-  const playCharuImmediately = () => {
-    playAudio(charuAudio)
-      .then(() => {
-        // 从 charu 的真实播放时间 1.00 秒开始 bg4 进场。
-        startCharuBg4Sync();
-      })
+  let kacaPromise;
+  let charuPromise;
+  try {
+    kacaPromise = kacaAudio.play();
+  } catch (error) {
+    console.warn("kaca 音效播放失败：", error);
+  }
+  try {
+    charuPromise = charuAudio.play();
+  } catch (error) {
+    console.warn("charu 音效播放失败：", error);
+  }
+
+  if (kacaPromise instanceof Promise) {
+    kacaPromise.catch((error) => console.warn("kaca 音效播放失败：", error));
+  }
+
+  if (charuPromise instanceof Promise) {
+    charuPromise
+      .then(() => startCharuBg4Sync())
       .catch((error) => {
         console.warn("charu 音效播放失败：", error);
         hideInsertionGlows();
       });
-  };
-
-  // 插卡位移开始时先同步启动 kaca；kaca 确认开始后立刻启动 charu，不等待 kaca 播完。
-  playAudio(kacaAudio).then(playCharuImmediately, (error) => {
-    console.warn("kaca 音效播放失败：", error);
-    playCharuImmediately();
-  });
+  } else {
+    startCharuBg4Sync();
+  }
 }
 
 function handleCardTransitionStart(event) {
@@ -1740,7 +1800,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=60", { updateViaCache: "none" })
+      .register("./sw.js?v=62", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

@@ -1,11 +1,11 @@
-// Ryuki v61: horizontal-only card-box extraction + masked KPC flow
-const CACHE_NAME = "ryuki-pwa-v61-horizontal-cardbox-extract";
+// Ryuki v62: reliable insertion audio + right-only KPC extraction + original layering
+const CACHE_NAME = "ryuki-pwa-v62-kpc-right-original-layers";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=60",
-  "./style.css?v=61",
-  "./script.js?v=61",
+  "./manifest.webmanifest?v=62",
+  "./style.css?v=62",
+  "./script.js?v=62",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
