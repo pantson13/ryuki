@@ -1,11 +1,11 @@
-// Ryuki v59: manual KPC drag to LZJ + six per-card sounds
-const CACHE_NAME = "ryuki-pwa-v59-manual-kpc-lzj-audio";
+// Ryuki v61: horizontal-only card-box extraction + masked KPC flow
+const CACHE_NAME = "ryuki-pwa-v61-horizontal-cardbox-extract";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=59",
-  "./style.css?v=59",
-  "./script.js?v=59",
+  "./manifest.webmanifest?v=60",
+  "./style.css?v=61",
+  "./script.js?v=61",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -30,6 +30,10 @@ const APP_SHELL = [
   "./assets/images/khzd.png",
   "./assets/images/khfg.png",
   "./assets/images/ydfg.png",
+  "./assets/audio/kh1.mp3",
+  "./assets/audio/ydmusic.mp3",
+  "./assets/audio/kaca.mp3",
+  "./assets/audio/charu.mp3",
   "./assets/audio/chouka.mp3",
   "./assets/audio/huagai1.mp3",
   "./assets/audio/chaka.mp3",
@@ -40,6 +44,7 @@ const APP_SHELL = [
   "./assets/audio/l.mp3",
   "./assets/audio/f.mp3",
   "./assets/audio/hc.mp3",
+  "./assets/audio/guo.mp3",
   "./assets/icons/icon-192.png?v=50",
   "./assets/icons/icon-512.png?v=50",
   "./assets/icons/icon-maskable-512.png?v=50",

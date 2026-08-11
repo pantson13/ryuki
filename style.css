@@ -1,4 +1,4 @@
-/* Ryuki v59: manual KPC drag to LZJ + six per-card sounds */
+/* Ryuki v60: masked KPC extraction + selected-card flip + persistent side buttons */
 
 :root {
   color-scheme: dark;
@@ -934,7 +934,8 @@ body {
   -webkit-touch-callout: none;
   -webkit-user-drag: none;
   user-select: none;
-  will-change: left, top;
+  will-change: left, top, transform;
+  object-fit: contain;
 }
 
 .aux-transfer-card.is-visible {
@@ -1122,4 +1123,71 @@ body {
 /* LZJ2 等待接卡时先让出命中层；卡片确认插入后按钮才重新接收最终点击。 */
 .scene.is-aux-armed:not(.is-aux-card-inserted) .lzj-button {
   pointer-events: none;
+}
+
+
+/* v60：KPC 从卡盒左侧抽出时，khzd 遮挡副本始终压在卡片之上。
+ * 它固定在原卡盒位置，直到 KPC 完整离开遮挡区域。
+ */
+.aux-card-cover-mask {
+  position: absolute;
+  z-index: 8;
+  display: block;
+  opacity: 0;
+  pointer-events: none;
+  transform: none;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+.aux-card-cover-mask.is-visible {
+  opacity: 1;
+}
+
+.aux-transfer-card.is-flipping {
+  pointer-events: none;
+  animation: aux-kpc-card-flip var(--kpc-flip-duration) cubic-bezier(0.42, 0, 0.2, 1) both;
+}
+
+@keyframes aux-kpc-card-flip {
+  0% { transform: perspective(900px) rotateY(0deg); }
+  49% { transform: perspective(900px) rotateY(90deg); }
+  51% { transform: perspective(900px) rotateY(-90deg); }
+  100% { transform: perspective(900px) rotateY(0deg); }
+}
+
+/* 左下角常驻四颗圆形按钮。位置和大小由 script.js 的 sideButtons 参数控制。 */
+.side-controls {
+  position: absolute;
+  z-index: 14;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--side-button-gap);
+  transform: translate3d(var(--side-buttons-x), var(--side-buttons-y), 0);
+  pointer-events: auto;
+}
+
+.side-control-button {
+  width: var(--side-button-size);
+  height: var(--side-button-size);
+  flex: 0 0 var(--side-button-size);
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / 72%);
+  background: rgb(10 16 22 / 58%);
+  box-shadow:
+    inset 0 0 14px rgb(255 255 255 / 12%),
+    0 0 12px rgb(80 180 255 / 24%);
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+.side-control-button:active {
+  transform: scale(0.92);
 }
