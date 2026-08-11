@@ -78,7 +78,7 @@ const ANIMATION_CONFIG = {
 
     // 第1层（最上层）lyfg：独立调位置与大小。
     // showForTuning=true：当前先常亮显示，方便你调位置；之后改 false 即恢复隐藏逻辑。
-    lyfg: { x: 8, y: -160, width: 500, duration: 1, showForTuning: true },
+    lyfg: { x: 8, y: -160, width: 500, duration: 1, showForTuning: false },
 
     // KPC 手动拖出参数。
     kpcDrag: {
