@@ -1,11 +1,11 @@
 // Ryuki v66: independently adjustable 4-layer dragon summoner + visible lyfg tuning
-const CACHE_NAME = "ryuki-pwa-v66-dragon-four-layer-tuning";
+const CACHE_NAME = "ryuki-pwa-v67-kpc-left-extraction-fix";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=66",
-  "./style.css?v=66",
-  "./script.js?v=66",
+  "./manifest.webmanifest?v=67",
+  "./style.css?v=67",
+  "./script.js?v=67",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

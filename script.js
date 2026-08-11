@@ -1,4 +1,4 @@
-/* Ryuki v65: independently adjustable 4-layer dragon summoner + visible lyfg tuning */
+/* Ryuki v67: fix leftward KPC extraction in dragon device */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -78,7 +78,7 @@ const ANIMATION_CONFIG = {
 
     // 第1层（最上层）lyfg：独立调位置与大小。
     // showForTuning=true：当前先常亮显示，方便你调位置；之后改 false 即恢复隐藏逻辑。
-    lyfg: { x: 8, y: -160, width: 500, duration: 1, showForTuning: false },
+    lyfg: { x: 8, y: -160, width: 500, duration: 1, showForTuning: true },
 
     // KPC 手动拖出参数。
     kpcDrag: {
@@ -880,7 +880,7 @@ function setAuxKpcPosition(left, top) {
 }
 
 function setAuxKpcPullX(x) {
-  auxKpcPullX = Math.max(0, x);
+  auxKpcPullX = Math.min(0, x);
   scene.style.setProperty("--kpc-pull-x", `${auxKpcPullX * sceneScale}px`);
 }
 
