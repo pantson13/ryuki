@@ -55,15 +55,15 @@ const ANIMATION_CONFIG = {
   },
   auxDevice: {
     // bs：右侧边缘按钮。x / y / width 都可自行调整。
-    bs: { x: 520, y: 330, width: 150 },
+    bs: { x: 530, y: 330, width: 150 },
     // lzj 从 bs 位置向左滑出。slideX 为滑出距离，offsetY 为相对 bs 的上下偏移。
-    lzj: { slideX: -310, offsetY: 0, width: 330, duration: 0.42 },
+    lzj: { slideX: -310, offsetY: 0, width: 630, duration: 0.42 },
     // lzj3 是 lzj2 上方遮挡层，可单独微调。
     lzj3: { x: 0, y: 0, width: 330 },
     // 卡片自动反转插入 lzj2 的落点，以 lzj2 中心为基准。
     cardSlot: { x: 0, y: 10, width: 170, duration: 0.62 },
     // lyfg：绝对位置参数，可自行调整；默认显示 1 秒后消失。
-    lyfg: { x: 210, y: 330, width: 360, duration: 1 },
+    lyfg: { x: 210, y: 140, width: 430, duration: 10 },
     // lzj 滑出期间，下方 lq 区域的虚化强度。
     lqBlur: 7,
   },
