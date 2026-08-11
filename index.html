@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Ryuki v62: reliable insertion audio + right-only KPC extraction + original layering -->
+<!-- Ryuki v66: independently adjustable 4-layer dragon summoner + visible lyfg tuning -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -12,7 +12,7 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="Ryuki 腰带变身动画演示" />
     <title>Ryuki</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=62" />
+    <link rel="manifest" href="./manifest.webmanifest?v=66" />
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png?v=50" />
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=50" />
     <link rel="preload" href="./assets/audio/ydmusic.mp3" as="audio" type="audio/mpeg" />
@@ -31,7 +31,7 @@
     <link rel="preload" href="./assets/audio/guo.mp3" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/images/bg4.png" as="image" type="image/png" />
     <link rel="preload" href="./assets/images/bg5.png" as="image" type="image/png" />
-    <link rel="stylesheet" href="./style.css?v=62" />
+    <link rel="stylesheet" href="./style.css?v=66" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -131,17 +131,16 @@
         <button class="side-control-button" type="button" aria-label="预留按钮 4"></button>
       </div>
 
-      <div class="aux-dock" id="auxDock" aria-label="右侧卡片装置">
-        <img class="lzj-image lzj-image-default" id="lzjImage" src="./assets/images/lzj.png" alt="" />
-        <img class="lzj-image lzj-image-active" id="lzj2Image" src="./assets/images/lzj2.png" alt="" />
-        <img class="aux-transfer-card" id="auxTransferCard" src="./assets/images/kpc.png" alt="" />
-        <img class="aux-card-cover-mask" id="auxCardCoverMask" src="./assets/images/khzd.png" alt="" aria-hidden="true" />
+      <div class="aux-dock" id="auxDock" aria-label="右侧龙召机">
         <img class="lzj-cover" id="lzj3Image" src="./assets/images/lzj3.png" alt="" />
-        <button class="lzj-button" id="lzjButton" type="button" aria-label="切换 LZJ 装置"></button>
-        <button class="bs-button" id="bsButton" type="button" aria-label="打开右侧装置"><img src="./assets/images/bs.png" alt="" /></button>
+        <img class="aux-transfer-card" id="auxTransferCard" src="./assets/images/kpc.png" alt="" />
+        <img class="lzj-image lzj-image-active" id="lzj2Image" src="./assets/images/lzj2.png" alt="" />
+        <img class="lzj-image lzj-image-default" id="lzjImage" src="./assets/images/lzj.png" alt="" />
+        <img class="aux-card-cover-mask" id="auxCardCoverMask" src="./assets/images/khzd.png" alt="" aria-hidden="true" />
+        <img class="aux-lyfg" id="lyfgImage" src="./assets/images/lyfg.png" alt="" aria-hidden="true" />
+        <button class="lzj-button" id="lzjButton" type="button" aria-label="操作龙召机"></button>
+        <button class="bs-button" id="bsButton" type="button" aria-label="打开龙召机"><img src="./assets/images/bs.png" alt="" /></button>
       </div>
-
-      <img class="aux-lyfg" id="lyfgImage" src="./assets/images/lyfg.png" alt="" aria-hidden="true" />
 
       <button class="card-unit card-trigger" id="cardTrigger" type="button" aria-label="启动卡盒与腰带动画">
         <img class="card-layer card-bottom" src="./assets/images/khdc.png" alt="" />
@@ -152,6 +151,6 @@
 
     </main>
 
-    <script src="./script.js?v=62"></script>
+    <script src="./script.js?v=66"></script>
   </body>
 </html>

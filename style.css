@@ -1,4 +1,4 @@
-/* Ryuki v62: original-layer right-only KPC extraction + 90deg selected-card flip */
+/* Ryuki v63: original-layer left-only KPC extraction + single flip then 90deg rotate */
 
 :root {
   color-scheme: dark;
@@ -65,9 +65,11 @@ body {
   --lzj3-y: 0px;
   --lzj3-width: 330px;
   --lyfg-x: 210px;
-  --lyfg-y: 330px;
+  --lyfg-y: 0px;
   --lyfg-width: 360px;
   --lyfg-duration: 1s;
+  --lzj-container-x: 0px;
+  --lzj-container-y: 0px;
   --aux-lq-blur: 7px;
   --card-extract-x: 0px;
   --card-extract-y: 0px;
@@ -788,7 +790,7 @@ body {
   filter: brightness(1.14) drop-shadow(0 0 8px rgb(255 255 255 / 50%));
 }
 
-/* 右侧 BS / LZJ 支线。参数全部由 script.js 顶部 ANIMATION_CONFIG.auxDevice 驱动。 */
+/* 右侧龙召机容器。四层从下到上：lzj3、lzj2、lzj、lyfg（默认隐藏）。 */
 .aux-dock {
   position: absolute;
   z-index: 9;
@@ -820,7 +822,7 @@ body {
 }
 
 .bs-button {
-  z-index: 7;
+  z-index: 8;
   top: 0;
   left: 0;
   width: var(--bs-width);
@@ -839,32 +841,39 @@ body {
 
 .lzj-image,
 .lzj-cover,
-.lzj-button {
+.lzj-button,
+.aux-lyfg {
   position: absolute;
   top: 0;
   left: 0;
-  width: var(--lzj-width);
   opacity: 0;
   pointer-events: none;
-  transform:
-    translate3d(calc(-50% + 0px), calc(-50% + var(--lzj-offset-y)), 0);
   transition:
     transform var(--lzj-duration) cubic-bezier(0.2, 0.72, 0.2, 1),
     opacity 0.16s linear;
 }
 
-.lzj-image { z-index: 2; }
-.lzj-image-active { opacity: 0; }
+.lzj-button {
+  width: var(--lzj-width);
+  transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lzj-x)), calc(-50% + var(--lzj-container-y) + var(--lzj-y)), 0);
+}
+
+.lzj-image-default {
+  z-index: 4;
+  width: var(--lzj-width);
+  transform: translate3d(calc(-50% + var(--lzj-x)), calc(-50% + var(--lzj-y)), 0);
+}
+
+.lzj-image-active {
+  z-index: 3;
+  width: var(--lzj2-width);
+  transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lzj2-x)), calc(-50% + var(--lzj-container-y) + var(--lzj2-y)), 0);
+}
 
 .lzj-cover {
-  z-index: 5;
+  z-index: 1;
   width: var(--lzj3-width);
-  transform:
-    translate3d(
-      calc(-50% + var(--lzj3-x)),
-      calc(-50% + var(--lzj-offset-y) + var(--lzj3-y)),
-      0
-    );
+  transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lzj3-x)), calc(-50% + var(--lzj-container-y) + var(--lzj3-y)), 0);
 }
 
 .lzj-button {
@@ -873,45 +882,45 @@ body {
   cursor: pointer;
 }
 
-.scene.is-aux-open .lzj-image,
+.aux-lyfg {
+  z-index: 5;
+  width: var(--lyfg-width);
+  transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lyfg-x)), calc(-50% + var(--lzj-container-y) + var(--lyfg-y)), 0);
+}
+
+.scene.is-aux-open .lzj-image-default,
+.scene.is-aux-open .lzj-image-active,
+.scene.is-aux-open .lzj-cover,
 .scene.is-aux-open .lzj-button {
   opacity: 1;
   pointer-events: auto;
-  transform:
-    translate3d(
-      calc(-50% + var(--lzj-slide-x)),
-      calc(-50% + var(--lzj-offset-y)),
-      0
-    );
+}
+
+.scene.is-aux-open .lzj-image-default,
+.scene.is-aux-open .lzj-button {
+  transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lzj-slide-x) + var(--lzj-x)), calc(-50% + var(--lzj-container-y) + var(--lzj-y)), 0);
 }
 
 .scene.is-aux-open .lzj-image-active {
-  opacity: 0;
+  transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lzj-slide-x) + var(--lzj2-x)), calc(-50% + var(--lzj-container-y) + var(--lzj2-y)), 0);
 }
 
 .scene.is-aux-open .lzj-cover {
-  transform:
-    translate3d(
-      calc(-50% + var(--lzj-slide-x) + var(--lzj3-x)),
-      calc(-50% + var(--lzj-offset-y) + var(--lzj3-y)),
-      0
-    );
+  transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lzj-slide-x) + var(--lzj3-x)), calc(-50% + var(--lzj-container-y) + var(--lzj3-y)), 0);
 }
 
+.scene.is-aux-open .aux-lyfg {
+  transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lzj-slide-x) + var(--lyfg-x)), calc(-50% + var(--lzj-container-y) + var(--lyfg-y)), 0);
+}
+
+/* 点击 lzj 后，仅第2层 lzj 下滑；lzj2 / lzj3 / lyfg 位置保持各自参数。 */
 .scene.is-aux-armed .lzj-image-default,
-.scene.is-aux-card-inserted .lzj-image-default {
-  opacity: 0;
-}
-
-.scene.is-aux-armed .lzj-image-active,
-.scene.is-aux-card-inserted .lzj-image-active {
-  opacity: 1;
-}
-
-.scene.is-aux-armed .lzj-cover,
-.scene.is-aux-card-inserted .lzj-cover {
-  opacity: 1;
-  pointer-events: none;
+.scene.is-aux-card-inserted .lzj-image-default,
+.scene.is-aux-playing .lzj-image-default,
+.scene.is-aux-armed .lzj-button,
+.scene.is-aux-card-inserted .lzj-button,
+.scene.is-aux-playing .lzj-button {
+  transform: translate3d(calc(-50% + var(--lzj-container-x) + var(--lzj-slide-x) + var(--lzj-x)), calc(-50% + var(--lzj-container-y) + var(--lzj-y) + var(--lzj-drop-y)), 0);
 }
 
 .scene.is-aux-open .lq-panel {
@@ -925,7 +934,7 @@ body {
 
 .aux-transfer-card {
   position: absolute;
-  z-index: 4;
+  z-index: 2;
   display: block;
   opacity: 0;
   pointer-events: none;
@@ -935,7 +944,7 @@ body {
   -webkit-touch-callout: none;
   -webkit-user-drag: none;
   user-select: none;
-  will-change: left, top, transform;
+  will-change: left, top, transform, opacity;
   object-fit: contain;
 }
 
@@ -953,29 +962,25 @@ body {
   pointer-events: none;
 }
 
-.aux-lyfg {
-  position: absolute;
-  z-index: 13;
-  top: 50%;
-  left: 50%;
-  display: block;
-  width: var(--lyfg-width);
-  height: auto;
+.aux-transfer-card.is-consumed {
   opacity: 0;
   pointer-events: none;
-  transform:
-    translate(-50%, -50%)
-    translate3d(var(--lyfg-x), var(--lyfg-y), 0);
+}
+
+/* v65：调位置阶段先强制显示 lyfg。后续把 showForTuning 改 false 即恢复只在读卡时显示。 */
+.scene.show-lyfg-tuning.is-aux-open .aux-lyfg {
+  opacity: 1;
 }
 
 .aux-lyfg.is-active {
+  opacity: 1;
   animation: lyfg-flash var(--lyfg-duration) linear both;
 }
 
 @keyframes lyfg-flash {
   0% { opacity: 0; }
-  10% { opacity: 1; }
-  72% { opacity: 1; }
+  8% { opacity: 1; }
+  92% { opacity: 1; }
   100% { opacity: 0; }
 }
 
@@ -1127,7 +1132,7 @@ body {
 }
 
 
-/* v62：抽卡阶段不再复制 khzd 到外部高层级。
+/* v63：抽卡阶段不再复制 khzd 到外部高层级。
  * KPC 在完全抽出前始终使用腰带内部原 card-middle，因此原 card-cover / belt layer 的遮挡关系不变。
  * 该旧节点保留为兼容占位，但永远不显示。
  */
@@ -1141,11 +1146,12 @@ body {
 }
 
 @keyframes aux-kpc-card-flip {
-  0% { transform: rotateZ(0deg) rotateY(0deg); }
-  34% { transform: rotateZ(90deg) rotateY(0deg); }
-  61% { transform: rotateZ(90deg) rotateY(90deg); }
-  64% { transform: rotateZ(90deg) rotateY(-90deg); }
-  100% { transform: rotateZ(90deg) rotateY(0deg); }
+  /* 先完成一次翻面，再单独旋转 90° 变成竖向。 */
+  0% { transform: rotateY(0deg) rotateZ(0deg); }
+  34% { transform: rotateY(90deg) rotateZ(0deg); }
+  36% { transform: rotateY(-90deg) rotateZ(0deg); }
+  70% { transform: rotateY(0deg) rotateZ(0deg); }
+  100% { transform: rotateY(0deg) rotateZ(90deg); }
 }
 
 .aux-transfer-card.is-flipped {

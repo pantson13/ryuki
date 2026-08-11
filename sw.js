@@ -1,11 +1,11 @@
-// Ryuki v62: reliable insertion audio + right-only KPC extraction + original layering
-const CACHE_NAME = "ryuki-pwa-v62-kpc-right-original-layers";
+// Ryuki v66: independently adjustable 4-layer dragon summoner + visible lyfg tuning
+const CACHE_NAME = "ryuki-pwa-v66-dragon-four-layer-tuning";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=62",
-  "./style.css?v=62",
-  "./script.js?v=62",
+  "./manifest.webmanifest?v=66",
+  "./style.css?v=66",
+  "./script.js?v=66",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
