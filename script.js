@@ -1,4 +1,4 @@
-/* Ryuki v58: fix repeat stage-two ripple/reinsert audio + add BS/LZJ card-processing branch */
+/* Ryuki v59: PWA manual KPC drag to LZJ + per-card audio branch */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -60,8 +60,8 @@ const ANIMATION_CONFIG = {
     lzj: { slideX: -310, offsetY: 0, width: 630, duration: 0.42 },
     // lzj3 是 lzj2 上方遮挡层，可单独微调。
     lzj3: { x: 0, y: 0, width: 330 },
-    // 卡片自动反转插入 lzj2 的落点，以 lzj2 中心为基准。
-    cardSlot: { x: 0, y: 10, width: 170, duration: 0.62 },
+    // KPC 手动拖出参数：放手不回弹；dropHitPadding 越大越容易判定“拖到 LZJ2”。
+    kpcDrag: { dropHitPadding: 24 },
     // lyfg：绝对位置参数，可自行调整；默认显示 1 秒后消失。
     lyfg: { x: 210, y: 140, width: 430, duration: 10 },
     // lzj 滑出期间，下方 lq 区域的虚化强度。
@@ -76,8 +76,6 @@ const ANIMATION_CONFIG = {
     insert: { x: 0, y: 0 },
     width: 485,
     duration: 1.25,
-    // 点击任意 lq 后，kpc 向左滑出的距离。这里就是你以后自己改的参数。
-    kpcSlideOut: { x: -260, duration: 0.42 },
     // charu 完成后，卡盒从腰带内拖出超过这个距离就算抽出成功。
     extract: { threshold: 210 },
     drag: {
@@ -106,6 +104,17 @@ const AUDIO_CONFIG = {
   kaca: "./assets/audio/kaca.mp3",
   charu: "./assets/audio/charu.mp3",
   chouka: "./assets/audio/chouka.mp3",
+  huagai1: "./assets/audio/huagai1.mp3",
+  chaka: "./assets/audio/chaka.mp3",
+  huagai2: "./assets/audio/huagai2.mp3",
+  cardVoices: {
+    1: "./assets/audio/j.mp3",
+    2: "./assets/audio/q.mp3",
+    3: "./assets/audio/d.mp3",
+    4: "./assets/audio/l.mp3",
+    5: "./assets/audio/f.mp3",
+    6: "./assets/audio/hc.mp3",
+  },
 };
 
 const PHONE_VIEWPORT = { width: 440, height: 956 };
@@ -202,8 +211,14 @@ let cardDragPosition = { x: ANIMATION_CONFIG.card.start.x, y: ANIMATION_CONFIG.c
 let auxOpen = false;
 let auxArmed = false;
 let auxCardInserted = false;
-let auxTransferInProgress = false;
-let auxTransferTimer = 0;
+let auxKpcDragging = false;
+let auxKpcPointerId = null;
+let auxKpcPointerStart = { x: 0, y: 0 };
+let auxKpcStartPosition = { left: 0, top: 0 };
+let auxKpcPosition = { left: 0, top: 0 };
+let auxKpcHasBeenPulled = false;
+let auxKpcCaptureTarget = null;
+let auxResultPlayed = false;
 let lyfgTimer = 0;
 
 const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
@@ -211,12 +226,25 @@ const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
 const kacaAudio = new Audio(AUDIO_CONFIG.kaca);
 const charuAudio = new Audio(AUDIO_CONFIG.charu);
 const choukaAudio = new Audio(AUDIO_CONFIG.chouka);
+const huagai1Audio = new Audio(AUDIO_CONFIG.huagai1);
+const chakaAudio = new Audio(AUDIO_CONFIG.chaka);
+const huagai2Audio = new Audio(AUDIO_CONFIG.huagai2);
+const cardVoiceAudios = Object.fromEntries(
+  Object.entries(AUDIO_CONFIG.cardVoices).map(([key, src]) => [key, new Audio(src)]),
+);
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
 kacaAudio.preload = "auto";
 charuAudio.preload = "auto";
 choukaAudio.preload = "auto";
-[kh1Audio, ydMusicAudio, kacaAudio, charuAudio, choukaAudio].forEach((audio) => audio.load());
+huagai1Audio.preload = "auto";
+chakaAudio.preload = "auto";
+huagai2Audio.preload = "auto";
+Object.values(cardVoiceAudios).forEach((audio) => { audio.preload = "auto"; });
+[
+  kh1Audio, ydMusicAudio, kacaAudio, charuAudio, choukaAudio,
+  huagai1Audio, chakaAudio, huagai2Audio, ...Object.values(cardVoiceAudios),
+].forEach((audio) => audio.load());
 
 function applyPhoneLayout() {
   // 背景覆盖完整动态视口；前景继续按 iPhone 16 Pro Max 的 440:956
@@ -266,7 +294,6 @@ function applyPhoneLayout() {
   scene.style.setProperty("--lzj3-x", `${auxDevice.lzj3.x * scale}px`);
   scene.style.setProperty("--lzj3-y", `${auxDevice.lzj3.y * scale}px`);
   scene.style.setProperty("--lzj3-width", `${auxDevice.lzj3.width * scale}px`);
-  scene.style.setProperty("--aux-card-duration", `${auxDevice.cardSlot.duration}s`);
   scene.style.setProperty("--lyfg-x", `${auxDevice.lyfg.x * scale}px`);
   scene.style.setProperty("--lyfg-y", `${auxDevice.lyfg.y * scale}px`);
   scene.style.setProperty("--lyfg-width", `${auxDevice.lyfg.width * scale}px`);
@@ -286,8 +313,6 @@ function applyPhoneLayout() {
   scene.style.setProperty("--kpc-x", `${card.layers.middle.x * scale}px`);
   scene.style.setProperty("--kpc-y", `${card.layers.middle.y * scale}px`);
   scene.style.setProperty("--kpc-width", `${card.layers.middle.width * scale}px`);
-  scene.style.setProperty("--kpc-slide-x", `${card.kpcSlideOut.x * scale}px`);
-  scene.style.setProperty("--kpc-slide-duration", `${card.kpcSlideOut.duration}s`);
   scene.style.setProperty("--card-extract-x", `${cardExtractPosition.x * scale}px`);
   scene.style.setProperty("--card-extract-y", `${cardExtractPosition.y * scale}px`);
   scene.style.setProperty("--khfg-x", `${card.layers.glow.x * scale}px`);
@@ -724,7 +749,7 @@ function hideLqPanel() {
   lqButtons.forEach((button) => button.classList.remove("is-selected"));
   selectedLq = null;
   cardBox.classList.remove("is-kpc-ejected");
-  if (auxOpen || auxArmed || auxCardInserted || auxTransferInProgress) resetAuxDevice();
+  if (auxOpen || auxArmed || auxCardInserted || auxKpcHasBeenPulled || auxKpcDragging) resetAuxDevice();
 }
 
 function showLqPanel() {
@@ -749,42 +774,56 @@ function selectLqCard(event) {
   const button = event.currentTarget;
   selectedLq = button.dataset.lq;
   lqButtons.forEach((item) => item.classList.toggle("is-selected", item === button));
-  // 任何一张 lq 被选中，都让腰带内的 kpc 按配置距离向左滑出。
-  cardBox.classList.add("is-kpc-ejected");
+  // v59：选卡只记录卡种，不再自动把腰带里的 KPC 向左推出。
+  cardBox.classList.remove("is-kpc-ejected");
 }
 
-function playChoukaFromKpc(event) {
-  // lzj2 已展开时，点击 kpc 优先执行“抽出 → 反转 → 插入 lzj2”。
-  if (auxOpen && auxArmed && startAuxCardTransfer(event)) return;
-  if (!flowStarted || !cardBox.classList.contains("is-kpc-ejected")) return;
-  event.preventDefault();
-  event.stopPropagation();
-  playAudio(choukaAudio).catch((error) => {
-    console.warn("chouka 音效播放失败：", error);
+function playSelectedCardVoice() {
+  const audio = selectedLq ? cardVoiceAudios[selectedLq] : null;
+  if (!audio) return;
+  playAudio(audio).catch((error) => {
+    console.warn(`LQ${selectedLq} 对应卡片音效播放失败：`, error);
   });
 }
 
+function setAuxKpcPosition(left, top) {
+  auxKpcPosition = { left, top };
+  if (!auxTransferCard) return;
+  auxTransferCard.style.left = `${left}px`;
+  auxTransferCard.style.top = `${top}px`;
+}
+
+function stopAuxKpcDrag(pointerId = null) {
+  if (!auxKpcDragging) return;
+  if (pointerId !== null && auxKpcCaptureTarget?.hasPointerCapture?.(pointerId)) {
+    auxKpcCaptureTarget.releasePointerCapture(pointerId);
+  }
+  auxKpcDragging = false;
+  auxKpcPointerId = null;
+  auxKpcCaptureTarget = null;
+  auxTransferCard?.classList.remove("is-dragging");
+}
+
 function resetAuxDevice(options = {}) {
-  clearTimeout(auxTransferTimer);
-  auxTransferTimer = 0;
   clearTimeout(lyfgTimer);
   lyfgTimer = 0;
+  stopAuxKpcDrag(auxKpcPointerId);
   auxOpen = false;
   auxArmed = false;
   auxCardInserted = false;
-  auxTransferInProgress = false;
+  auxKpcHasBeenPulled = false;
+  auxKpcCaptureTarget = null;
+  auxResultPlayed = false;
+  auxKpcPosition = { left: 0, top: 0 };
   scene.classList.remove("is-aux-open", "is-aux-armed", "is-aux-card-inserted");
   auxDock?.classList.remove("is-open", "is-armed", "is-card-inserted");
-  auxTransferCard?.classList.remove("is-visible", "is-moving", "is-inserted");
+  auxTransferCard?.classList.remove("is-visible", "is-dragging", "is-inserted");
   lyfgImage?.classList.remove("is-active");
   if (auxTransferCard) {
     auxTransferCard.style.removeProperty("left");
     auxTransferCard.style.removeProperty("top");
     auxTransferCard.style.removeProperty("width");
     auxTransferCard.style.removeProperty("height");
-    auxTransferCard.style.removeProperty("--aux-card-dx");
-    auxTransferCard.style.removeProperty("--aux-card-dy");
-    auxTransferCard.style.removeProperty("--aux-card-scale");
   }
   if (!options.keepKpcHidden) cardBox.classList.remove("is-kpc-aux-hidden");
 }
@@ -792,7 +831,8 @@ function resetAuxDevice(options = {}) {
 function toggleAuxDock(event) {
   event?.preventDefault();
   event?.stopPropagation();
-  if (!flowStarted || !scene.classList.contains("show-lq")) return;
+  // 必须先选中一张下方卡，BS 才开启对应卡种的流程。
+  if (!flowStarted || !scene.classList.contains("show-lq") || !selectedLq) return;
 
   if (auxOpen) {
     resetAuxDevice();
@@ -802,6 +842,8 @@ function toggleAuxDock(event) {
   auxOpen = true;
   auxArmed = false;
   auxCardInserted = false;
+  auxKpcHasBeenPulled = false;
+  auxResultPlayed = false;
   scene.classList.add("is-aux-open");
   auxDock?.classList.add("is-open");
 }
@@ -809,89 +851,112 @@ function toggleAuxDock(event) {
 function handleLzjClick(event) {
   event?.preventDefault();
   event?.stopPropagation();
-  if (!flowStarted || !auxOpen || auxTransferInProgress) return;
+  if (!flowStarted || !auxOpen || !selectedLq) return;
 
   if (!auxArmed) {
+    // 第一次点击 LZJ：huagai1 与视觉切换在同一用户手势内触发。
+    playAudio(huagai1Audio).catch((error) => {
+      console.warn("huagai1 音效播放失败：", error);
+    });
     auxArmed = true;
     scene.classList.add("is-aux-armed");
     auxDock?.classList.add("is-armed");
     return;
   }
 
-  if (!auxCardInserted) return;
+  if (!auxCardInserted || auxResultPlayed) return;
 
-  // 卡片已插入 lzj2 后再次点击：切回 lzj，并触发 lyfg 一秒消失。
-  auxArmed = false;
-  auxCardInserted = false;
-  scene.classList.remove("is-aux-armed", "is-aux-card-inserted");
-  auxDock?.classList.remove("is-armed", "is-card-inserted");
-  auxTransferCard?.classList.remove("is-visible", "is-moving", "is-inserted");
-  cardBox.classList.remove("is-kpc-aux-hidden");
-
-  clearTimeout(lyfgTimer);
-  lyfgImage?.classList.remove("is-active");
-  void lyfgImage?.offsetWidth;
-  lyfgImage?.classList.add("is-active");
-  lyfgTimer = setTimeout(() => {
-    lyfgImage?.classList.remove("is-active");
-    lyfgTimer = 0;
-  }, ANIMATION_CONFIG.auxDevice.lyfg.duration * 1000);
+  // 卡片已经拖进 LZJ2 后，再点一次：先启动 huagai2，随后立即启动当前所选卡片音效。
+  // 最新流程没有要求此时自动收回 LZJ2，因此保持当前装置画面，避免额外视觉动作。
+  auxResultPlayed = true;
+  playAudio(huagai2Audio).catch((error) => {
+    console.warn("huagai2 音效播放失败：", error);
+  });
+  playSelectedCardVoice();
 }
 
-function startAuxCardTransfer(event) {
-  if (!flowStarted || !auxOpen || !auxArmed || auxCardInserted || auxTransferInProgress) return false;
-  if (!cardBox.classList.contains("is-inserted")) return false;
-  if (!auxTransferCard || !lzj2Image) return false;
+function prepareAuxKpcCard() {
+  if (!auxTransferCard || !auxDock || !kpcLayer) return false;
+  if (auxKpcHasBeenPulled) return true;
 
-  event?.preventDefault();
-  event?.stopPropagation();
-  auxTransferInProgress = true;
-
-  // 保留原本“点击 kpc 播放 chouka”的反馈，同时把卡片抽出并自动反转插入 lzj2。
-  playAudio(choukaAudio).catch((error) => {
-    console.warn("chouka 音效播放失败：", error);
-  });
-
-  // auxTransferCard 是 auxDock 的子元素，因此坐标要以 dock 锚点为基准，不能直接拿 scene 坐标。
-  // 这一点在 PWA 动态视口下尤其重要，否则卡片会整体偏移一个 bs 的位置。
   const dockRect = auxDock.getBoundingClientRect();
   const startRect = kpcLayer.getBoundingClientRect();
-  const deviceRect = lzj2Image.getBoundingClientRect();
-  const { cardSlot } = ANIMATION_CONFIG.auxDevice;
+  const left = startRect.left - dockRect.left;
+  const top = startRect.top - dockRect.top;
 
-  const startLeft = startRect.left - dockRect.left;
-  const startTop = startRect.top - dockRect.top;
-  const startCenterX = startLeft + startRect.width / 2;
-  const startCenterY = startTop + startRect.height / 2;
-  const targetCenterX = deviceRect.left - dockRect.left + deviceRect.width / 2 + cardSlot.x * sceneScale;
-  const targetCenterY = deviceRect.top - dockRect.top + deviceRect.height / 2 + cardSlot.y * sceneScale;
-  const targetWidth = Math.max(1, cardSlot.width * sceneScale);
-  const scale = targetWidth / Math.max(1, startRect.width);
-
-  auxTransferCard.style.left = `${startLeft}px`;
-  auxTransferCard.style.top = `${startTop}px`;
   auxTransferCard.style.width = `${startRect.width}px`;
   auxTransferCard.style.height = `${startRect.height}px`;
-  auxTransferCard.style.setProperty("--aux-card-dx", `${targetCenterX - startCenterX}px`);
-  auxTransferCard.style.setProperty("--aux-card-dy", `${targetCenterY - startCenterY}px`);
-  auxTransferCard.style.setProperty("--aux-card-scale", String(scale));
-  auxTransferCard.classList.remove("is-moving", "is-inserted");
+  setAuxKpcPosition(left, top);
   auxTransferCard.classList.add("is-visible");
   cardBox.classList.add("is-kpc-aux-hidden");
-  void auxTransferCard.offsetWidth;
-
-  requestAnimationFrame(() => auxTransferCard.classList.add("is-moving"));
-
-  clearTimeout(auxTransferTimer);
-  auxTransferTimer = setTimeout(() => {
-    auxTransferInProgress = false;
-    auxCardInserted = true;
-    scene.classList.add("is-aux-card-inserted");
-    auxDock?.classList.add("is-card-inserted");
-    auxTransferCard.classList.add("is-inserted");
-    auxTransferTimer = 0;
-  }, cardSlot.duration * 1000 + 40);
+  auxKpcHasBeenPulled = true;
   return true;
+}
+
+function beginAuxKpcDrag(event, fromTransferCard = false) {
+  if (!flowStarted || !auxOpen || !auxArmed || auxCardInserted) return;
+  if (!cardBox.classList.contains("is-inserted")) return;
+  if (!prepareAuxKpcCard()) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  auxKpcDragging = true;
+  auxKpcPointerId = event.pointerId;
+  auxKpcPointerStart = { x: event.clientX, y: event.clientY };
+  auxKpcStartPosition = { ...auxKpcPosition };
+  auxTransferCard?.classList.add("is-dragging");
+
+  // 第一次从卡盒 KPC 开始拖时保持原 KPC 的 pointer capture；之后直接由浮动 KPC 捕获。
+  const captureTarget = fromTransferCard ? auxTransferCard : kpcLayer;
+  auxKpcCaptureTarget = captureTarget || null;
+  captureTarget?.setPointerCapture?.(event.pointerId);
+}
+
+function moveAuxKpcDrag(event) {
+  if (!auxKpcDragging || auxKpcPointerId !== event.pointerId) return;
+  event.preventDefault();
+  event.stopPropagation();
+
+  const dx = event.clientX - auxKpcPointerStart.x;
+  const dy = event.clientY - auxKpcPointerStart.y;
+  // 完全跟手，不做自动回弹；松手后当前位置会作为下一次拖动的起点。
+  setAuxKpcPosition(auxKpcStartPosition.left + dx, auxKpcStartPosition.top + dy);
+}
+
+function isAuxKpcOverLzj() {
+  if (!auxTransferCard || !lzj2Image) return false;
+  const cardRect = auxTransferCard.getBoundingClientRect();
+  const targetRect = lzj2Image.getBoundingClientRect();
+  const pad = (ANIMATION_CONFIG.auxDevice.kpcDrag?.dropHitPadding || 0) * sceneScale;
+
+  const cx = cardRect.left + cardRect.width / 2;
+  const cy = cardRect.top + cardRect.height / 2;
+  return (
+    cx >= targetRect.left - pad &&
+    cx <= targetRect.right + pad &&
+    cy >= targetRect.top - pad &&
+    cy <= targetRect.bottom + pad
+  );
+}
+
+function endAuxKpcDrag(event) {
+  if (!auxKpcDragging || auxKpcPointerId !== event.pointerId) return;
+  event.preventDefault();
+  event.stopPropagation();
+
+  stopAuxKpcDrag(event.pointerId);
+
+  // 没拖到 LZJ2：什么都不重置，KPC 就停在松手位置。
+  if (!isAuxKpcOverLzj()) return;
+
+  auxCardInserted = true;
+  scene.classList.add("is-aux-card-inserted");
+  auxDock?.classList.add("is-card-inserted");
+  auxTransferCard?.classList.add("is-inserted");
+  playAudio(chakaAudio).catch((error) => {
+    console.warn("chaka 音效播放失败：", error);
+  });
 }
 
 function resetCardGesture() {
@@ -936,6 +1001,10 @@ function resetToCard() {
   stopAudio(kacaAudio);
   stopAudio(charuAudio);
   stopAudio(choukaAudio);
+  stopAudio(huagai1Audio);
+  stopAudio(chakaAudio);
+  stopAudio(huagai2Audio);
+  Object.values(cardVoiceAudios).forEach(stopAudio);
   resetAuxDevice();
   ydMusicInUse = false;
   insertionAudioInUse = false;
@@ -1503,9 +1572,20 @@ cardBox.addEventListener("pointercancel", handleExtractPointerEnd);
 cardBox.addEventListener("contextmenu", (event) => event.preventDefault());
 lqButtons.forEach((button) => button.addEventListener("click", selectLqCard));
 kpcLayer.addEventListener("pointerdown", (event) => {
-  if (cardBox.classList.contains("is-kpc-ejected") || auxArmed) event.stopPropagation();
+  if (auxOpen && auxArmed) {
+    beginAuxKpcDrag(event, false);
+    return;
+  }
+  if (cardBox.classList.contains("is-kpc-ejected")) event.stopPropagation();
 });
-kpcLayer.addEventListener("click", playChoukaFromKpc);
+kpcLayer.addEventListener("pointermove", moveAuxKpcDrag);
+kpcLayer.addEventListener("pointerup", endAuxKpcDrag);
+kpcLayer.addEventListener("pointercancel", endAuxKpcDrag);
+auxTransferCard?.addEventListener("pointerdown", (event) => beginAuxKpcDrag(event, true));
+auxTransferCard?.addEventListener("pointermove", moveAuxKpcDrag);
+auxTransferCard?.addEventListener("pointerup", endAuxKpcDrag);
+auxTransferCard?.addEventListener("pointercancel", endAuxKpcDrag);
+auxTransferCard?.addEventListener("contextmenu", (event) => event.preventDefault());
 bsButton?.addEventListener("click", toggleAuxDock);
 lzjButton?.addEventListener("click", handleLzjClick);
 bg4Center.addEventListener("animationend", finishBg4Merge);
@@ -1515,7 +1595,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=58", { updateViaCache: "none" })
+      .register("./sw.js?v=59", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

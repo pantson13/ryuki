@@ -1,11 +1,11 @@
-// Ryuki v58: PWA loop fixes + BS/LZJ auxiliary card-processing branch
-const CACHE_NAME = "ryuki-pwa-v58-loop-aux-device";
+// Ryuki v59: manual KPC drag to LZJ + six per-card sounds
+const CACHE_NAME = "ryuki-pwa-v59-manual-kpc-lzj-audio";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=58",
-  "./style.css?v=58",
-  "./script.js?v=58",
+  "./manifest.webmanifest?v=59",
+  "./style.css?v=59",
+  "./script.js?v=59",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -31,6 +31,15 @@ const APP_SHELL = [
   "./assets/images/khfg.png",
   "./assets/images/ydfg.png",
   "./assets/audio/chouka.mp3",
+  "./assets/audio/huagai1.mp3",
+  "./assets/audio/chaka.mp3",
+  "./assets/audio/huagai2.mp3",
+  "./assets/audio/j.mp3",
+  "./assets/audio/q.mp3",
+  "./assets/audio/d.mp3",
+  "./assets/audio/l.mp3",
+  "./assets/audio/f.mp3",
+  "./assets/audio/hc.mp3",
   "./assets/icons/icon-192.png?v=50",
   "./assets/icons/icon-512.png?v=50",
   "./assets/icons/icon-maskable-512.png?v=50",

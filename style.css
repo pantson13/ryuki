@@ -1,4 +1,4 @@
-/* Ryuki v58: repeat-stage fixes + BS/LZJ auxiliary card-processing branch */
+/* Ryuki v59: manual KPC drag to LZJ + six per-card sounds */
 
 :root {
   color-scheme: dark;
@@ -64,7 +64,6 @@ body {
   --lzj3-x: 0px;
   --lzj3-y: 0px;
   --lzj3-width: 330px;
-  --aux-card-duration: 0.62s;
   --lyfg-x: 210px;
   --lyfg-y: 330px;
   --lyfg-width: 360px;
@@ -72,8 +71,6 @@ body {
   --aux-lq-blur: 7px;
   --card-extract-x: 0px;
   --card-extract-y: 0px;
-  --kpc-slide-x: -260px;
-  --kpc-slide-duration: 0.42s;
   --stage-two-wave-duration: 1s;
   --stage-two-flip-duration: 0.42s;
   --card-start-x: 0px;
@@ -495,14 +492,18 @@ body {
   transform:
     translate(-50%, -50%)
     translate3d(var(--kpc-x), var(--kpc-y), 0);
-  transition:
-    transform var(--kpc-slide-duration) cubic-bezier(0.2, 0.72, 0.2, 1),
-    opacity 0.16s linear;
+  transition: opacity 0.16s linear;
+}
+
+.scene.is-aux-armed .card-box.is-inserted {
+  pointer-events: auto;
 }
 
 .scene.is-aux-armed .card-middle {
   pointer-events: auto;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+  -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -512,12 +513,8 @@ body {
 }
 
 .card-box.is-kpc-ejected .card-middle {
-  transform:
-    translate(-50%, -50%)
-    translate3d(calc(var(--kpc-x) + var(--kpc-slide-x)), var(--kpc-y), 0);
   pointer-events: auto;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+  cursor: grab;
 }
 
 .card-glow {
@@ -931,24 +928,27 @@ body {
   display: block;
   opacity: 0;
   pointer-events: none;
+  transform: none;
   transform-origin: 50% 50%;
-  transform: translate3d(0, 0, 0) rotateY(0deg) scale(1);
-  transition:
-    transform var(--aux-card-duration) cubic-bezier(0.2, 0.75, 0.2, 1),
-    opacity 0.12s linear;
-  will-change: transform, opacity;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-drag: none;
+  user-select: none;
+  will-change: left, top;
 }
 
 .aux-transfer-card.is-visible {
   opacity: 1;
+  pointer-events: auto;
+  cursor: grab;
 }
 
-.aux-transfer-card.is-moving,
+.aux-transfer-card.is-dragging {
+  cursor: grabbing;
+}
+
 .aux-transfer-card.is-inserted {
-  transform:
-    translate3d(var(--aux-card-dx), var(--aux-card-dy), 0)
-    rotateY(180deg)
-    scale(var(--aux-card-scale));
+  pointer-events: none;
 }
 
 .aux-lyfg {
@@ -1111,4 +1111,15 @@ body {
       rotateY(864deg)
       scaleY(var(--bg3-height-scale));
   }
+}
+
+/* v59 PWA 手动抽 KPC：装置开启后，上层透明 PNG 不再吞掉触摸。 */
+.scene.is-aux-armed .card-cover,
+.scene.is-aux-armed .card-glow {
+  pointer-events: none;
+}
+
+/* LZJ2 等待接卡时先让出命中层；卡片确认插入后按钮才重新接收最终点击。 */
+.scene.is-aux-armed:not(.is-aux-card-inserted) .lzj-button {
+  pointer-events: none;
 }
