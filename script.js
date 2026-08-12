@@ -1,4 +1,4 @@
-/* Ryuki v89: direct-front extraction + PWA window hit-test drag + reliable chaka */
+/* Ryuki v90: direct-front extraction + PWA window hit-test drag + reliable chaka */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -991,9 +991,19 @@ function setAuxKpcPullX(x) {
 
 function stopAuxKpcDrag(pointerId = null) {
   if (!auxKpcDragging) return;
-  // PWA / iPhone Safari：整个抽卡手势只由 window + pointerId 跟踪。
-  // 不再让旧 KPC 或浮动卡承担 pointer capture 的“接力”。
   if (pointerId !== null && auxKpcPointerId !== null && pointerId !== auxKpcPointerId) return;
+
+  // PWA / iPhone Safari：每一轮手势都固定由 .scene 持有 capture。
+  // 只在本轮 pointerup/cancel 时释放，绝不在手势中途从 KPC 转给浮动卡。
+  const activeId = auxKpcPointerId;
+  if (activeId !== null && scene?.hasPointerCapture?.(activeId)) {
+    try {
+      scene.releasePointerCapture(activeId);
+    } catch (error) {
+      // Safari 在 pointercancel 后可能已自动释放；这里无需再次抛错。
+    }
+  }
+
   auxKpcDragging = false;
   auxKpcPointerId = null;
   auxTransferCard?.classList.remove("is-dragging");
@@ -1168,7 +1178,7 @@ function handoffAuxKpcToFloatingCard(event) {
   auxTransferCard.classList.remove("is-consumed", "is-inserted");
   lzjButton?.classList.remove("is-result-ready");
 
-  // v89：完全抽出这一帧直接变成所选卡片正面，不再执行任何 rotateY / animation。
+  // v90：完全抽出这一帧直接变成所选卡片正面，不再执行任何 rotateY / animation。
   // 正面大小继续使用用户当前设置的 flippedWidth，并保持卡片中心不跳。
   auxKpcAspectRatio = cardRect.height > 0 ? cardRect.width / cardRect.height : 1;
   const configuredFrontWidth = ANIMATION_CONFIG.auxDevice.kpcDrag?.flippedWidth;
@@ -1251,8 +1261,13 @@ function beginAuxKpcDrag(event, fromTransferCard = false) {
   auxKpcPullStartX = auxKpcPullX;
   if (auxKpcFullyExtracted || fromTransferCard) auxTransferCard?.classList.add("is-dragging");
 
-  // PWA 优先：不设置元素级 pointer capture。
-  // 当前 pointerId 的 move/up/cancel 由 window 捕获阶段统一处理。
+  // PWA 优先：新的手势开始时就由稳定的 scene 捕获当前 pointer。
+  // 这是“每轮手势一次 capture”，不是旧版那种抽到一半再跨 DOM 转移 capture。
+  try {
+    scene?.setPointerCapture?.(event.pointerId);
+  } catch (error) {
+    // 极少数 Safari 状态下 capture 失败时，window 监听仍作为兜底。
+  }
 }
 
 function moveAuxKpcDrag(event) {
@@ -1435,7 +1450,8 @@ function endAuxKpcDrag(event) {
 // PWA / iPhone Safari 保险入口：自由卡片再次拖动不依赖 DOM 自身 hit-test。
 // 只要 pointerdown 落在卡片当前实际矩形内，就立即开始新一轮拖动。
 function handleAuxFloatingCardPointerDown(event) {
-  if (event.button !== undefined && event.button !== 0) return;
+  // touch/pen 的 button 值在 Safari 版本间并不值得信任；只对鼠标限制左键。
+  if (event.pointerType === "mouse" && event.button !== 0) return;
   if (!auxKpcFullyExtracted || !auxKpcFrontReady || auxCardInserted || auxKpcDragging) return;
   if (!auxOpen || !auxArmed) return;
 
@@ -2147,7 +2163,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=89", { updateViaCache: "none" })
+      .register("./sw.js?v=90", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
