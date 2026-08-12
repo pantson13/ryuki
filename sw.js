@@ -1,11 +1,11 @@
-// Ryuki v80: first-insertion-safe WebAudio kaca + PWA-stable KPC drag
-const CACHE_NAME = "ryuki-pwa-v80-first-kaca-ready";
+// Ryuki v84: v83 startup preserved + top-only Dragon Summoner card entry
+const CACHE_NAME = "ryuki-pwa-v84-top-entry-charu";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=80",
-  "./style.css?v=80",
-  "./script.js?v=80",
+  "./manifest.webmanifest?v=84",
+  "./style.css?v=84",
+  "./script.js?v=84",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -32,11 +32,9 @@ const APP_SHELL = [
   "./assets/images/ydfg.png",
   "./assets/audio/kh1.mp3",
   "./assets/audio/ydmusic.mp3",
-  "./assets/audio/kaca.mp3",
   "./assets/audio/charu.mp3",
   "./assets/audio/chouka.mp3",
   "./assets/audio/huagai1.mp3",
-  "./assets/audio/chaka.mp3",
   "./assets/audio/huagai2.mp3",
   "./assets/audio/j.mp3",
   "./assets/audio/q.mp3",

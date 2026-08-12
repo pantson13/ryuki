@@ -1,4 +1,4 @@
-/* Ryuki v80: first-insertion-safe WebAudio kaca pipeline for iPhone PWA */
+/* Ryuki v84: PWA draggable flipped card + top-only Dragon Summoner slot entry */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -80,8 +80,8 @@ const ANIMATION_CONFIG = {
     // showForTuning=true：当前先常亮显示，方便你调位置；之后改 false 即恢复隐藏逻辑。
     lyfg: { x: 8, y: -160, width: 500, duration: 1, showForTuning: false },
 
-    // 红框卡槽有效区：相对龙召机容器中心。只有卡片中心进入此区域并松手才算插入成功。
-    // 下面默认值按你提供的红框比例估算，可自行微调。
+    // 红框卡槽有效区：相对龙召机容器中心。
+    // 只允许卡片从红框上方往下跨过顶部边界进入；左右/下方都不能触发插入。
     cardSlot: {
       showDebug: false,
       x: -10,
@@ -102,8 +102,10 @@ const ANIMATION_CONFIG = {
       fullExtractPadding: 6,
       // 抽出到完整距离的多少比例时播放 chouka；0.5 = 一半。
       choukaTriggerRatio: 0.5,
-      // 卡片与红色卡槽至少进入这么多像素，就立即触发 chaka 并切入龙召机内部层级。
+      // 卡片从“上方入口”向下跨过卡槽上边缘时，横向至少需要这么多像素重叠。
       slotEnterThreshold: 8,
+      // PWA 指针帧允许的顶部边界容差；只有整张卡上一帧位于卡槽上方，才允许从顶部插入。
+      slotTopEntryTolerance: 4,
       // 翻面成所选卡片正面后的宽度；翻面开始前就先切到这个尺寸，避免“先大后小”。
       flippedWidth: 350,
     },
@@ -145,11 +147,9 @@ const ANIMATION_CONFIG = {
 const AUDIO_CONFIG = {
   kh1: "./assets/audio/kh1.mp3",
   ydmusic: "./assets/audio/ydmusic.mp3",
-  kaca: "./assets/audio/kaca.mp3",
   charu: "./assets/audio/charu.mp3",
   chouka: "./assets/audio/chouka.mp3",
   huagai1: "./assets/audio/huagai1.mp3",
-  chaka: "./assets/audio/chaka.mp3",
   huagai2: "./assets/audio/huagai2.mp3",
   guo: "./assets/audio/guo.mp3",
   cardVoices: {
@@ -270,7 +270,6 @@ let auxKpcPosition = { left: 0, top: 0 };
 let auxKpcPullX = 0;
 let auxKpcPullStartX = 0;
 let auxKpcHasBeenPulled = false;
-let auxKpcCaptureTarget = null;
 let auxKpcFullyExtracted = false;
 let auxKpcFlipped = false;
 let auxKpcFlipInProgress = false;
@@ -281,48 +280,36 @@ let auxKpcFullExtractDistance = 0;
 let auxKpcSize = { width: 0, height: 0 };
 let auxKpcAspectRatio = 1;
 let auxDockViewportOrigin = { left: 0, top: 0 };
+let auxSceneViewportOrigin = { left: 0, top: 0 };
+let auxTransferCardPortaled = false;
 let auxChoukaPlayed = false;
 let auxResultPlayed = false;
+let auxCharuPlaybackInUse = false;
 let lyfgTimer = 0;
 
 const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
 const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
-const kacaAudio = new Audio(AUDIO_CONFIG.kaca);
 const charuAudio = new Audio(AUDIO_CONFIG.charu);
 const choukaAudio = new Audio(AUDIO_CONFIG.chouka);
 const huagai1Audio = new Audio(AUDIO_CONFIG.huagai1);
-const chakaAudio = new Audio(AUDIO_CONFIG.chaka);
 const huagai2Audio = new Audio(AUDIO_CONFIG.huagai2);
 const guoAudio = new Audio(AUDIO_CONFIG.guo);
 const cardVoiceAudios = Object.fromEntries(
   Object.entries(AUDIO_CONFIG.cardVoices).map(([key, src]) => [key, new Audio(src)]),
 );
 
-// iPhone/PWA：kaca 走独立 Web Audio 通道。
-// 关键点：网络数据提前 fetch；第一次真实用户手势里同步发起 AudioContext.resume()，
-// 并建立唯一的 ready Promise。插卡命中时等待这个 Promise，再 start()，彻底消除首次竞态。
-let sfxAudioContext = null;
-let kacaAudioBuffer = null;
-let kacaBytesPromise = null;
-let kacaReadyPromise = null;
-let activeKacaSource = null;
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
-kacaAudio.preload = "auto";
 charuAudio.preload = "auto";
 choukaAudio.preload = "auto";
 huagai1Audio.preload = "auto";
-chakaAudio.preload = "auto";
 huagai2Audio.preload = "auto";
 guoAudio.preload = "auto";
 Object.values(cardVoiceAudios).forEach((audio) => { audio.preload = "auto"; });
 [
-  kh1Audio, ydMusicAudio, kacaAudio, charuAudio, choukaAudio,
-  huagai1Audio, chakaAudio, huagai2Audio, guoAudio, ...Object.values(cardVoiceAudios),
+  kh1Audio, ydMusicAudio, charuAudio, choukaAudio,
+  huagai1Audio, huagai2Audio, guoAudio, ...Object.values(cardVoiceAudios),
 ].forEach((audio) => audio.load());
-
-// 尽早读取 kaca 的原始音频数据；解锁/解码仍留到真实用户手势。
-preloadKacaBytes();
 
 function applyPhoneLayout() {
   // 背景覆盖完整动态视口；前景继续按 iPhone 16 Pro Max 的 440:956
@@ -494,162 +481,6 @@ function playAudio(audio) {
   stopAudio(audio);
   const playPromise = audio.play();
   return playPromise instanceof Promise ? playPromise : Promise.resolve();
-}
-
-function getSfxAudioContext() {
-  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextCtor) return null;
-  if (!sfxAudioContext) sfxAudioContext = new AudioContextCtor();
-  return sfxAudioContext;
-}
-
-// 网络读取不需要用户手势，页面加载后就提前开始。
-// 这里只保存原始字节，不提前创建/解锁 AudioContext，避免 iOS 首次状态混乱。
-function preloadKacaBytes() {
-  if (kacaBytesPromise) return kacaBytesPromise;
-
-  kacaBytesPromise = fetch(AUDIO_CONFIG.kaca, { cache: "force-cache" })
-    .then((response) => {
-      if (!response.ok) throw new Error(`kaca fetch failed: ${response.status}`);
-      return response.arrayBuffer();
-    })
-    .catch((error) => {
-      console.warn("kaca 音频数据预加载失败：", error);
-      kacaBytesPromise = null;
-      return null;
-    });
-
-  return kacaBytesPromise;
-}
-
-// 必须从真实 click / pointerdown 中调用。
-// resume() 在函数进入后立即发起，之后异步 decode 可以慢慢完成；
-// 返回的 kacaReadyPromise 是第一次和后续插卡共同等待的唯一准备状态。
-function prepareKacaFromUserGesture() {
-  const context = getSfxAudioContext();
-  if (!context) return Promise.resolve(false);
-
-  let resumePromise = Promise.resolve();
-  try {
-    if (context.state !== "running") {
-      // 这一句必须发生在当前真实用户手势的同步调用栈里。
-      resumePromise = context.resume();
-    }
-  } catch (error) {
-    console.warn("WebAudio resume 发起失败：", error);
-    return Promise.resolve(false);
-  }
-
-  // 每次真实按下都把 resume 链接进 ready Promise，处理 PWA 从后台回来后再次 suspended 的情况。
-  const decodePromise = kacaAudioBuffer
-    ? Promise.resolve(kacaAudioBuffer)
-    : preloadKacaBytes().then((bytes) => {
-        if (!bytes) return null;
-        if (kacaAudioBuffer) return kacaAudioBuffer;
-        // Safari 的 decodeAudioData 可能接管 ArrayBuffer，复制一份最稳妥。
-        return context.decodeAudioData(bytes.slice(0)).then((buffer) => {
-          kacaAudioBuffer = buffer;
-          return buffer;
-        });
-      });
-
-  kacaReadyPromise = Promise.all([Promise.resolve(resumePromise), decodePromise])
-    .then(([, buffer]) => Boolean(buffer && context.state === "running"))
-    .catch((error) => {
-      console.warn("kaca WebAudio 准备失败：", error);
-      return false;
-    });
-
-  return kacaReadyPromise;
-}
-
-function unlockSfxAudio() {
-  return prepareKacaFromUserGesture();
-}
-
-function stopKacaReliable() {
-  if (activeKacaSource) {
-    try {
-      activeKacaSource.stop();
-    } catch {
-      // 已经结束的 AudioBufferSource 再 stop 会抛错，忽略即可。
-    }
-    activeKacaSource = null;
-  }
-  stopAudio(kacaAudio);
-}
-
-async function playKacaReliable() {
-  const context = getSfxAudioContext();
-
-  if (context) {
-    // 正常情况下 ready Promise 已在首次 click / 本次拖动 pointerdown 中创建。
-    // 这里绝不再依赖“命中瞬间刚好已经 running”这种竞态判断。
-    const ready = kacaAudioBuffer && context.state === "running"
-      ? true
-      : await (kacaReadyPromise || Promise.resolve(false));
-
-    if (ready && kacaAudioBuffer && context.state === "running") {
-      if (activeKacaSource) {
-        try { activeKacaSource.stop(); } catch {}
-      }
-
-      const source = context.createBufferSource();
-      source.buffer = kacaAudioBuffer;
-      source.connect(context.destination);
-      source.onended = () => {
-        if (activeKacaSource === source) activeKacaSource = null;
-      };
-      activeKacaSource = source;
-      source.start(0);
-      return true;
-    }
-  }
-
-  // 只有 Web Audio 真正不可用/准备失败才兜底 HTMLAudio。
-  // 现代 iPhone PWA 正常流程不会走到这里。
-  try {
-    await playAudio(kacaAudio);
-    return true;
-  } catch (error) {
-    console.warn("kaca HTMLAudio 兜底播放失败：", error);
-    return false;
-  }
-}
-
-function cancelCharuBg4Sync() {
-  if (charuBg4SyncFrame) {
-    cancelAnimationFrame(charuBg4SyncFrame);
-    charuBg4SyncFrame = 0;
-  }
-}
-
-function getBg4CharuStartTime() {
-  const { seconds, frames, fps } = ANIMATION_CONFIG.bg4.startTimecode;
-  return seconds + frames / fps;
-}
-
-function startCharuBg4Sync() {
-  cancelCharuBg4Sync();
-  const triggerTime = getBg4CharuStartTime();
-
-  const syncToCharu = () => {
-    if (!flowStarted || bg4MergeStarted || charuAudio.ended) {
-      charuBg4SyncFrame = 0;
-      return;
-    }
-
-    // 直接读取 charu 的真实播放进度，避免 setTimeout 因音频启动延迟而导致画面抢跑。
-    if (!charuAudio.paused && charuAudio.currentTime >= triggerTime) {
-      charuBg4SyncFrame = 0;
-      startBg4Merge();
-      return;
-    }
-
-    charuBg4SyncFrame = requestAnimationFrame(syncToCharu);
-  };
-
-  charuBg4SyncFrame = requestAnimationFrame(syncToCharu);
 }
 
 function primeAudio(audio, isInUse) {
@@ -1046,6 +877,17 @@ async function playSelectedCardVoiceWithLyfg() {
   }
 }
 
+function playAuxCardInsertCharu() {
+  // 复用已经在首次真实用户手势中 prime 过的 charuAudio，避免 PWA 在 pointermove 中另开新音频实例被拦截。
+  // auxCharuPlaybackInUse 会让 ended 事件只结束本次插卡音效，不重新触发卡盒阶段的 LQ/抽盒逻辑。
+  auxCharuPlaybackInUse = true;
+  return playAudio(charuAudio).catch((error) => {
+    auxCharuPlaybackInUse = false;
+    console.warn("龙召机插卡 charu 音效播放失败：", error);
+    return null;
+  });
+}
+
 function setAuxKpcPosition(left, top) {
   auxKpcPosition = { left, top };
   if (!auxTransferCard) return;
@@ -1061,13 +903,30 @@ function setAuxKpcPullX(x) {
 
 function stopAuxKpcDrag(pointerId = null) {
   if (!auxKpcDragging) return;
-  if (pointerId !== null && auxKpcCaptureTarget?.hasPointerCapture?.(pointerId)) {
-    auxKpcCaptureTarget.releasePointerCapture(pointerId);
-  }
+  // PWA / iPhone Safari：整个抽卡手势只由 window + pointerId 跟踪。
+  // 不再让旧 KPC 或浮动卡承担 pointer capture 的“接力”。
+  if (pointerId !== null && auxKpcPointerId !== null && pointerId !== auxKpcPointerId) return;
   auxKpcDragging = false;
   auxKpcPointerId = null;
-  auxKpcCaptureTarget = null;
   auxTransferCard?.classList.remove("is-dragging");
+}
+
+function restoreAuxTransferCardHome() {
+  if (!auxTransferCard || !auxDock) return;
+  if (auxTransferCard.parentElement !== auxDock) {
+    // 恢复到 v81 原始 DOM 位置：lzj3 后、lzj2 前。
+    auxDock.insertBefore(auxTransferCard, lzj2Image || null);
+  }
+  auxTransferCardPortaled = false;
+  auxTransferCard.classList.remove("is-scene-floating");
+}
+
+function portalAuxTransferCardToScene() {
+  if (!auxTransferCard || !scene) return false;
+  if (auxTransferCard.parentElement !== scene) scene.appendChild(auxTransferCard);
+  auxTransferCardPortaled = true;
+  auxTransferCard.classList.add("is-scene-floating");
+  return true;
 }
 
 function resetAuxDevice(options = {}) {
@@ -1078,7 +937,6 @@ function resetAuxDevice(options = {}) {
   auxArmed = false;
   auxCardInserted = false;
   auxKpcHasBeenPulled = false;
-  auxKpcCaptureTarget = null;
   auxKpcFullyExtracted = false;
   auxKpcFlipped = false;
   auxKpcFlipInProgress = false;
@@ -1089,12 +947,16 @@ function resetAuxDevice(options = {}) {
   auxKpcSize = { width: 0, height: 0 };
   auxKpcAspectRatio = 1;
   auxDockViewportOrigin = { left: 0, top: 0 };
+  auxSceneViewportOrigin = { left: 0, top: 0 };
   auxKpcPullX = 0;
   auxKpcPullStartX = 0;
   setAuxKpcPullX(0);
   auxChoukaPlayed = false;
   auxResultPlayed = false;
+  if (auxCharuPlaybackInUse) stopAudio(charuAudio);
+  auxCharuPlaybackInUse = false;
   auxKpcPosition = { left: 0, top: 0 };
+  restoreAuxTransferCardHome();
   scene.classList.remove("is-aux-open", "is-aux-armed", "is-aux-card-inserted", "is-aux-playing");
   auxDock?.classList.remove("is-open", "is-armed", "is-card-inserted", "is-playing");
   auxTransferCard?.classList.remove("is-visible", "is-dragging", "is-inserted", "is-fully-extracted", "is-flipping", "is-flipped", "is-consumed");
@@ -1200,14 +1062,22 @@ function getSelectedLqImageSrc() {
 }
 
 function handoffAuxKpcToFloatingCard(event) {
-  if (!auxTransferCard || !auxDock || !kpcLayer || auxKpcFullyExtracted) return false;
+  if (!auxTransferCard || !kpcLayer || !auxKpcOriginalRect || auxKpcFullyExtracted) return false;
 
-  // 这里只读一次布局。抽卡 pointermove 阶段不再反复 getBoundingClientRect。
-  const dockRect = auxDock.getBoundingClientRect();
-  const cardRect = kpcLayer.getBoundingClientRect();
-  auxDockViewportOrigin = { left: dockRect.left, top: dockRect.top };
-  const left = cardRect.left - dockRect.left;
-  const top = cardRect.top - dockRect.top;
+  // 100% 抽出这一刻才把浮动卡临时挂到 scene。
+  // 启动、第一阶段、第二阶段、卡盒出现全部保持 v81 的原始 DOM，不受影响。
+  if (!portalAuxTransferCardToScene()) return false;
+
+  // pointermove 内不再读取布局。当前位置由抽卡起始 rect + 当前 pullX 算出。
+  const scale = sceneScale || 1;
+  const cardRect = {
+    left: auxKpcOriginalRect.left + auxKpcPullX * scale,
+    top: auxKpcOriginalRect.top,
+    width: auxKpcOriginalRect.width,
+    height: auxKpcOriginalRect.height,
+  };
+  const left = cardRect.left - auxSceneViewportOrigin.left;
+  const top = cardRect.top - auxSceneViewportOrigin.top;
 
   if (auxTransferCardImage) auxTransferCardImage.src = "./assets/images/kpc.png";
   auxTransferCard.classList.remove("is-flipping", "is-flipped", "is-consumed", "is-inserted");
@@ -1219,14 +1089,13 @@ function handoffAuxKpcToFloatingCard(event) {
   auxTransferCard.style.width = `${cardRect.width}px`;
   auxTransferCard.style.height = `${cardRect.height}px`;
   setAuxKpcPosition(left, top);
-  auxTransferCard.classList.add("is-visible", "is-fully-extracted");
+  auxTransferCard.classList.add("is-visible", "is-fully-extracted", "is-dragging");
 
+  // 原 KPC 现在只负责视觉退场；手势已经由 window + pointerId 管理，隐藏它不会断触摸。
   cardBox.classList.add("is-kpc-aux-hidden");
   auxKpcFullyExtracted = true;
 
-  // PWA / iPhone Safari 优先：同一根手指的拖动过程中绝不转移 pointer capture。
-  // 当前手势继续由最初 pointerdown 的元素持有 capture；浮动卡只负责视觉显示。
-  // 中途 release(old) -> set(new) 在 iOS PWA 上会偶发丢失后续 pointermove。
+  // 从这一帧开始，自由拖动以当前手指位置为新原点。
   auxKpcPointerStart = { x: event.clientX, y: event.clientY };
   auxKpcStartPosition = { ...auxKpcPosition };
   return true;
@@ -1246,6 +1115,10 @@ function prepareAuxKpcCard() {
   // 只在开始抽卡时读一次尺寸，之后 pointermove 纯数学计算，避免 iPhone/PWA 强制重排。
   const startRect = kpcLayer.getBoundingClientRect();
   const boxRect = cardBox.getBoundingClientRect();
+  const sceneRect = scene.getBoundingClientRect();
+  const dockRect = auxDock?.getBoundingClientRect();
+  auxSceneViewportOrigin = { left: sceneRect.left, top: sceneRect.top };
+  if (dockRect) auxDockViewportOrigin = { left: dockRect.left, top: dockRect.top };
   auxKpcOriginalRect = {
     left: startRect.left,
     top: startRect.top,
@@ -1281,11 +1154,10 @@ function beginAuxKpcDrag(event, fromTransferCard = false) {
   auxKpcPointerStart = { x: event.clientX, y: event.clientY };
   auxKpcStartPosition = { ...auxKpcPosition };
   auxKpcPullStartX = auxKpcPullX;
-  auxTransferCard?.classList.add("is-dragging");
+  if (auxKpcFullyExtracted || fromTransferCard) auxTransferCard?.classList.add("is-dragging");
 
-  const captureTarget = auxKpcFullyExtracted || fromTransferCard ? auxTransferCard : kpcLayer;
-  auxKpcCaptureTarget = captureTarget || null;
-  captureTarget?.setPointerCapture?.(event.pointerId);
+  // PWA 优先：不设置元素级 pointer capture。
+  // 当前 pointerId 的 move/up/cancel 由 window 捕获阶段统一处理。
 }
 
 function moveAuxKpcDrag(event) {
@@ -1307,17 +1179,20 @@ function moveAuxKpcDrag(event) {
       });
     }
 
-    updateAuxKpcExtractionState(event);
-    return;
+    const handedOff = updateAuxKpcExtractionState(event);
+    if (!handedOff) return;
+    // 100% 抽出的同一个 pointermove 立即落入自由拖动分支，不等下一帧。
   }
 
   // 完全离开卡盒后使用 compositor transform 跟手，不触发布局重排。
+  // 翻面后的卡片允许再次按住继续拖；这里保留移动前的屏幕 rect，用来判断是否真正“从上往下”跨过卡槽入口。
+  const previousCardRect = auxKpcFlipped ? getAuxFloatingCardRect() : null;
   const dx = event.clientX - auxKpcPointerStart.x;
   const dy = event.clientY - auxKpcPointerStart.y;
   setAuxKpcPosition(auxKpcStartPosition.left + dx, auxKpcStartPosition.top + dy);
 
-  // 已翻成正面后，只要卡片进入红色槽位就立即 chaka，不再等 pointerup / 完全塞入。
-  if (auxKpcFlipped) tryInsertAuxKpcIntoSlot(event);
+  // 只有从红框上方往下穿过顶部入口才允许插入；左右横穿、从下往上都不触发。
+  if (auxKpcFlipped) tryInsertAuxKpcIntoSlot(event, previousCardRect);
 }
 
 function getAuxCardSlotRect() {
@@ -1341,8 +1216,9 @@ function getAuxCardSlotRect() {
 }
 
 function getAuxFloatingCardRect() {
-  const left = auxDockViewportOrigin.left + auxKpcPosition.left;
-  const top = auxDockViewportOrigin.top + auxKpcPosition.top;
+  const origin = auxTransferCardPortaled ? auxSceneViewportOrigin : auxDockViewportOrigin;
+  const left = origin.left + auxKpcPosition.left;
+  const top = origin.top + auxKpcPosition.top;
   return {
     left,
     top,
@@ -1355,15 +1231,33 @@ function getAuxFloatingCardRect() {
   };
 }
 
-function isAuxKpcEnteringSlot() {
-  if (!auxTransferCard || !auxKpcFullyExtracted) return false;
+function isAuxKpcEnteringSlot(previousCardRect = null) {
+  if (!auxTransferCard || !auxKpcFullyExtracted || !previousCardRect) return false;
+
   const cardRect = getAuxFloatingCardRect();
   const targetRect = getAuxCardSlotRect();
   if (!targetRect) return false;
-  const threshold = (ANIMATION_CONFIG.auxDevice.kpcDrag?.slotEnterThreshold || 0) * (sceneScale || 1);
+
+  const scale = sceneScale || 1;
+  const threshold = (ANIMATION_CONFIG.auxDevice.kpcDrag?.slotEnterThreshold || 0) * scale;
+  const topTolerance = (ANIMATION_CONFIG.auxDevice.kpcDrag?.slotTopEntryTolerance || 0) * scale;
+
+  // 入口是单向的：必须从上往下移动。
+  const movingDown = cardRect.centerY > previousCardRect.centerY + 0.5;
+  if (!movingDown) return false;
+
+  // 上一帧整张卡仍在卡槽上边缘之外；这样从左右侧或下方直接横穿红框永远不会被认成插入。
+  const wasAboveTopGate = previousCardRect.bottom <= targetRect.top + topTolerance;
+  if (!wasAboveTopGate) return false;
+
+  // 当前帧卡片下边缘已经真正跨过顶部边界。
+  const crossedTopGate = cardRect.bottom >= targetRect.top + threshold;
+  if (!crossedTopGate) return false;
+
+  // 从顶部进入时还必须横向对准卡槽。中心点在槽宽范围内，并保留最小重叠量，避免只擦到一个角就触发。
   const overlapX = Math.min(cardRect.right, targetRect.right) - Math.max(cardRect.left, targetRect.left);
-  const overlapY = Math.min(cardRect.bottom, targetRect.bottom) - Math.max(cardRect.top, targetRect.top);
-  return overlapX >= threshold && overlapY >= threshold;
+  const horizontallyAligned = cardRect.centerX >= targetRect.left && cardRect.centerX <= targetRect.right;
+  return horizontallyAligned && overlapX >= threshold;
 }
 
 function showInsertedCardInSlot() {
@@ -1400,15 +1294,15 @@ function completeAuxCardInsertion(event) {
   auxTransferCard?.classList.add("is-inserted");
   showInsertedCardInSlot();
   lzjButton?.classList.add("is-result-ready");
-  playAudio(chakaAudio).catch((error) => {
-    console.warn("chaka 音效播放失败：", error);
-  });
+  // 龙召机卡片从顶部入口插入成功时播放 charu。
+  // 使用已 prime 的主 charuAudio，但用独立状态隔离它的 ended 副作用。
+  playAuxCardInsertCharu();
   return true;
 }
 
-function tryInsertAuxKpcIntoSlot(event) {
+function tryInsertAuxKpcIntoSlot(event, previousCardRect = null) {
   if (!auxKpcFlipped || auxCardInserted || !auxArmed) return false;
-  if (!isAuxKpcEnteringSlot()) return false;
+  if (!isAuxKpcEnteringSlot(previousCardRect)) return false;
   return completeAuxCardInsertion(event);
 }
 
@@ -1455,7 +1349,9 @@ function flipAuxKpcToSelectedCard() {
     auxKpcFlipInProgress = false;
     auxKpcFlipped = true;
     auxTransferCardImage.classList.remove("is-flip-running");
-    auxTransferCard.classList.add("is-flipped");
+    // 翻面结束后仍保持独立浮动卡可命中，用户可以再次按住继续拖向龙召机。
+    auxTransferCard.classList.add("is-visible", "is-flipped");
+    auxTransferCard.classList.remove("is-dragging");
   }, duration + 20);
 }
 function endAuxKpcDrag(event) {
@@ -1473,8 +1369,8 @@ function endAuxKpcDrag(event) {
     return;
   }
 
-  // 若最后一帧刚好进入红框，也在 pointerup 再兜底检查一次。
-  if (auxKpcFlipped) tryInsertAuxKpcIntoSlot(event);
+  // 顶部入口必须依据连续两帧的方向判断，因此 pointerup 不再做“只看当前位置”的兜底插入。
+  // 这样从左右/下方松手时不会绕过顶部单向入口。
 }
 function resetCardGesture() {
   clearTimeout(insertionTimer);
@@ -1515,12 +1411,11 @@ function resetToCard() {
   waterDisplacement.setAttribute("scale", "0");
   stopAudio(kh1Audio);
   stopAudio(ydMusicAudio);
-  stopKacaReliable();
+  auxCharuPlaybackInUse = false;
   stopAudio(charuAudio);
   stopAudio(choukaAudio);
   stopAudio(guoAudio);
   stopAudio(huagai1Audio);
-  stopAudio(chakaAudio);
   stopAudio(huagai2Audio);
   Object.values(cardVoiceAudios).forEach(stopAudio);
   resetAuxDevice();
@@ -1562,7 +1457,6 @@ function completeCardInsertion(pointerId) {
   bg4MergeStarted = false;
   insertionAudioInUse = false;
   cancelCharuBg4Sync();
-  stopKacaReliable();
   stopAudio(charuAudio);
   clearTimeout(bg5TransitionTimer);
   bg5TransitionTimer = 0;
@@ -1589,8 +1483,7 @@ function completeCardInsertion(pointerId) {
   cardTrigger.classList.add("is-hidden");
   activePointerId = null;
 
-  // iPhone/PWA：插槽命中发生在 pointermove；kaca 不再直接依赖该事件的媒体权限。
-  // 首次真实手势已提前建立 WebAudio ready Promise，这里等待准备完成后稳定播放 kaca，再立刻启动 charu。
+  // 卡盒命中腰带卡槽后直接启动 charu。
   playInsertionAudio();
 
   // 下一绘制帧启动“吸入卡槽”的位移。
@@ -1650,6 +1543,12 @@ function hideInsertionGlows() {
 }
 
 function handleCharuEnded() {
+  // 龙召机插卡复用 charuAudio，但不能重新执行卡盒插腰带后的 LQ/抽盒收尾逻辑。
+  if (auxCharuPlaybackInUse) {
+    auxCharuPlaybackInUse = false;
+    return;
+  }
+
   hideInsertionGlows();
   insertionAudioInUse = false;
   if (!flowStarted) return;
@@ -1665,48 +1564,37 @@ function playInsertionAudio() {
   insertionAudioFallback = 0;
   insertionAudioInUse = true;
 
-  stopKacaReliable();
   stopAudio(charuAudio);
-  kacaAudio.muted = false;
   charuAudio.muted = false;
-  kacaAudio.volume = 1;
   charuAudio.volume = 1;
 
-  // PWA 首次插卡：先等待首次真实用户手势已经建立的 WebAudio ready Promise。
-  // 一旦 kaca 的 BufferSource.start() 真正执行，立即启动 charu，保证顺序稳定：kaca -> charu。
-  Promise.resolve(playKacaReliable())
-    .catch((error) => {
-      console.warn("kaca 音效播放失败：", error);
-      return false;
-    })
-    .then(() => {
-      if (!flowStarted || !insertionAudioInUse) return;
+  // 卡盒插入腰带后直接播放 charu，并继续使用 charu 时间轴同步 bg4。
+  let charuPromise;
+  try {
+    charuPromise = charuAudio.play();
+  } catch (error) {
+    console.warn("charu 音效播放失败：", error);
+    hideInsertionGlows();
+    insertionAudioInUse = false;
+    return;
+  }
 
-      let charuPromise;
-      try {
-        charuPromise = charuAudio.play();
-      } catch (error) {
+  if (charuPromise instanceof Promise) {
+    charuPromise
+      .then(() => startCharuBg4Sync())
+      .catch((error) => {
         console.warn("charu 音效播放失败：", error);
         hideInsertionGlows();
-        return;
-      }
-
-      if (charuPromise instanceof Promise) {
-        charuPromise
-          .then(() => startCharuBg4Sync())
-          .catch((error) => {
-            console.warn("charu 音效播放失败：", error);
-            hideInsertionGlows();
-          });
-      } else {
-        startCharuBg4Sync();
-      }
-    });
+        insertionAudioInUse = false;
+      });
+  } else {
+    startCharuBg4Sync();
+  }
 }
 
 function handleCardTransitionStart(event) {
   if (event.propertyName === "transform" && cardBox.classList.contains("is-inserting")) {
-    // 浏览器确认卡盒位移真正开始的同一时刻启动 kaca，再立即启动 charu。
+    // 浏览器确认卡盒位移真正开始时确保 charu 已启动；insertionAudioInUse 会防止重复播放。
     playInsertionAudio();
   }
 }
@@ -1733,9 +1621,6 @@ function enableCardDrag(options = {}) {
 
 function handleCardPointerDown(event) {
   if (!dragReady || !cardTrigger.classList.contains("is-draggable")) return;
-
-  // 真实按下手势里再次 resume AudioContext。iOS PWA 从后台恢复后可能重新 suspend。
-  unlockSfxAudio();
 
   event.preventDefault();
   event.stopPropagation();
@@ -2047,10 +1932,7 @@ function startFromCard(event) {
   // 在 iPhone 的真实点击手势中预解锁后续自动音效。
   ydMusicInUse = false;
   insertionAudioInUse = false;
-  unlockSfxAudio();
-  preloadKacaBytes();
   primeAudio(ydMusicAudio, () => ydMusicInUse);
-  // kaca 不再对同一个 HTMLAudio 做异步 prime，避免和真正插卡播放发生竞态。
   primeAudio(charuAudio, () => insertionAudioInUse);
 
   playAudio(kh1Audio).catch((error) => {
@@ -2082,9 +1964,18 @@ async function waitForSceneImages() {
   );
 }
 
+// PWA 启动优先：初始卡盒不能依赖所有图片 decode 完成才出现。
+// 第一帧先把 cardTrigger 设为 ready；图片随后全部就绪时只做安全的布局校准。
+requestAnimationFrame(() => {
+  if (!flowStarted) {
+    applyPhoneLayout();
+    resetToCard();
+  }
+});
+
 waitForSceneImages().then(() => {
   applyPhoneLayout();
-  requestAnimationFrame(resetToCard);
+  if (!flowStarted && !cardTrigger.classList.contains("is-ready")) resetToCard();
 });
 
 cardTrigger.addEventListener("click", startFromCard);
@@ -2147,7 +2038,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=80", { updateViaCache: "none" })
+      .register("./sw.js?v=84", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
