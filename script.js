@@ -1,4 +1,4 @@
-/* Ryuki v91: element-owned PWA card drag + direct-front extraction + reliable chaka */
+/* Ryuki v92: fixed scene-level PWA card drag + versioned audio cache */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -144,21 +144,21 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3",
-  ydmusic: "./assets/audio/ydmusic.mp3",
-  charu: "./assets/audio/charu.mp3",
-  chouka: "./assets/audio/chouka.mp3",
-  chaka: "./assets/audio/chaka.mp3",
-  huagai1: "./assets/audio/huagai1.mp3",
-  huagai2: "./assets/audio/huagai2.mp3",
-  guo: "./assets/audio/guo.mp3",
+  kh1: "./assets/audio/kh1.mp3?av=92",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=92",
+  charu: "./assets/audio/charu.mp3?av=92",
+  chouka: "./assets/audio/chouka.mp3?av=92",
+  chaka: "./assets/audio/chaka.mp3?av=92",
+  huagai1: "./assets/audio/huagai1.mp3?av=92",
+  huagai2: "./assets/audio/huagai2.mp3?av=92",
+  guo: "./assets/audio/guo.mp3?av=92",
   cardVoices: {
-    1: "./assets/audio/j.mp3",
-    2: "./assets/audio/q.mp3",
-    3: "./assets/audio/d.mp3",
-    4: "./assets/audio/l.mp3",
-    5: "./assets/audio/f.mp3",
-    6: "./assets/audio/hc.mp3",
+    1: "./assets/audio/j.mp3?av=92",
+    2: "./assets/audio/q.mp3?av=92",
+    3: "./assets/audio/d.mp3?av=92",
+    4: "./assets/audio/l.mp3?av=92",
+    5: "./assets/audio/f.mp3?av=92",
+    6: "./assets/audio/hc.mp3?av=92",
   },
 };
 
@@ -281,7 +281,6 @@ let auxKpcSize = { width: 0, height: 0 };
 let auxKpcAspectRatio = 1;
 let auxDockViewportOrigin = { left: 0, top: 0 };
 let auxSceneViewportOrigin = { left: 0, top: 0 };
-let auxTransferCardPortaled = false;
 let auxChoukaPlayed = false;
 let auxResultPlayed = false;
 let lyfgTimer = 0;
@@ -1013,24 +1012,6 @@ function stopAuxKpcDrag(pointerId = null) {
   auxTransferCard?.classList.remove("is-dragging");
 }
 
-function restoreAuxTransferCardHome() {
-  if (!auxTransferCard || !auxDock) return;
-  if (auxTransferCard.parentElement !== auxDock) {
-    // 恢复到 v81 原始 DOM 位置：lzj3 后、lzj2 前。
-    auxDock.insertBefore(auxTransferCard, lzj2Image || null);
-  }
-  auxTransferCardPortaled = false;
-  auxTransferCard.classList.remove("is-scene-floating");
-}
-
-function portalAuxTransferCardToScene() {
-  if (!auxTransferCard || !scene) return false;
-  if (auxTransferCard.parentElement !== scene) scene.appendChild(auxTransferCard);
-  auxTransferCardPortaled = true;
-  auxTransferCard.classList.add("is-scene-floating");
-  return true;
-}
-
 function resetAuxDevice(options = {}) {
   clearTimeout(lyfgTimer);
   lyfgTimer = 0;
@@ -1055,7 +1036,6 @@ function resetAuxDevice(options = {}) {
   auxChoukaPlayed = false;
   auxResultPlayed = false;
   auxKpcPosition = { left: 0, top: 0 };
-  restoreAuxTransferCardHome();
   scene.classList.remove("is-aux-open", "is-aux-armed", "is-aux-card-inserted", "is-aux-playing");
   auxDock?.classList.remove("is-open", "is-armed", "is-card-inserted", "is-playing");
   auxTransferCard?.classList.remove("is-visible", "is-dragging", "is-inserted", "is-fully-extracted", "is-consumed");
@@ -1162,9 +1142,8 @@ function getSelectedLqImageSrc() {
 function handoffAuxKpcToFloatingCard(event) {
   if (!auxTransferCard || !kpcLayer || !auxKpcOriginalRect || auxKpcFullyExtracted) return false;
 
-  // 100% 抽出这一刻才把浮动卡临时挂到 scene。
-  // 启动、第一阶段、第二阶段、卡盒出现全部保持原结构，不受影响。
-  if (!portalAuxTransferCardToScene()) return false;
+  // v92：浮动卡从页面初始化开始就是 .scene 的固定子元素。
+  // 100% 抽出时只切换视觉与坐标，不再在活跃触摸期间 reparent DOM。
 
   // pointermove 内不再读取布局。当前位置由抽卡起始 rect + 当前 pullX 算出。
   const scale = sceneScale || 1;
@@ -1182,7 +1161,7 @@ function handoffAuxKpcToFloatingCard(event) {
   auxTransferCard.classList.remove("is-consumed", "is-inserted");
   lzjButton?.classList.remove("is-result-ready");
 
-  // v90：完全抽出这一帧直接变成所选卡片正面，不再执行任何 rotateY / animation。
+  // 完全抽出这一帧直接变成所选卡片正面，不执行 rotateY / animation。
   // 正面大小继续使用用户当前设置的 flippedWidth，并保持卡片中心不跳。
   auxKpcAspectRatio = cardRect.height > 0 ? cardRect.width / cardRect.height : 1;
   const configuredFrontWidth = ANIMATION_CONFIG.auxDevice.kpcDrag?.flippedWidth;
@@ -1200,7 +1179,7 @@ function handoffAuxKpcToFloatingCard(event) {
   auxKpcFrontReady = true; // 正面已就绪，用于允许龙召机插卡。
   auxTransferCard.classList.add("is-visible", "is-fully-extracted", "is-dragging");
 
-  // 原 KPC 只负责视觉退场；当前手势由 window + pointerId 管理。
+  // 原 KPC 只负责视觉退场；浮动卡 DOM 始终固定在 scene，不发生父级切换。
   cardBox.classList.add("is-kpc-aux-hidden");
   auxKpcFullyExtracted = true;
 
@@ -1332,9 +1311,9 @@ function getAuxCardSlotRect() {
 }
 
 function getAuxFloatingCardRect() {
-  const origin = auxTransferCardPortaled ? auxSceneViewportOrigin : auxDockViewportOrigin;
-  const left = origin.left + auxKpcPosition.left;
-  const top = origin.top + auxKpcPosition.top;
+  // v92：auxTransferCard 永远是 scene 直接子元素，因此只使用 scene 坐标原点。
+  const left = auxSceneViewportOrigin.left + auxKpcPosition.left;
+  const top = auxSceneViewportOrigin.top + auxKpcPosition.top;
   return {
     left,
     top,
@@ -2159,7 +2138,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=91", { updateViaCache: "none" })
+      .register("./sw.js?v=92", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

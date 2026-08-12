@@ -1,11 +1,11 @@
-// Ryuki v91: element-owned PWA drag + direct-front extraction + reliable chaka
-const CACHE_NAME = "ryuki-pwa-v91-element-owned-card-drag";
+// Ryuki v92: fixed scene-level card drag + versioned audio cache
+const CACHE_NAME = "ryuki-pwa-v92-fixed-card-audio-cache";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=91",
-  "./style.css?v=91",
-  "./script.js?v=91",
+  "./manifest.webmanifest?v=92",
+  "./style.css?v=92",
+  "./script.js?v=92",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -30,20 +30,20 @@ const APP_SHELL = [
   "./assets/images/khzd.png",
   "./assets/images/khfg.png",
   "./assets/images/ydfg.png",
-  "./assets/audio/kh1.mp3",
-  "./assets/audio/ydmusic.mp3",
-  "./assets/audio/charu.mp3",
-  "./assets/audio/chouka.mp3",
-  "./assets/audio/chaka.mp3",
-  "./assets/audio/huagai1.mp3",
-  "./assets/audio/huagai2.mp3",
-  "./assets/audio/j.mp3",
-  "./assets/audio/q.mp3",
-  "./assets/audio/d.mp3",
-  "./assets/audio/l.mp3",
-  "./assets/audio/f.mp3",
-  "./assets/audio/hc.mp3",
-  "./assets/audio/guo.mp3",
+  "./assets/audio/kh1.mp3?av=92",
+  "./assets/audio/ydmusic.mp3?av=92",
+  "./assets/audio/charu.mp3?av=92",
+  "./assets/audio/chouka.mp3?av=92",
+  "./assets/audio/chaka.mp3?av=92",
+  "./assets/audio/huagai1.mp3?av=92",
+  "./assets/audio/huagai2.mp3?av=92",
+  "./assets/audio/j.mp3?av=92",
+  "./assets/audio/q.mp3?av=92",
+  "./assets/audio/d.mp3?av=92",
+  "./assets/audio/l.mp3?av=92",
+  "./assets/audio/f.mp3?av=92",
+  "./assets/audio/hc.mp3?av=92",
+  "./assets/audio/guo.mp3?av=92",
   "./assets/icons/icon-192.png?v=50",
   "./assets/icons/icon-512.png?v=50",
   "./assets/icons/icon-maskable-512.png?v=50",
@@ -100,6 +100,22 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() => caches.match(scopedUrl("./index.html"))),
+    );
+    return;
+  }
+
+  // v92：音频使用 Network First。配合 ?av=92 资源版本，覆盖同名 mp3 后不会再随机命中旧媒体缓存。
+  if (requestUrl.pathname.includes("/assets/audio/")) {
+    event.respondWith(
+      fetch(request, { cache: "no-store" })
+        .then((response) => {
+          if (response.status === 200) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request)),
     );
     return;
   }

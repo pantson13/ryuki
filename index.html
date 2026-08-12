@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- Ryuki v88: PWA immediate post-flip drag + reliable chaka -->
+<!-- Ryuki v92: fixed scene-level card drag + versioned PWA audio -->
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -12,25 +12,25 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="description" content="Ryuki 腰带变身动画演示" />
     <title>Ryuki</title>
-    <link rel="manifest" href="./manifest.webmanifest?v=91" />
+    <link rel="manifest" href="./manifest.webmanifest?v=92" />
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/icons/icon-192.png?v=50" />
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/icons/apple-touch-icon.png?v=50" />
-    <link rel="preload" href="./assets/audio/ydmusic.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/charu.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/chouka.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/chaka.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/huagai1.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/huagai2.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/j.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/q.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/d.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/l.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/f.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/hc.mp3" as="audio" type="audio/mpeg" />
-    <link rel="preload" href="./assets/audio/guo.mp3" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/ydmusic.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/charu.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/chouka.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/chaka.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/huagai1.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/huagai2.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/j.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/q.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/d.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/l.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/f.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/hc.mp3?av=92" as="audio" type="audio/mpeg" />
+    <link rel="preload" href="./assets/audio/guo.mp3?av=92" as="audio" type="audio/mpeg" />
     <link rel="preload" href="./assets/images/bg4.png" as="image" type="image/png" />
     <link rel="preload" href="./assets/images/bg5.png" as="image" type="image/png" />
-    <link rel="stylesheet" href="./style.css?v=91" />
+    <link rel="stylesheet" href="./style.css?v=92" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -136,7 +136,6 @@
         <div class="lzj-card-slot-mask" id="lzjCardSlotMask" aria-hidden="true">
           <img class="lzj-inserted-card" id="lzjInsertedCard" src="./assets/images/kpc.png" alt="" />
         </div>
-        <div class="aux-transfer-card" id="auxTransferCard" aria-hidden="true"><img class="aux-transfer-card-image" id="auxTransferCardImage" src="./assets/images/kpc.png" alt="" /></div>
         <img class="lzj-image lzj-image-active" id="lzj2Image" src="./assets/images/lzj2.png" alt="" />
         <img class="lzj-image lzj-image-default" id="lzjImage" src="./assets/images/lzj.png" alt="" />
         <img class="aux-card-cover-mask" id="auxCardCoverMask" src="./assets/images/khzd.png" alt="" aria-hidden="true" />
@@ -144,6 +143,9 @@
         <button class="lzj-button" id="lzjButton" type="button" aria-label="操作龙召机"></button>
         <button class="bs-button" id="bsButton" type="button" aria-label="打开龙召机"><img src="./assets/images/bs.png" alt="" /></button>
       </div>
+
+      <!-- PWA：浮动卡从初始化开始就是 scene 的固定子元素，抽卡过程中不再动态换父级。 -->
+      <div class="aux-transfer-card" id="auxTransferCard" aria-hidden="true"><img class="aux-transfer-card-image" id="auxTransferCardImage" src="./assets/images/kpc.png" alt="" /></div>
 
       <button class="card-unit card-trigger" id="cardTrigger" type="button" aria-label="启动卡盒与腰带动画">
         <img class="card-layer card-bottom" src="./assets/images/khdc.png" alt="" />
@@ -154,6 +156,6 @@
 
     </main>
 
-    <script src="./script.js?v=91"></script>
+    <script src="./script.js?v=92"></script>
   </body>
 </html>

@@ -1,4 +1,4 @@
-/* Ryuki v91: element-owned PWA drag + direct-front extraction + reliable chaka */
+/* Ryuki v92: fixed scene-level PWA card drag + versioned audio */
 
 :root {
   color-scheme: dark;
@@ -1013,8 +1013,8 @@ body {
 
 .aux-transfer-card {
   position: absolute;
-  /* 拖动时永远在完整龙召机上方；真正插入后会切换到 z=2 的槽位裁切层。 */
-  z-index: 7;
+  /* v92：固定挂在 scene；自由拖动时永远位于完整龙召机(z=9)上方。 */
+  z-index: 12;
   left: 0;
   top: 0;
   display: block;
@@ -1029,12 +1029,6 @@ body {
   will-change: transform, opacity;
 }
 
-
-/* 只有 KPC 100% 抽出后，JS 才把浮动卡临时挂到 .scene。
- * 启动阶段仍保持 v81 原始 DOM；这个类只负责 portal 后的层级。 */
-.aux-transfer-card.is-scene-floating {
-  z-index: 12;
-}
 
 .aux-transfer-card-image {
   display: block;
