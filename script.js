@@ -1,11 +1,11 @@
-/* Ryuki v99: visible configurable full-card hit area */
+/* Ryuki v100: hidden debug areas + chained card voice follow-ups */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "99";
+const PWA_BUILD = "100";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 
@@ -87,7 +87,7 @@ const ANIMATION_CONFIG = {
     // 红框卡槽有效区：相对龙召机容器中心。
     // 只允许卡片从红框上方往下跨过顶部边界进入；左右/下方都不能触发插入。
     cardSlot: {
-      showDebug: true,
+      showDebug: false,
       x: -10,
       y: -380,
       width: 400,
@@ -114,7 +114,7 @@ const ANIMATION_CONFIG = {
       // 正面卡片重新拖动的真实触碰区。红框与实际命中区使用同一套参数。
       hitArea: {
         // true = 显示红色触碰区域；确认后改 false 即可隐藏。
-        showDebug: true,
+        showDebug: false,
         // 相对卡片中心偏移，单位为设计坐标。
         offsetX: 0,
         offsetY: 0,
@@ -159,21 +159,27 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=99",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=99",
-  charu: "./assets/audio/charu.mp3?av=99",
-  chouka: "./assets/audio/chouka.mp3?av=99",
-  chaka: "./assets/audio/chaka.mp3?av=99",
-  huagai1: "./assets/audio/huagai1.mp3?av=99",
-  huagai2: "./assets/audio/huagai2.mp3?av=99",
-  guo: "./assets/audio/guo.mp3?av=99",
+  kh1: "./assets/audio/kh1.mp3?av=100",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=100",
+  charu: "./assets/audio/charu.mp3?av=100",
+  chouka: "./assets/audio/chouka.mp3?av=100",
+  chaka: "./assets/audio/chaka.mp3?av=100",
+  huagai1: "./assets/audio/huagai1.mp3?av=100",
+  huagai2: "./assets/audio/huagai2.mp3?av=100",
+  guo: "./assets/audio/guo.mp3?av=100",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=99",
-    2: "./assets/audio/q.mp3?av=99",
-    3: "./assets/audio/d.mp3?av=99",
-    4: "./assets/audio/l.mp3?av=99",
-    5: "./assets/audio/f.mp3?av=99",
-    6: "./assets/audio/hc.mp3?av=99",
+    1: "./assets/audio/j.mp3?av=100",
+    2: "./assets/audio/q.mp3?av=100",
+    3: "./assets/audio/d.mp3?av=100",
+    4: "./assets/audio/l.mp3?av=100",
+    5: "./assets/audio/f.mp3?av=100",
+    6: "./assets/audio/hc.mp3?av=100",
+  },
+  // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
+  cardVoiceFollowUps: {
+    1: "./assets/audio/jianjianglin.mp3?av=100",
+    4: "./assets/audio/longjiao.mp3?av=100",
+    5: "./assets/audio/bsj.mp3?av=100",
   },
 };
 
@@ -331,6 +337,9 @@ const guoAudio = new Audio(AUDIO_CONFIG.guo);
 const cardVoiceAudios = Object.fromEntries(
   Object.entries(AUDIO_CONFIG.cardVoices).map(([key, src]) => [key, new Audio(src)]),
 );
+const cardVoiceFollowUpAudios = Object.fromEntries(
+  Object.entries(AUDIO_CONFIG.cardVoiceFollowUps).map(([key, src]) => [key, new Audio(src)]),
+);
 
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
@@ -341,9 +350,11 @@ huagai1Audio.preload = "auto";
 huagai2Audio.preload = "auto";
 guoAudio.preload = "auto";
 Object.values(cardVoiceAudios).forEach((audio) => { audio.preload = "auto"; });
+Object.values(cardVoiceFollowUpAudios).forEach((audio) => { audio.preload = "auto"; });
 [
   kh1Audio, ydMusicAudio, charuAudio, choukaAudio, chakaAudio,
   huagai1Audio, huagai2Audio, guoAudio, ...Object.values(cardVoiceAudios),
+  ...Object.values(cardVoiceFollowUpAudios),
 ].forEach((audio) => audio.load());
 
 function applyPhoneLayout() {
@@ -991,35 +1002,53 @@ function playSelectedCardVoice() {
 }
 
 async function playSelectedCardVoiceWithLyfg() {
-  const audio = getSelectedCardVoiceAudio();
+  const cardId = selectedLq ? String(selectedLq) : "";
+  const audio = cardId ? cardVoiceAudios[cardId] || null : null;
+  const followUpAudio = cardId ? cardVoiceFollowUpAudios[cardId] || null : null;
   if (!audio) {
     lyfgImage?.classList.remove("is-active");
     return;
   }
 
+  // 每次开始新的读卡流程，先停掉可能残留的追加音效，避免重复叠播。
+  Object.values(cardVoiceFollowUpAudios).forEach(stopAudio);
+
   clearTimeout(lyfgTimer);
   lyfgTimer = 0;
   lyfgImage?.classList.remove("is-active");
 
-  const hideLyfg = () => {
+  const cleanupBaseVoice = () => {
     lyfgImage?.classList.remove("is-active");
-    audio.removeEventListener("ended", hideLyfg);
-    audio.removeEventListener("error", hideLyfg);
+    audio.removeEventListener("ended", handleBaseVoiceEnded);
+    audio.removeEventListener("error", handleBaseVoiceError);
   };
 
-  audio.addEventListener("ended", hideLyfg, { once: true });
-  audio.addEventListener("error", hideLyfg, { once: true });
+  const handleBaseVoiceEnded = () => {
+    cleanupBaseVoice();
+    // j→jianjianglin、l→longjiao、f→bsj；其余卡片没有追加音效。
+    if (followUpAudio) {
+      playAudio(followUpAudio).catch((error) => {
+        console.warn(`LQ${cardId} 追加音效播放失败：`, error);
+      });
+    }
+  };
+
+  const handleBaseVoiceError = () => {
+    cleanupBaseVoice();
+  };
+
+  audio.addEventListener("ended", handleBaseVoiceEnded, { once: true });
+  audio.addEventListener("error", handleBaseVoiceError, { once: true });
 
   try {
     await playAudio(audio);
-    // 只有卡片专属音效真正开始播放后才显示 lyfg。
+    // 只有基础卡片音效真正开始播放后才显示 lyfg。
     lyfgImage?.classList.add("is-active");
   } catch (error) {
-    hideLyfg();
-    console.warn(`LQ${selectedLq} 对应卡片音效播放失败：`, error);
+    cleanupBaseVoice();
+    console.warn(`LQ${cardId} 对应卡片音效播放失败：`, error);
   }
 }
-
 
 function setAuxKpcPosition(left, top) {
   auxKpcPosition = { left, top };
@@ -1402,7 +1431,7 @@ function getAuxFloatingCardRect() {
 }
 
 function getAuxFloatingCardHitRect() {
-  // v99：这是自由正面卡唯一的真实触碰矩形，也是红色调试框显示的区域。
+  // v100：这是自由正面卡唯一的真实触碰矩形；调试框默认隐藏。
   // 不读取 transform DOM，完全使用内部坐标，避免 iPhone Safari 合成层时序影响命中。
   const cardRect = getAuxFloatingCardRect();
   const config = ANIMATION_CONFIG.auxDevice.kpcDrag?.hitArea || {};
@@ -1751,6 +1780,7 @@ function resetToCard() {
   stopAudio(huagai1Audio);
   stopAudio(huagai2Audio);
   Object.values(cardVoiceAudios).forEach(stopAudio);
+  Object.values(cardVoiceFollowUpAudios).forEach(stopAudio);
   resetAuxDevice();
   ydMusicInUse = false;
   insertionAudioInUse = false;
