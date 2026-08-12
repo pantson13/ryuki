@@ -1183,11 +1183,9 @@ function handoffAuxKpcToFloatingCard(event) {
   cardBox.classList.add("is-kpc-aux-hidden");
   auxKpcFullyExtracted = true;
 
-  if (kpcLayer.hasPointerCapture?.(event.pointerId)) {
-    kpcLayer.releasePointerCapture(event.pointerId);
-  }
-  auxTransferCard.setPointerCapture?.(event.pointerId);
-  auxKpcCaptureTarget = auxTransferCard;
+  // PWA / iPhone Safari 优先：同一根手指的拖动过程中绝不转移 pointer capture。
+  // 当前手势继续由最初 pointerdown 的元素持有 capture；浮动卡只负责视觉显示。
+  // 中途 release(old) -> set(new) 在 iOS PWA 上会偶发丢失后续 pointermove。
   auxKpcPointerStart = { x: event.clientX, y: event.clientY };
   auxKpcStartPosition = { ...auxKpcPosition };
   return true;
@@ -2082,13 +2080,14 @@ kpcLayer.addEventListener("pointerdown", (event) => {
   }
   if (cardBox.classList.contains("is-kpc-ejected")) event.stopPropagation();
 });
-kpcLayer.addEventListener("pointermove", moveAuxKpcDrag);
-kpcLayer.addEventListener("pointerup", endAuxKpcDrag);
-kpcLayer.addEventListener("pointercancel", endAuxKpcDrag);
 auxTransferCard?.addEventListener("pointerdown", (event) => beginAuxKpcDrag(event, true));
-auxTransferCard?.addEventListener("pointermove", moveAuxKpcDrag);
-auxTransferCard?.addEventListener("pointerup", endAuxKpcDrag);
-auxTransferCard?.addEventListener("pointercancel", endAuxKpcDrag);
+
+// PWA / iPhone Safari 优先：拖动生命周期统一由 window 捕获。
+// 这样卡片从卡盒内层切换为浮动层时，不依赖 DOM 中途转移 pointer capture。
+// 只有 auxKpcDragging=true 时处理，所以不会干扰页面其他 pointer 交互。
+window.addEventListener("pointermove", moveAuxKpcDrag, { capture: true, passive: false });
+window.addEventListener("pointerup", endAuxKpcDrag, { capture: true, passive: false });
+window.addEventListener("pointercancel", endAuxKpcDrag, { capture: true, passive: false });
 sideButtons[0]?.addEventListener("click", (event) => {
   event.preventDefault();
   event.stopPropagation();
@@ -2106,7 +2105,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=63", { updateViaCache: "none" })
+      .register("./sw.js?v=79", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
