@@ -1,11 +1,11 @@
-// Ryuki v83: v81 startup preserved + runtime scene portal for KPC
-const CACHE_NAME = "ryuki-pwa-v83-runtime-kpc-portal";
+// Ryuki v80: first-insertion-safe WebAudio kaca + PWA-stable KPC drag
+const CACHE_NAME = "ryuki-pwa-v80-first-kaca-ready";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=83",
-  "./style.css?v=83",
-  "./script.js?v=83",
+  "./manifest.webmanifest?v=80",
+  "./style.css?v=80",
+  "./script.js?v=80",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -32,6 +32,7 @@ const APP_SHELL = [
   "./assets/images/ydfg.png",
   "./assets/audio/kh1.mp3",
   "./assets/audio/ydmusic.mp3",
+  "./assets/audio/kaca.mp3",
   "./assets/audio/charu.mp3",
   "./assets/audio/chouka.mp3",
   "./assets/audio/huagai1.mp3",

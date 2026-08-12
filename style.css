@@ -1,4 +1,4 @@
-/* Ryuki v83: v81 startup preserved; floating card portals to scene only after full extraction */
+/* Ryuki v63: original-layer left-only KPC extraction + single flip then 90deg rotate */
 
 :root {
   color-scheme: dark;
@@ -1016,13 +1016,6 @@ body {
   -webkit-user-drag: none;
   user-select: none;
   will-change: transform, opacity;
-}
-
-
-/* 只有 KPC 100% 抽出后，JS 才把浮动卡临时挂到 .scene。
- * 启动阶段仍保持 v81 原始 DOM；这个类只负责 portal 后的层级。 */
-.aux-transfer-card.is-scene-floating {
-  z-index: 12;
 }
 
 .aux-transfer-card-image {
