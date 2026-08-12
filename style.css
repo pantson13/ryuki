@@ -97,6 +97,8 @@ body {
   --kpc-x: 0px;
   --kpc-y: 0px;
   --kpc-pull-x: 0px;
+  --aux-card-x: 0px;
+  --aux-card-y: 0px;
   --kpc-width: 437px;
   --khzd-x: 0px;
   --khzd-y: 0px;
@@ -1000,17 +1002,20 @@ body {
 
 .aux-transfer-card {
   position: absolute;
-  z-index: 2;
+  /* 拖动时永远在完整龙召机上方；真正插入后会切换到 z=2 的槽位裁切层。 */
+  z-index: 7;
+  left: 0;
+  top: 0;
   display: block;
   opacity: 0;
   pointer-events: none;
-  transform: none;
+  transform: translate3d(var(--aux-card-x), var(--aux-card-y), 0);
   transform-origin: 50% 50%;
   touch-action: none;
   -webkit-touch-callout: none;
   -webkit-user-drag: none;
   user-select: none;
-  will-change: left, top, transform, opacity;
+  will-change: transform, opacity;
 }
 
 .aux-transfer-card-image {
@@ -1195,9 +1200,9 @@ body {
   pointer-events: none;
 }
 
-/* LZJ2 等待接卡时先让出命中层；卡片确认插入后按钮才重新接收最终点击。 */
-.scene.is-aux-armed:not(.is-aux-card-inserted) .lzj-button {
-  pointer-events: none;
+/* 龙召机第二层始终可点击：即使没有插卡，也允许 huagai1 / huagai2 上下开合。 */
+.scene.is-aux-open .lzj-button {
+  pointer-events: auto;
 }
 
 /* 卡片确认进入龙召机后，第二次点击必须可靠接收 pointer/click。 */
@@ -1227,8 +1232,7 @@ body {
 }
 
 .aux-transfer-card.is-flipped {
-  /* v72：翻面完成后保持正常横向正面，不做任何 Z 轴旋转。 */
-  transform: none;
+  /* 翻面后不改外层 transform；外层 transform 专门负责 GPU 拖动位置。 */
 }
 
 

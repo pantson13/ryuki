@@ -1,11 +1,11 @@
-// Ryuki v75: KPC front flip + independently adjustable flipped card size
-const CACHE_NAME = "ryuki-pwa-v75-card-slot-debug";
+// Ryuki v77: PWA drag performance + full extraction + live slot insertion + free LZJ toggle
+const CACHE_NAME = "ryuki-pwa-v77-performance-slot-flow";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=75",
-  "./style.css?v=75",
-  "./script.js?v=75",
+  "./manifest.webmanifest?v=77",
+  "./style.css?v=77",
+  "./script.js?v=77",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
