@@ -4,7 +4,7 @@
   "short_name": "Ryuki",
   "description": "Ryuki 腰带变身动画演示",
   "lang": "zh-CN",
-  "start_url": "./?appv=97",
+  "start_url": "./?appv=99",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

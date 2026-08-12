@@ -1,11 +1,11 @@
-/* Ryuki v97: Safari-stable single-touch drag layer, math hit-test only */
+/* Ryuki v99: visible configurable full-card hit area */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "97";
+const PWA_BUILD = "99";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 
@@ -111,8 +111,17 @@ const ANIMATION_CONFIG = {
       slotTopEntryTolerance: 4,
       // 100% 完全抽出后直接显示所选卡片正面的宽度。
       flippedWidth: 350,
-      // iPhone 二次起拖只用内部数学坐标命中，不读 transform DOM；给手指少量容错。
-      redragHitPadding: 14,
+      // 正面卡片重新拖动的真实触碰区。红框与实际命中区使用同一套参数。
+      hitArea: {
+        // true = 显示红色触碰区域；确认后改 false 即可隐藏。
+        showDebug: true,
+        // 相对卡片中心偏移，单位为设计坐标。
+        offsetX: 0,
+        offsetY: 0,
+        // 0 = 自动跟随正面卡片真实宽/高；填正数可直接自定义触碰区域尺寸。
+        width: 0,
+        height: 0,
+      },
     },
 
     // 龙召机弹出期间，下方 lq 区域虚化强度。
@@ -150,21 +159,21 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=97",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=97",
-  charu: "./assets/audio/charu.mp3?av=97",
-  chouka: "./assets/audio/chouka.mp3?av=97",
-  chaka: "./assets/audio/chaka.mp3?av=97",
-  huagai1: "./assets/audio/huagai1.mp3?av=97",
-  huagai2: "./assets/audio/huagai2.mp3?av=97",
-  guo: "./assets/audio/guo.mp3?av=97",
+  kh1: "./assets/audio/kh1.mp3?av=99",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=99",
+  charu: "./assets/audio/charu.mp3?av=99",
+  chouka: "./assets/audio/chouka.mp3?av=99",
+  chaka: "./assets/audio/chaka.mp3?av=99",
+  huagai1: "./assets/audio/huagai1.mp3?av=99",
+  huagai2: "./assets/audio/huagai2.mp3?av=99",
+  guo: "./assets/audio/guo.mp3?av=99",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=97",
-    2: "./assets/audio/q.mp3?av=97",
-    3: "./assets/audio/d.mp3?av=97",
-    4: "./assets/audio/l.mp3?av=97",
-    5: "./assets/audio/f.mp3?av=97",
-    6: "./assets/audio/hc.mp3?av=97",
+    1: "./assets/audio/j.mp3?av=99",
+    2: "./assets/audio/q.mp3?av=99",
+    3: "./assets/audio/d.mp3?av=99",
+    4: "./assets/audio/l.mp3?av=99",
+    5: "./assets/audio/f.mp3?av=99",
+    6: "./assets/audio/hc.mp3?av=99",
   },
 };
 
@@ -215,6 +224,7 @@ const lzj3Image = document.querySelector("#lzj3Image");
 const lzjCardSlotMask = document.querySelector("#lzjCardSlotMask");
 const lzjInsertedCard = document.querySelector("#lzjInsertedCard");
 const cardDragLayer = document.querySelector("#cardDragLayer");
+const auxCardHitDebug = document.querySelector("#auxCardHitDebug");
 const auxTransferCard = document.querySelector("#auxTransferCard");
 const auxTransferCardImage = document.querySelector("#auxTransferCardImage");
 const auxCardCoverMask = document.querySelector("#auxCardCoverMask");
@@ -252,6 +262,7 @@ let shatterCleanupTimer = 0;
 let shatterAnimationFrame = 0;
 let charuBg4SyncFrame = 0;
 let selectedLq = null;
+let selectedLqAspectRatio = null;
 let extractReady = false;
 let isExtracting = false;
 let extractPointerId = null;
@@ -913,6 +924,7 @@ function hideLqPanel() {
   scene.classList.remove("show-lq");
   lqButtons.forEach((button) => button.classList.remove("is-selected"));
   selectedLq = null;
+  selectedLqAspectRatio = null;
   cardBox.classList.remove("is-kpc-ejected");
   if (auxOpen || auxArmed || auxCardInserted || auxKpcHasBeenPulled || auxKpcDragging) resetAuxDevice();
 }
@@ -934,12 +946,34 @@ function enableCardExtraction() {
   cardBox.classList.add("is-extractable");
 }
 
+function updateSelectedLqAspectRatio(button) {
+  const image = button?.querySelector("img");
+  if (!image) {
+    selectedLqAspectRatio = null;
+    return;
+  }
+
+  const applyNaturalRatio = () => {
+    if (button.dataset.lq !== String(selectedLq)) return;
+    if (image.naturalWidth > 0 && image.naturalHeight > 0) {
+      selectedLqAspectRatio = image.naturalWidth / image.naturalHeight;
+    }
+  };
+
+  applyNaturalRatio();
+  if (!selectedLqAspectRatio) {
+    image.decode?.().then(applyNaturalRatio).catch(() => undefined);
+  }
+}
+
 function selectLqCard(event) {
   if (!flowStarted || !scene.classList.contains("show-lq")) return;
   const button = event.currentTarget;
   selectedLq = button.dataset.lq;
+  selectedLqAspectRatio = null;
+  updateSelectedLqAspectRatio(button);
   lqButtons.forEach((item) => item.classList.toggle("is-selected", item === button));
-  // v59：选卡只记录卡种，不再自动把腰带里的 KPC 向左推出。
+  // 选卡只记录卡种与正面真实宽高比，不再自动把腰带里的 KPC 向左推出。
   cardBox.classList.remove("is-kpc-ejected");
 }
 
@@ -993,6 +1027,7 @@ function setAuxKpcPosition(left, top) {
   // PWA 优先：拖动只更新 transform，不再每帧修改 left/top 触发布局重排。
   auxTransferCard.style.setProperty("--aux-card-x", `${left}px`);
   auxTransferCard.style.setProperty("--aux-card-y", `${top}px`);
+  syncAuxCardHitDebug();
 }
 
 function setAuxKpcPullX(x) {
@@ -1057,6 +1092,7 @@ function resetAuxDevice(options = {}) {
   auxDock?.classList.remove("is-open", "is-armed", "is-card-inserted", "is-playing");
   auxTransferCard?.classList.remove("is-visible", "is-dragging", "is-inserted", "is-fully-extracted", "is-consumed");
   cardDragLayer?.classList.remove("is-active");
+  auxCardHitDebug?.classList.remove("is-visible");
   hideInsertedCardInSlot();
   lzjButton?.classList.remove("is-result-ready");
   auxCardCoverMask?.classList.remove("is-visible");
@@ -1158,6 +1194,20 @@ function getSelectedLqImageSrc() {
   return button?.querySelector("img")?.getAttribute("src") || null;
 }
 
+function getSelectedLqAspectRatio() {
+  if (Number.isFinite(selectedLqAspectRatio) && selectedLqAspectRatio > 0) {
+    return selectedLqAspectRatio;
+  }
+  if (!selectedLq) return null;
+  const button = lqButtons.find((item) => item.dataset.lq === String(selectedLq));
+  const image = button?.querySelector("img");
+  if (image?.naturalWidth > 0 && image.naturalHeight > 0) {
+    selectedLqAspectRatio = image.naturalWidth / image.naturalHeight;
+    return selectedLqAspectRatio;
+  }
+  return null;
+}
+
 function handoffAuxKpcToFloatingCard(event) {
   if (!auxTransferCard || !kpcLayer || !auxKpcOriginalRect || auxKpcFullyExtracted) return false;
 
@@ -1181,8 +1231,10 @@ function handoffAuxKpcToFloatingCard(event) {
   lzjButton?.classList.remove("is-result-ready");
 
   // 完全抽出这一帧直接变成所选卡片正面，不执行 rotateY / animation。
-  // 正面大小继续使用用户当前设置的 flippedWidth，并保持卡片中心不跳。
-  auxKpcAspectRatio = cardRect.height > 0 ? cardRect.width / cardRect.height : 1;
+  // v98：正面外层容器必须使用“所选 LQ 图片真实宽高比”。
+  // 旧版沿用 KPC 背面比例，导致图片视觉高度大于容器高度，出现“下半张看得到但摸不到”。
+  const originalAspectRatio = cardRect.height > 0 ? cardRect.width / cardRect.height : 1;
+  auxKpcAspectRatio = getSelectedLqAspectRatio() || originalAspectRatio;
   const configuredFrontWidth = ANIMATION_CONFIG.auxDevice.kpcDrag?.flippedWidth;
   const frontWidth = Number.isFinite(configuredFrontWidth) && configuredFrontWidth > 0
     ? configuredFrontWidth * scale
@@ -1199,6 +1251,7 @@ function handoffAuxKpcToFloatingCard(event) {
   auxTransferCard.classList.add("is-visible", "is-fully-extracted", "is-dragging");
   // 自由卡出现后，iPhone 的全屏拖卡层接管后续 touchstart。
   cardDragLayer?.classList.add("is-active");
+  syncAuxCardHitDebug();
 
   // 原 KPC 只负责视觉退场；浮动卡 DOM 始终固定在 cardDragLayer，不发生父级切换。
   cardBox.classList.add("is-kpc-aux-hidden");
@@ -1349,21 +1402,55 @@ function getAuxFloatingCardRect() {
 }
 
 function getAuxFloatingCardHitRect() {
-  // v97 / iPhone Safari：重新起拖绝不读取 transform 元素的 getBoundingClientRect()。
-  // WebKit 合成层可能已经视觉更新，但 DOM 几何短暂仍是旧值，正是“松手后要等”的来源。
-  // auxKpcPosition / auxKpcSize 是每一帧拖动时由 JS 自己维护的唯一真值。
-  const rect = getAuxFloatingCardRect();
-  const padding = (ANIMATION_CONFIG.auxDevice.kpcDrag?.redragHitPadding || 0) * (sceneScale || 1);
+  // v99：这是自由正面卡唯一的真实触碰矩形，也是红色调试框显示的区域。
+  // 不读取 transform DOM，完全使用内部坐标，避免 iPhone Safari 合成层时序影响命中。
+  const cardRect = getAuxFloatingCardRect();
+  const config = ANIMATION_CONFIG.auxDevice.kpcDrag?.hitArea || {};
+  const scale = sceneScale || 1;
+
+  const configuredWidth = Number(config.width);
+  const configuredHeight = Number(config.height);
+  const width = Number.isFinite(configuredWidth) && configuredWidth > 0
+    ? configuredWidth * scale
+    : cardRect.width;
+  const height = Number.isFinite(configuredHeight) && configuredHeight > 0
+    ? configuredHeight * scale
+    : cardRect.height;
+  const centerX = cardRect.centerX + (Number(config.offsetX) || 0) * scale;
+  const centerY = cardRect.centerY + (Number(config.offsetY) || 0) * scale;
+
   return {
-    left: rect.left - padding,
-    top: rect.top - padding,
-    right: rect.right + padding,
-    bottom: rect.bottom + padding,
-    width: rect.width + padding * 2,
-    height: rect.height + padding * 2,
-    centerX: rect.centerX,
-    centerY: rect.centerY,
+    left: centerX - width / 2,
+    top: centerY - height / 2,
+    right: centerX + width / 2,
+    bottom: centerY + height / 2,
+    width,
+    height,
+    centerX,
+    centerY,
   };
+}
+
+function syncAuxCardHitDebug() {
+  if (!auxCardHitDebug) return;
+  const config = ANIMATION_CONFIG.auxDevice.kpcDrag?.hitArea || {};
+  const shouldShow = Boolean(
+    config.showDebug &&
+    auxKpcFrontReady &&
+    !auxCardInserted &&
+    auxTransferCard?.classList.contains("is-visible")
+  );
+
+  auxCardHitDebug.classList.toggle("is-visible", shouldShow);
+  if (!shouldShow) return;
+
+  const rect = getAuxFloatingCardHitRect();
+  const left = rect.left - auxDragLayerViewportOrigin.left;
+  const top = rect.top - auxDragLayerViewportOrigin.top;
+  auxCardHitDebug.style.width = `${rect.width}px`;
+  auxCardHitDebug.style.height = `${rect.height}px`;
+  auxCardHitDebug.style.setProperty("--aux-hit-x", `${left}px`);
+  auxCardHitDebug.style.setProperty("--aux-hit-y", `${top}px`);
 }
 
 function isAuxKpcEnteringSlot(previousCardRect = null) {
@@ -1445,6 +1532,7 @@ function completeAuxCardInsertion(event) {
   auxDock?.classList.add("is-card-inserted");
   auxTransferCard?.classList.add("is-inserted");
   cardDragLayer?.classList.remove("is-active");
+  auxCardHitDebug?.classList.remove("is-visible");
   showInsertedCardInSlot();
   lzjButton?.classList.add("is-result-ready");
   // 卡片下边缘碰到卡槽上沿线即视为插卡成功：立刻 chaka，并自动吸入槽内。
@@ -1536,7 +1624,7 @@ function handleAuxTouchStart(event) {
   const touch = event.changedTouches?.[0];
   if (!touch) return;
 
-  // v97：本项目只支持单指拖卡。每一次新的 touchstart 都是新会话。
+  // v98：本项目只支持单指拖卡。每一次新的 touchstart 都是新会话。
   // 即使上一轮状态因为 WebKit 时序残留，也先清掉再立即开始，不存在等待窗口。
   if (auxTouchDragActive || auxKpcDragging || auxTouchIdentifier !== null) {
     clearAuxTouchSession();
@@ -1669,6 +1757,7 @@ function resetToCard() {
   charuFinished = true;
   bg4MergeStarted = false;
   selectedLq = null;
+  selectedLqAspectRatio = null;
   extractReady = false;
   isExtracting = false;
   extractPointerId = null;

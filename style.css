@@ -1029,8 +1029,27 @@ body {
 }
 
 
+/* 正面卡片真实触碰区域调试框。位置/大小与 JS 实际命中矩形完全一致。 */
+.aux-card-hit-debug {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  box-sizing: border-box;
+  opacity: 0;
+  pointer-events: none;
+  border: 4px solid rgba(255, 45, 45, 0.98);
+  background: rgba(255, 45, 45, 0.16);
+  transform: translate3d(var(--aux-hit-x, 0px), var(--aux-hit-y, 0px), 0);
+}
+
+.aux-card-hit-debug.is-visible {
+  opacity: 1;
+}
+
+
 /*
- * v97 / iPhone：自由卡出现后让固定全屏层接住下一次 touchstart。
+ * v98 / iPhone：自由卡出现后让固定全屏层接住下一次 touchstart。
  * 真正是否点中卡片由 JS 的数学矩形判断，不依赖 WebKit 对 transform 子元素的即时 hit-test。
  */
 @media (pointer: coarse) {
@@ -1045,7 +1064,7 @@ body {
 
 .aux-transfer-card {
   position: absolute;
-  /* v97：固定挂在 cardDragLayer；自由拖动时永远位于完整龙召机(z=9)上方。 */
+  /* v98：固定挂在 cardDragLayer；自由拖动时永远位于完整龙召机(z=9)上方。 */
   z-index: 1;
   left: 0;
   top: 0;
