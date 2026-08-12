@@ -1,11 +1,11 @@
-// Ryuki v80: first-insertion-safe WebAudio kaca + PWA-stable KPC drag
-const CACHE_NAME = "ryuki-pwa-v80-first-kaca-ready";
+// Ryuki v82: independent scene-level KPC drag layer for iPhone PWA
+const CACHE_NAME = "ryuki-pwa-v82-scene-floating-card";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=80",
-  "./style.css?v=80",
-  "./script.js?v=80",
+  "./manifest.webmanifest?v=82",
+  "./style.css?v=82",
+  "./script.js?v=82",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -32,7 +32,6 @@ const APP_SHELL = [
   "./assets/images/ydfg.png",
   "./assets/audio/kh1.mp3",
   "./assets/audio/ydmusic.mp3",
-  "./assets/audio/kaca.mp3",
   "./assets/audio/charu.mp3",
   "./assets/audio/chouka.mp3",
   "./assets/audio/huagai1.mp3",
