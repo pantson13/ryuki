@@ -83,7 +83,7 @@ const ANIMATION_CONFIG = {
     // 红框卡槽有效区：相对龙召机容器中心。
     // 只允许卡片从红框上方往下跨过顶部边界进入；左右/下方都不能触发插入。
     cardSlot: {
-      showDebug: false,
+      showDebug: true,
       x: -10,
       y: -380,
       width: 400,
@@ -2075,7 +2075,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=86", { updateViaCache: "none" })
+      .register("./sw.js?v=87", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

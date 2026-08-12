@@ -1,11 +1,11 @@
-// Ryuki v86: top-edge chaka trigger + automatic Dragon Summoner card intake
-const CACHE_NAME = "ryuki-pwa-v86-top-edge-chaka-auto-intake";
+// Ryuki v87: top-edge chaka trigger + automatic Dragon Summoner card intake
+const CACHE_NAME = "ryuki-pwa-v87-top-edge-chaka-auto-intake";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=86",
-  "./style.css?v=86",
-  "./script.js?v=86",
+  "./manifest.webmanifest?v=87",
+  "./style.css?v=87",
+  "./script.js?v=87",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
