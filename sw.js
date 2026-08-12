@@ -1,12 +1,12 @@
-// Ryuki v96: dedicated card drag layer + synchronized PWA build
+// Ryuki v97: Safari-stable single-touch drag layer
 const BUILD = "94";
-const CACHE_NAME = "ryuki-pwa-v96-card-drag-layer";
+const CACHE_NAME = "ryuki-pwa-v97-safari-touch-session";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=96",
-  "./style.css?v=96",
-  "./script.js?v=96",
+  "./manifest.webmanifest?v=97",
+  "./style.css?v=97",
+  "./script.js?v=97",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -31,20 +31,20 @@ const APP_SHELL = [
   "./assets/images/khzd.png",
   "./assets/images/khfg.png",
   "./assets/images/ydfg.png",
-  "./assets/audio/kh1.mp3?av=96",
-  "./assets/audio/ydmusic.mp3?av=96",
-  "./assets/audio/charu.mp3?av=96",
-  "./assets/audio/chouka.mp3?av=96",
-  "./assets/audio/chaka.mp3?av=96",
-  "./assets/audio/huagai1.mp3?av=96",
-  "./assets/audio/huagai2.mp3?av=96",
-  "./assets/audio/j.mp3?av=96",
-  "./assets/audio/q.mp3?av=96",
-  "./assets/audio/d.mp3?av=96",
-  "./assets/audio/l.mp3?av=96",
-  "./assets/audio/f.mp3?av=96",
-  "./assets/audio/hc.mp3?av=96",
-  "./assets/audio/guo.mp3?av=96",
+  "./assets/audio/kh1.mp3?av=97",
+  "./assets/audio/ydmusic.mp3?av=97",
+  "./assets/audio/charu.mp3?av=97",
+  "./assets/audio/chouka.mp3?av=97",
+  "./assets/audio/chaka.mp3?av=97",
+  "./assets/audio/huagai1.mp3?av=97",
+  "./assets/audio/huagai2.mp3?av=97",
+  "./assets/audio/j.mp3?av=97",
+  "./assets/audio/q.mp3?av=97",
+  "./assets/audio/d.mp3?av=97",
+  "./assets/audio/l.mp3?av=97",
+  "./assets/audio/f.mp3?av=97",
+  "./assets/audio/hc.mp3?av=97",
+  "./assets/audio/guo.mp3?av=97",
   "./assets/icons/icon-192.png?v=50",
   "./assets/icons/icon-512.png?v=50",
   "./assets/icons/icon-maskable-512.png?v=50",
@@ -120,7 +120,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // v96：音频使用 Network First。配合 ?av=96 资源版本，覆盖同名 mp3 后不会再随机命中旧媒体缓存。
+  // v97：音频使用 Network First。配合 ?av=97 资源版本，覆盖同名 mp3 后不会再随机命中旧媒体缓存。
   if (requestUrl.pathname.includes("/assets/audio/")) {
     event.respondWith(
       fetch(request, { cache: "no-store" })
