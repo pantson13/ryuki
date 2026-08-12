@@ -1,4 +1,4 @@
-/* Ryuki v86: top-edge chaka trigger + automatic Dragon Summoner card intake */
+/* Ryuki v88: PWA immediate post-flip drag + reliable chaka */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -274,6 +274,9 @@ let auxKpcHasBeenPulled = false;
 let auxKpcFullyExtracted = false;
 let auxKpcFlipped = false;
 let auxKpcFlipInProgress = false;
+let auxKpcFlipSwapTimer = 0;
+let auxKpcFlipFallbackTimer = 0;
+let auxKpcFlipTargetSrc = null;
 let auxKpcExtractStartCenterY = 0;
 let auxKpcInitialLeft = 0;
 let auxKpcOriginalRect = null;
@@ -286,6 +289,19 @@ let auxTransferCardPortaled = false;
 let auxChoukaPlayed = false;
 let auxResultPlayed = false;
 let lyfgTimer = 0;
+let chakaSfxContext = null;
+let chakaSfxBuffer = null;
+let chakaSfxDecodePromise = null;
+let chakaSfxSource = null;
+const chakaBytesPromise = fetch(AUDIO_CONFIG.chaka, { cache: "force-cache" })
+  .then((response) => {
+    if (!response.ok) throw new Error(`chaka fetch ${response.status}`);
+    return response.arrayBuffer();
+  })
+  .catch((error) => {
+    console.warn("chaka 预加载失败，将使用 HTMLAudio 兜底：", error);
+    return null;
+  });
 
 const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
 const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
@@ -506,6 +522,92 @@ function primeAudio(audio, isInUse) {
     })
     .catch(() => {
       audio.muted = false;
+    });
+}
+
+function getChakaAudioContext() {
+  if (chakaSfxContext) return chakaSfxContext;
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+  try {
+    chakaSfxContext = new AudioContextCtor();
+  } catch (error) {
+    console.warn("无法创建 chaka Web AudioContext：", error);
+    chakaSfxContext = null;
+  }
+  return chakaSfxContext;
+}
+
+async function prepareChakaSfxFromGesture() {
+  const context = getChakaAudioContext();
+  if (!context) return false;
+
+  try {
+    if (context.state === "suspended") await context.resume();
+  } catch (error) {
+    console.warn("chaka AudioContext resume 失败：", error);
+    return false;
+  }
+
+  if (chakaSfxBuffer) return context.state === "running";
+  if (!chakaSfxDecodePromise) {
+    chakaSfxDecodePromise = chakaBytesPromise
+      .then((bytes) => {
+        if (!bytes) return null;
+        return new Promise((resolve, reject) => {
+          context.decodeAudioData(bytes.slice(0), resolve, reject);
+        });
+      })
+      .then((buffer) => {
+        chakaSfxBuffer = buffer;
+        return buffer;
+      })
+      .catch((error) => {
+        console.warn("chaka Web Audio 解码失败：", error);
+        chakaSfxDecodePromise = null;
+        return null;
+      });
+  }
+
+  await chakaSfxDecodePromise;
+  return Boolean(chakaSfxBuffer && context.state === "running");
+}
+
+function startChakaBufferNow() {
+  const context = chakaSfxContext;
+  if (!context || context.state !== "running" || !chakaSfxBuffer) return false;
+  try {
+    if (chakaSfxSource) {
+      try { chakaSfxSource.stop(); } catch {}
+      chakaSfxSource.disconnect?.();
+    }
+    const source = context.createBufferSource();
+    source.buffer = chakaSfxBuffer;
+    source.connect(context.destination);
+    source.onended = () => {
+      if (chakaSfxSource === source) chakaSfxSource = null;
+      source.disconnect?.();
+    };
+    chakaSfxSource = source;
+    source.start(0);
+    return true;
+  } catch (error) {
+    console.warn("chaka Web Audio 播放失败：", error);
+    return false;
+  }
+}
+
+function playChakaReliable() {
+  if (startChakaBufferNow()) return Promise.resolve(true);
+
+  return prepareChakaSfxFromGesture()
+    .then((ready) => {
+      if (ready && startChakaBufferNow()) return true;
+      return playAudio(chakaAudio).then(() => true);
+    })
+    .catch((error) => {
+      console.warn("chaka 可靠播放链失败，尝试 HTMLAudio：", error);
+      return playAudio(chakaAudio).then(() => true);
     });
 }
 
@@ -932,6 +1034,11 @@ function resetAuxDevice(options = {}) {
   auxKpcFullyExtracted = false;
   auxKpcFlipped = false;
   auxKpcFlipInProgress = false;
+  clearTimeout(auxKpcFlipSwapTimer);
+  clearTimeout(auxKpcFlipFallbackTimer);
+  auxKpcFlipSwapTimer = 0;
+  auxKpcFlipFallbackTimer = 0;
+  auxKpcFlipTargetSrc = null;
   auxKpcExtractStartCenterY = 0;
   auxKpcInitialLeft = 0;
   auxKpcOriginalRect = null;
@@ -1003,6 +1110,7 @@ function handleLzjClick(event) {
   event?.preventDefault();
   event?.stopPropagation();
   if (!flowStarted || !auxOpen) return;
+  prepareChakaSfxFromGesture().catch(() => undefined);
 
   // 龙召机允许空载开合：第一次下滑 huagai1，第二次上滑 huagai2。
   if (!auxArmed) {
@@ -1130,7 +1238,7 @@ function prepareAuxKpcCard() {
   return true;
 }
 function beginAuxKpcDrag(event, fromTransferCard = false) {
-  if (!flowStarted || !auxOpen || !auxArmed || auxCardInserted || auxKpcFlipInProgress) return;
+  if (!flowStarted || !auxOpen || !auxArmed || auxCardInserted) return;
   if (!cardBox.classList.contains("is-inserted")) return;
   if (fromTransferCard && !auxKpcFullyExtracted) return;
 
@@ -1302,7 +1410,8 @@ function completeAuxCardInsertion(event) {
   showInsertedCardInSlot();
   lzjButton?.classList.add("is-result-ready");
   // 卡片下边缘碰到卡槽上沿线即视为插卡成功：立刻 chaka，并自动吸入槽内。
-  playAudio(chakaAudio).catch((error) => {
+  // PWA 优先：pointermove 里不用 HTMLAudio 作为主通道，直接播放已在真实手势中解锁的 Web Audio Buffer。
+  playChakaReliable().catch((error) => {
     console.warn("龙召机插卡 chaka 音效播放失败：", error);
   });
   return true;
@@ -1320,12 +1429,36 @@ function shouldFlipAuxKpcOnRelease() {
   return Boolean(auxTransferCard && auxKpcFullyExtracted && !auxKpcFlipped && !auxKpcFlipInProgress);
 }
 
+function finishAuxKpcFlip() {
+  if (!auxKpcFlipInProgress || !auxTransferCard || !auxTransferCardImage) return;
+
+  clearTimeout(auxKpcFlipSwapTimer);
+  clearTimeout(auxKpcFlipFallbackTimer);
+  auxKpcFlipSwapTimer = 0;
+  auxKpcFlipFallbackTimer = 0;
+
+  if (auxKpcFlipTargetSrc) auxTransferCardImage.src = auxKpcFlipTargetSrc;
+  auxKpcFlipTargetSrc = null;
+  auxKpcFlipInProgress = false;
+  auxKpcFlipped = true;
+  auxTransferCardImage.classList.remove("is-flip-running");
+  auxTransferCard.classList.add("is-visible", "is-flipped");
+  // 只有当前没有正在拖时才清掉 dragging。若用户在翻面尚未结束时已经重新碰卡并移动，拖动必须连续。
+  if (!auxKpcDragging) auxTransferCard.classList.remove("is-dragging");
+}
+
+function handleAuxKpcFlipAnimationEnd(event) {
+  if (event?.animationName && event.animationName !== "aux-kpc-card-flip") return;
+  finishAuxKpcFlip();
+}
+
 function flipAuxKpcToSelectedCard() {
   if (!auxTransferCard || !auxTransferCardImage || auxKpcFlipped || auxKpcFlipInProgress) return;
   const selectedSrc = getSelectedLqImageSrc();
   if (!selectedSrc) return;
 
   auxKpcFlipInProgress = true;
+  auxKpcFlipTargetSrc = selectedSrc;
   auxTransferCard.classList.remove("is-flipped");
   auxTransferCardImage.classList.remove("is-flip-running");
 
@@ -1342,25 +1475,20 @@ function flipAuxKpcToSelectedCard() {
     setAuxKpcPosition(centerX - newWidth / 2, centerY - newHeight / 2);
   }
 
-  // 只在松手这一次做一次同步刷新，随后动画全程走 compositor。
   void auxTransferCardImage.offsetWidth;
   auxTransferCardImage.classList.add("is-flip-running");
   const duration = (ANIMATION_CONFIG.auxDevice.kpcDrag?.flipDuration || 0.52) * 1000;
 
-  setTimeout(() => {
-    if (!auxKpcFlipInProgress || !auxTransferCardImage) return;
-    auxTransferCardImage.src = selectedSrc;
+  clearTimeout(auxKpcFlipSwapTimer);
+  clearTimeout(auxKpcFlipFallbackTimer);
+  auxKpcFlipSwapTimer = setTimeout(() => {
+    if (!auxKpcFlipInProgress || !auxTransferCardImage || !auxKpcFlipTargetSrc) return;
+    auxTransferCardImage.src = auxKpcFlipTargetSrc;
   }, duration * 0.5);
 
-  setTimeout(() => {
-    if (!auxKpcFlipInProgress || !auxTransferCard || !auxTransferCardImage) return;
-    auxKpcFlipInProgress = false;
-    auxKpcFlipped = true;
-    auxTransferCardImage.classList.remove("is-flip-running");
-    // 翻面结束后仍保持独立浮动卡可命中，用户可以再次按住继续拖向龙召机。
-    auxTransferCard.classList.add("is-visible", "is-flipped");
-    auxTransferCard.classList.remove("is-dragging");
-  }, duration + 20);
+  // 真实结束以 CSS animationend 为准，避免 iPhone PWA 出现“画面翻完但 JS 锁还没解”的等待感。
+  // 这个计时器只作为 animationend 偶发丢失时的保险。
+  auxKpcFlipFallbackTimer = setTimeout(finishAuxKpcFlip, duration + 180);
 }
 function endAuxKpcDrag(event) {
   if (!auxKpcDragging || auxKpcPointerId !== event.pointerId) return;
@@ -1970,7 +2098,7 @@ function startFromCard(event) {
   insertionAudioInUse = false;
   primeAudio(ydMusicAudio, () => ydMusicInUse);
   primeAudio(charuAudio, () => insertionAudioInUse);
-  primeAudio(chakaAudio, () => auxCardInserted);
+  prepareChakaSfxFromGesture().catch(() => undefined);
 
   playAudio(kh1Audio).catch((error) => {
     console.warn("kh1 音效播放失败：", error);
@@ -2045,12 +2173,18 @@ cardBox.addEventListener("contextmenu", (event) => event.preventDefault());
 lqButtons.forEach((button) => button.addEventListener("click", selectLqCard));
 kpcLayer.addEventListener("pointerdown", (event) => {
   if (auxOpen && auxArmed) {
+    prepareChakaSfxFromGesture().catch(() => undefined);
     beginAuxKpcDrag(event, false);
     return;
   }
   if (cardBox.classList.contains("is-kpc-ejected")) event.stopPropagation();
 });
-auxTransferCard?.addEventListener("pointerdown", (event) => beginAuxKpcDrag(event, true));
+auxTransferCard?.addEventListener("pointerdown", (event) => {
+  prepareChakaSfxFromGesture().catch(() => undefined);
+  beginAuxKpcDrag(event, true);
+});
+auxTransferCardImage?.addEventListener("animationend", handleAuxKpcFlipAnimationEnd);
+auxTransferCardImage?.addEventListener("webkitAnimationEnd", handleAuxKpcFlipAnimationEnd);
 
 // PWA / iPhone Safari 优先：拖动生命周期统一由 window 捕获。
 // 这样卡片从卡盒内层切换为浮动层时，不依赖 DOM 中途转移 pointer capture。
@@ -2075,7 +2209,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=87", { updateViaCache: "none" })
+      .register("./sw.js?v=88", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
