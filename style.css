@@ -1,4 +1,4 @@
-/* Ryuki v82: PWA-native independent floating-card drag layer */
+/* Ryuki v83: v81 startup preserved; floating card portals to scene only after full extraction */
 
 :root {
   color-scheme: dark;
@@ -1002,9 +1002,8 @@ body {
 
 .aux-transfer-card {
   position: absolute;
-  /* PWA 优先：作为 scene 的直接子层，拖动时永远压在完整龙召机(auxDock z=9)上方。
-   * 真正插入后隐藏本层，改由 auxDock 内 z=2 的槽位裁切副本显示。 */
-  z-index: 12;
+  /* 拖动时永远在完整龙召机上方；真正插入后会切换到 z=2 的槽位裁切层。 */
+  z-index: 7;
   left: 0;
   top: 0;
   display: block;
@@ -1017,7 +1016,13 @@ body {
   -webkit-user-drag: none;
   user-select: none;
   will-change: transform, opacity;
-  contain: layout style;
+}
+
+
+/* 只有 KPC 100% 抽出后，JS 才把浮动卡临时挂到 .scene。
+ * 启动阶段仍保持 v81 原始 DOM；这个类只负责 portal 后的层级。 */
+.aux-transfer-card.is-scene-floating {
+  z-index: 12;
 }
 
 .aux-transfer-card-image {

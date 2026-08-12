@@ -1,4 +1,4 @@
-/* Ryuki v82: PWA-native independent floating-card drag architecture */
+/* Ryuki v83: stable v81 startup + runtime PWA floating-card portal */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -280,6 +280,7 @@ let auxKpcSize = { width: 0, height: 0 };
 let auxKpcAspectRatio = 1;
 let auxDockViewportOrigin = { left: 0, top: 0 };
 let auxSceneViewportOrigin = { left: 0, top: 0 };
+let auxTransferCardPortaled = false;
 let auxChoukaPlayed = false;
 let auxResultPlayed = false;
 let lyfgTimer = 0;
@@ -891,12 +892,30 @@ function setAuxKpcPullX(x) {
 
 function stopAuxKpcDrag(pointerId = null) {
   if (!auxKpcDragging) return;
-  // PWA / iPhone Safari：拖卡生命周期只认 pointerId + window 监听，
-  // 不再依赖某个 DOM 元素持续持有 pointer capture。
+  // PWA / iPhone Safari：整个抽卡手势只由 window + pointerId 跟踪。
+  // 不再让旧 KPC 或浮动卡承担 pointer capture 的“接力”。
   if (pointerId !== null && auxKpcPointerId !== null && pointerId !== auxKpcPointerId) return;
   auxKpcDragging = false;
   auxKpcPointerId = null;
   auxTransferCard?.classList.remove("is-dragging");
+}
+
+function restoreAuxTransferCardHome() {
+  if (!auxTransferCard || !auxDock) return;
+  if (auxTransferCard.parentElement !== auxDock) {
+    // 恢复到 v81 原始 DOM 位置：lzj3 后、lzj2 前。
+    auxDock.insertBefore(auxTransferCard, lzj2Image || null);
+  }
+  auxTransferCardPortaled = false;
+  auxTransferCard.classList.remove("is-scene-floating");
+}
+
+function portalAuxTransferCardToScene() {
+  if (!auxTransferCard || !scene) return false;
+  if (auxTransferCard.parentElement !== scene) scene.appendChild(auxTransferCard);
+  auxTransferCardPortaled = true;
+  auxTransferCard.classList.add("is-scene-floating");
+  return true;
 }
 
 function resetAuxDevice(options = {}) {
@@ -924,6 +943,7 @@ function resetAuxDevice(options = {}) {
   auxChoukaPlayed = false;
   auxResultPlayed = false;
   auxKpcPosition = { left: 0, top: 0 };
+  restoreAuxTransferCardHome();
   scene.classList.remove("is-aux-open", "is-aux-armed", "is-aux-card-inserted", "is-aux-playing");
   auxDock?.classList.remove("is-open", "is-armed", "is-card-inserted", "is-playing");
   auxTransferCard?.classList.remove("is-visible", "is-dragging", "is-inserted", "is-fully-extracted", "is-flipping", "is-flipped", "is-consumed");
@@ -1031,10 +1051,14 @@ function getSelectedLqImageSrc() {
 function handoffAuxKpcToFloatingCard(event) {
   if (!auxTransferCard || !kpcLayer || !auxKpcOriginalRect || auxKpcFullyExtracted) return false;
 
-  // 不在 pointermove 中读布局：当前位置直接由“抽卡起点 + 已抽出的 X”计算。
-  // 浮动卡已经是 .scene 的直接子元素，因此坐标也直接换算到 scene，而不是 0×0 的 auxDock。
+  // 100% 抽出这一刻才把浮动卡临时挂到 scene。
+  // 启动、第一阶段、第二阶段、卡盒出现全部保持 v81 的原始 DOM，不受影响。
+  if (!portalAuxTransferCardToScene()) return false;
+
+  // pointermove 内不再读取布局。当前位置由抽卡起始 rect + 当前 pullX 算出。
+  const scale = sceneScale || 1;
   const cardRect = {
-    left: auxKpcOriginalRect.left + auxKpcPullX * (sceneScale || 1),
+    left: auxKpcOriginalRect.left + auxKpcPullX * scale,
     top: auxKpcOriginalRect.top,
     width: auxKpcOriginalRect.width,
     height: auxKpcOriginalRect.height,
@@ -1054,13 +1078,11 @@ function handoffAuxKpcToFloatingCard(event) {
   setAuxKpcPosition(left, top);
   auxTransferCard.classList.add("is-visible", "is-fully-extracted", "is-dragging");
 
-  // 原 KPC 此刻只负责留在卡盒里的视觉层，之后可以隐藏；
-  // 当前手势完全由 window + pointerId 继续追踪，不再依赖这个被隐藏的 DOM。
+  // 原 KPC 现在只负责视觉退场；手势已经由 window + pointerId 管理，隐藏它不会断触摸。
   cardBox.classList.add("is-kpc-aux-hidden");
   auxKpcFullyExtracted = true;
 
-  // 以当前这一帧作为自由拖动的新原点。moveAuxKpcDrag 会在同一事件内继续执行，
-  // 不再 handoff 后 return 等下一帧，因此 PWA 不存在交接空档。
+  // 从这一帧开始，自由拖动以当前手指位置为新原点。
   auxKpcPointerStart = { x: event.clientX, y: event.clientY };
   auxKpcStartPosition = { ...auxKpcPosition };
   return true;
@@ -1121,8 +1143,8 @@ function beginAuxKpcDrag(event, fromTransferCard = false) {
   auxKpcPullStartX = auxKpcPullX;
   if (auxKpcFullyExtracted || fromTransferCard) auxTransferCard?.classList.add("is-dragging");
 
-  // PWA 优先：不建立元素级 pointer capture。当前手势由 window 的捕获阶段监听 + pointerId 管理。
-  // 这样原 KPC 隐藏、浮动卡出现、父层变化都不会让手势依赖某个 DOM 的 capture 生命周期。
+  // PWA 优先：不设置元素级 pointer capture。
+  // 当前 pointerId 的 move/up/cancel 由 window 捕获阶段统一处理。
 }
 
 function moveAuxKpcDrag(event) {
@@ -1146,7 +1168,7 @@ function moveAuxKpcDrag(event) {
 
     const handedOff = updateAuxKpcExtractionState(event);
     if (!handedOff) return;
-    // handedOff=true 时不要 return：同一个 pointermove 立即进入下面的自由拖动分支。
+    // 100% 抽出的同一个 pointermove 立即落入自由拖动分支，不等下一帧。
   }
 
   // 完全离开卡盒后使用 compositor transform 跟手，不触发布局重排。
@@ -1179,8 +1201,9 @@ function getAuxCardSlotRect() {
 }
 
 function getAuxFloatingCardRect() {
-  const left = auxSceneViewportOrigin.left + auxKpcPosition.left;
-  const top = auxSceneViewportOrigin.top + auxKpcPosition.top;
+  const origin = auxTransferCardPortaled ? auxSceneViewportOrigin : auxDockViewportOrigin;
+  const left = origin.left + auxKpcPosition.left;
+  const top = origin.top + auxKpcPosition.top;
   return {
     left,
     top,
@@ -1900,9 +1923,18 @@ async function waitForSceneImages() {
   );
 }
 
+// PWA 启动优先：初始卡盒不能依赖所有图片 decode 完成才出现。
+// 第一帧先把 cardTrigger 设为 ready；图片随后全部就绪时只做安全的布局校准。
+requestAnimationFrame(() => {
+  if (!flowStarted) {
+    applyPhoneLayout();
+    resetToCard();
+  }
+});
+
 waitForSceneImages().then(() => {
   applyPhoneLayout();
-  requestAnimationFrame(resetToCard);
+  if (!flowStarted && !cardTrigger.classList.contains("is-ready")) resetToCard();
 });
 
 cardTrigger.addEventListener("click", startFromCard);
@@ -1942,9 +1974,9 @@ kpcLayer.addEventListener("pointerdown", (event) => {
 });
 auxTransferCard?.addEventListener("pointerdown", (event) => beginAuxKpcDrag(event, true));
 
-// PWA / iPhone Safari 优先：抽卡与自由拖卡的完整生命周期统一由 window 捕获。
-// 浮动卡是 scene 的独立直接子层，DOM 切换时不转移 pointer capture。
-// 只有 auxKpcDragging=true 且 pointerId 匹配时处理，不干扰其他交互。
+// PWA / iPhone Safari 优先：拖动生命周期统一由 window 捕获。
+// 这样卡片从卡盒内层切换为浮动层时，不依赖 DOM 中途转移 pointer capture。
+// 只有 auxKpcDragging=true 时处理，所以不会干扰页面其他 pointer 交互。
 window.addEventListener("pointermove", moveAuxKpcDrag, { capture: true, passive: false });
 window.addEventListener("pointerup", endAuxKpcDrag, { capture: true, passive: false });
 window.addEventListener("pointercancel", endAuxKpcDrag, { capture: true, passive: false });
@@ -1965,7 +1997,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=82", { updateViaCache: "none" })
+      .register("./sw.js?v=83", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

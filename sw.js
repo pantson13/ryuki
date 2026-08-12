@@ -1,11 +1,11 @@
-// Ryuki v82: independent scene-level KPC drag layer for iPhone PWA
-const CACHE_NAME = "ryuki-pwa-v82-scene-floating-card";
+// Ryuki v83: v81 startup preserved + runtime scene portal for KPC
+const CACHE_NAME = "ryuki-pwa-v83-runtime-kpc-portal";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=82",
-  "./style.css?v=82",
-  "./script.js?v=82",
+  "./manifest.webmanifest?v=83",
+  "./style.css?v=83",
+  "./script.js?v=83",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
