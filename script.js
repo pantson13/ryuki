@@ -5,7 +5,7 @@
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "100";
+const PWA_BUILD = "101";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 
@@ -159,27 +159,27 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=100",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=100",
-  charu: "./assets/audio/charu.mp3?av=100",
-  chouka: "./assets/audio/chouka.mp3?av=100",
-  chaka: "./assets/audio/chaka.mp3?av=100",
-  huagai1: "./assets/audio/huagai1.mp3?av=100",
-  huagai2: "./assets/audio/huagai2.mp3?av=100",
-  guo: "./assets/audio/guo.mp3?av=100",
+  kh1: "./assets/audio/kh1.mp3?av=101",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=101",
+  charu: "./assets/audio/charu.mp3?av=101",
+  chouka: "./assets/audio/chouka.mp3?av=101",
+  chaka: "./assets/audio/chaka.mp3?av=101",
+  huagai1: "./assets/audio/huagai1.mp3?av=101",
+  huagai2: "./assets/audio/huagai2.mp3?av=101",
+  guo: "./assets/audio/guo.mp3?av=101",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=100",
-    2: "./assets/audio/q.mp3?av=100",
-    3: "./assets/audio/d.mp3?av=100",
-    4: "./assets/audio/l.mp3?av=100",
-    5: "./assets/audio/f.mp3?av=100",
-    6: "./assets/audio/hc.mp3?av=100",
+    1: "./assets/audio/j.mp3?av=101",
+    2: "./assets/audio/q.mp3?av=101",
+    3: "./assets/audio/d.mp3?av=101",
+    4: "./assets/audio/l.mp3?av=101",
+    5: "./assets/audio/f.mp3?av=101",
+    6: "./assets/audio/hc.mp3?av=101",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=100",
-    4: "./assets/audio/longjiao.mp3?av=100",
-    5: "./assets/audio/bsj.mp3?av=100",
+    1: "./assets/audio/jianjianglin.mp3?av=101",
+    4: "./assets/audio/longjiao.mp3?av=101",
+    5: "./assets/audio/bsj.mp3?av=101",
   },
 };
 
@@ -311,6 +311,10 @@ let auxDockViewportOrigin = { left: 0, top: 0 };
 let auxDragLayerViewportOrigin = { left: 0, top: 0 };
 let auxChoukaPlayed = false;
 let auxResultPlayed = false;
+let auxReturning = false;
+let lzjReturnFallbackTimer = 0;
+let lzjReturnTransitionHandler = null;
+let lzjReturnToken = 0;
 let lyfgTimer = 0;
 let chakaSfxContext = null;
 let chakaSfxBuffer = null;
@@ -1094,6 +1098,7 @@ function stopAuxKpcDrag(pointerId = null) {
 }
 
 function resetAuxDevice(options = {}) {
+  cancelLzjReturnWait();
   clearTimeout(lyfgTimer);
   lyfgTimer = 0;
   stopAuxKpcDrag(auxKpcPointerId);
@@ -1169,13 +1174,77 @@ function toggleAuxDock(event) {
   auxDock?.classList.add("is-open");
 }
 
+function cancelLzjReturnWait() {
+  lzjReturnToken += 1;
+  auxReturning = false;
+  clearTimeout(lzjReturnFallbackTimer);
+  lzjReturnFallbackTimer = 0;
+  if (lzjReturnTransitionHandler && lzjImage) {
+    lzjImage.removeEventListener("transitionend", lzjReturnTransitionHandler);
+    lzjImage.removeEventListener("webkitTransitionEnd", lzjReturnTransitionHandler);
+  }
+  lzjReturnTransitionHandler = null;
+}
+
+function runLzjReturnedActions(hadInsertedCard, token) {
+  if (token !== lzjReturnToken || !auxReturning) return;
+
+  cancelLzjReturnWait();
+
+  // 新规则：第2层真正复位到原始位置后，才触发 huagai2。
+  playAudio(huagai2Audio).catch((error) => {
+    console.warn("huagai2 音效播放失败：", error);
+  });
+
+  // 有卡时仍保持 huagai2 -> 读卡音效 的原顺序，只是整体延后到复位完成后。
+  if (hadInsertedCard && selectedLq) {
+    auxResultPlayed = true;
+    scene.classList.add("is-aux-playing");
+    auxDock?.classList.add("is-playing");
+    playSelectedCardVoiceWithLyfg();
+    auxTransferCard?.classList.add("is-consumed");
+    cardDragLayer?.classList.remove("is-active");
+    auxTransferCard?.classList.remove("is-inserted");
+    hideInsertedCardInSlot();
+  } else {
+    auxResultPlayed = false;
+    scene.classList.remove("is-aux-playing");
+    auxDock?.classList.remove("is-playing");
+  }
+}
+
+function waitForLzjReturn(hadInsertedCard) {
+  cancelLzjReturnWait();
+  auxReturning = true;
+  const token = lzjReturnToken;
+
+  const finish = () => {
+    if (token !== lzjReturnToken || !auxReturning) return;
+    // transitionend 到达后再等一帧，确保 Safari 已提交最终 transform。
+    requestAnimationFrame(() => runLzjReturnedActions(hadInsertedCard, token));
+  };
+
+  lzjReturnTransitionHandler = (event) => {
+    if (event.target !== lzjImage || event.propertyName !== "transform") return;
+    finish();
+  };
+
+  lzjImage?.addEventListener("transitionend", lzjReturnTransitionHandler);
+  lzjImage?.addEventListener("webkitTransitionEnd", lzjReturnTransitionHandler);
+
+  // PWA 兜底：极少数 WebKit 情况下 transitionend 可能缺失。
+  // 时间仅作失事件兜底，正常路径始终以真实 transform transitionend 为准。
+  const durationMs = Math.max(0, Number(ANIMATION_CONFIG.auxDevice.container.duration || 0.42) * 1000);
+  lzjReturnFallbackTimer = window.setTimeout(finish, durationMs + 140);
+}
+
 function handleLzjClick(event) {
   event?.preventDefault();
   event?.stopPropagation();
-  if (!flowStarted || !auxOpen) return;
+  if (!flowStarted || !auxOpen || auxReturning) return;
   prepareChakaSfxFromGesture().catch(() => undefined);
 
-  // 龙召机允许空载开合：第一次下滑 huagai1，第二次上滑 huagai2。
+  // 龙召机允许空载开合：第一次下滑 huagai1；第二次先复位，复位完成才 huagai2。
   if (!auxArmed) {
     auxArmed = true;
     auxResultPlayed = false;
@@ -1196,25 +1265,8 @@ function handleLzjClick(event) {
   auxDock?.classList.remove("is-armed", "is-card-inserted");
   lzjButton?.classList.remove("is-result-ready");
 
-  playAudio(huagai2Audio).catch((error) => {
-    console.warn("huagai2 音效播放失败：", error);
-  });
-
-  // 有卡时，上滑同时读卡；没卡时只做 huagai2，不阻止继续反复开合。
-  if (hadInsertedCard && selectedLq) {
-    auxResultPlayed = true;
-    scene.classList.add("is-aux-playing");
-    auxDock?.classList.add("is-playing");
-    playSelectedCardVoiceWithLyfg();
-    auxTransferCard?.classList.add("is-consumed");
-    cardDragLayer?.classList.remove("is-active");
-    auxTransferCard?.classList.remove("is-inserted");
-    hideInsertedCardInSlot();
-  } else {
-    auxResultPlayed = false;
-    scene.classList.remove("is-aux-playing");
-    auxDock?.classList.remove("is-playing");
-  }
+  // 清掉 class 的这一刻开始回位。huagai2 不在这里播放，而是等 transform 真正复位完成。
+  waitForLzjReturn(hadInsertedCard);
 }
 
 function getSelectedLqImageSrc() {

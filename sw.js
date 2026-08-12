@@ -1,12 +1,12 @@
 // Ryuki v100: visible configurable card hit area
-const BUILD = "100";
-const CACHE_NAME = "ryuki-pwa-v100-hidden-debug-audio-chain";
+const BUILD = "101";
+const CACHE_NAME = "ryuki-pwa-v101-huagai2-after-return";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=100",
-  "./style.css?v=100",
-  "./script.js?v=100",
+  "./manifest.webmanifest?v=101",
+  "./style.css?v=101",
+  "./script.js?v=101",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -31,23 +31,23 @@ const APP_SHELL = [
   "./assets/images/khzd.png",
   "./assets/images/khfg.png",
   "./assets/images/ydfg.png",
-  "./assets/audio/kh1.mp3?av=100",
-  "./assets/audio/ydmusic.mp3?av=100",
-  "./assets/audio/charu.mp3?av=100",
-  "./assets/audio/chouka.mp3?av=100",
-  "./assets/audio/chaka.mp3?av=100",
-  "./assets/audio/huagai1.mp3?av=100",
-  "./assets/audio/huagai2.mp3?av=100",
-  "./assets/audio/j.mp3?av=100",
-  "./assets/audio/q.mp3?av=100",
-  "./assets/audio/d.mp3?av=100",
-  "./assets/audio/l.mp3?av=100",
-  "./assets/audio/f.mp3?av=100",
-  "./assets/audio/hc.mp3?av=100",
-  "./assets/audio/jianjianglin.mp3?av=100",
-  "./assets/audio/longjiao.mp3?av=100",
-  "./assets/audio/bsj.mp3?av=100",
-  "./assets/audio/guo.mp3?av=100",
+  "./assets/audio/kh1.mp3?av=101",
+  "./assets/audio/ydmusic.mp3?av=101",
+  "./assets/audio/charu.mp3?av=101",
+  "./assets/audio/chouka.mp3?av=101",
+  "./assets/audio/chaka.mp3?av=101",
+  "./assets/audio/huagai1.mp3?av=101",
+  "./assets/audio/huagai2.mp3?av=101",
+  "./assets/audio/j.mp3?av=101",
+  "./assets/audio/q.mp3?av=101",
+  "./assets/audio/d.mp3?av=101",
+  "./assets/audio/l.mp3?av=101",
+  "./assets/audio/f.mp3?av=101",
+  "./assets/audio/hc.mp3?av=101",
+  "./assets/audio/jianjianglin.mp3?av=101",
+  "./assets/audio/longjiao.mp3?av=101",
+  "./assets/audio/bsj.mp3?av=101",
+  "./assets/audio/guo.mp3?av=101",
   "./assets/icons/icon-192.png?v=50",
   "./assets/icons/icon-512.png?v=50",
   "./assets/icons/icon-maskable-512.png?v=50",
@@ -123,7 +123,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // v100：音频使用 Network First。配合 ?av=100 资源版本，覆盖同名 mp3 后不会再随机命中旧媒体缓存。
+  // v101：音频使用 Network First。配合 ?av=101 资源版本，覆盖同名 mp3 后不会再随机命中旧媒体缓存。
   if (requestUrl.pathname.includes("/assets/audio/")) {
     event.respondWith(
       fetch(request, { cache: "no-store" })
