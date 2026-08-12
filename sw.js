@@ -1,11 +1,11 @@
-// Ryuki v77: PWA drag performance + full extraction + live slot insertion + free LZJ toggle
-const CACHE_NAME = "ryuki-pwa-v77-performance-slot-flow";
+// Ryuki v78: reliable WebAudio kaca playback for iPhone PWA
+const CACHE_NAME = "ryuki-pwa-v78-performance-slot-flow";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=77",
-  "./style.css?v=77",
-  "./script.js?v=77",
+  "./manifest.webmanifest?v=78",
+  "./style.css?v=78",
+  "./script.js?v=78",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
