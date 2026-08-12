@@ -1,4 +1,4 @@
-/* Ryuki v88: PWA immediate post-flip drag + reliable chaka */
+/* Ryuki v89: direct-front extraction + PWA window hit-test drag + reliable chaka */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -97,7 +97,6 @@ const ANIMATION_CONFIG = {
     // KPC 手动拖出参数：抽出约一半时播放 chouka，完全抽出后才交接为自由拖动。
     kpcDrag: {
       dropHitPadding: 24,
-      flipDuration: 0.52,
       // 整张卡右边缘必须完全离开卡盒左边界后才算抽出；可微调额外安全距离。
       fullExtractPadding: 6,
       // 抽出到完整距离的多少比例时播放 chouka；0.5 = 一半。
@@ -106,7 +105,7 @@ const ANIMATION_CONFIG = {
       slotEnterThreshold: 8,
       // PWA 指针帧允许的顶部边界容差；只有整张卡上一帧位于卡槽上方，才允许从顶部插入。
       slotTopEntryTolerance: 4,
-      // 翻面成所选卡片正面后的宽度；翻面开始前就先切到这个尺寸，避免“先大后小”。
+      // 100% 完全抽出后直接显示所选卡片正面的宽度。
       flippedWidth: 350,
     },
 
@@ -272,11 +271,7 @@ let auxKpcPullX = 0;
 let auxKpcPullStartX = 0;
 let auxKpcHasBeenPulled = false;
 let auxKpcFullyExtracted = false;
-let auxKpcFlipped = false;
-let auxKpcFlipInProgress = false;
-let auxKpcFlipSwapTimer = 0;
-let auxKpcFlipFallbackTimer = 0;
-let auxKpcFlipTargetSrc = null;
+let auxKpcFrontReady = false;
 let auxKpcExtractStartCenterY = 0;
 let auxKpcInitialLeft = 0;
 let auxKpcOriginalRect = null;
@@ -371,7 +366,6 @@ function applyPhoneLayout() {
   scene.style.setProperty("--side-buttons-y", `${sideButtons.y * scale}px`);
   scene.style.setProperty("--side-button-size", `${sideButtons.size * scale}px`);
   scene.style.setProperty("--side-button-gap", `${sideButtons.gap * scale}px`);
-  scene.style.setProperty("--kpc-flip-duration", `${auxDevice.kpcDrag.flipDuration}s`);
   scene.style.setProperty("--bs-x", `${auxDevice.bs.x * scale}px`);
   scene.style.setProperty("--bs-y", `${auxDevice.bs.y * scale}px`);
   scene.style.setProperty("--bs-width", `${auxDevice.bs.width * scale}px`);
@@ -1032,13 +1026,7 @@ function resetAuxDevice(options = {}) {
   auxCardInserted = false;
   auxKpcHasBeenPulled = false;
   auxKpcFullyExtracted = false;
-  auxKpcFlipped = false;
-  auxKpcFlipInProgress = false;
-  clearTimeout(auxKpcFlipSwapTimer);
-  clearTimeout(auxKpcFlipFallbackTimer);
-  auxKpcFlipSwapTimer = 0;
-  auxKpcFlipFallbackTimer = 0;
-  auxKpcFlipTargetSrc = null;
+  auxKpcFrontReady = false;
   auxKpcExtractStartCenterY = 0;
   auxKpcInitialLeft = 0;
   auxKpcOriginalRect = null;
@@ -1056,9 +1044,8 @@ function resetAuxDevice(options = {}) {
   restoreAuxTransferCardHome();
   scene.classList.remove("is-aux-open", "is-aux-armed", "is-aux-card-inserted", "is-aux-playing");
   auxDock?.classList.remove("is-open", "is-armed", "is-card-inserted", "is-playing");
-  auxTransferCard?.classList.remove("is-visible", "is-dragging", "is-inserted", "is-fully-extracted", "is-flipping", "is-flipped", "is-consumed");
+  auxTransferCard?.classList.remove("is-visible", "is-dragging", "is-inserted", "is-fully-extracted", "is-consumed");
   hideInsertedCardInSlot();
-  auxTransferCardImage?.classList.remove("is-flip-running");
   lzjButton?.classList.remove("is-result-ready");
   auxCardCoverMask?.classList.remove("is-visible");
   if (auxTransferCardImage) auxTransferCardImage.src = "./assets/images/kpc.png";
@@ -1096,8 +1083,7 @@ function toggleAuxDock(event) {
   auxKpcFullyExtracted = false;
   auxKpcOriginalRect = null;
   setAuxKpcPullX(0);
-  auxKpcFlipped = false;
-  auxKpcFlipInProgress = false;
+  auxKpcFrontReady = false;
   auxChoukaPlayed = false;
   auxResultPlayed = false;
   scene.classList.remove("is-aux-playing");
@@ -1163,7 +1149,7 @@ function handoffAuxKpcToFloatingCard(event) {
   if (!auxTransferCard || !kpcLayer || !auxKpcOriginalRect || auxKpcFullyExtracted) return false;
 
   // 100% 抽出这一刻才把浮动卡临时挂到 scene。
-  // 启动、第一阶段、第二阶段、卡盒出现全部保持 v81 的原始 DOM，不受影响。
+  // 启动、第一阶段、第二阶段、卡盒出现全部保持原结构，不受影响。
   if (!portalAuxTransferCardToScene()) return false;
 
   // pointermove 内不再读取布局。当前位置由抽卡起始 rect + 当前 pullX 算出。
@@ -1177,23 +1163,34 @@ function handoffAuxKpcToFloatingCard(event) {
   const left = cardRect.left - auxSceneViewportOrigin.left;
   const top = cardRect.top - auxSceneViewportOrigin.top;
 
-  if (auxTransferCardImage) auxTransferCardImage.src = "./assets/images/kpc.png";
-  auxTransferCard.classList.remove("is-flipping", "is-flipped", "is-consumed", "is-inserted");
-  auxTransferCardImage?.classList.remove("is-flip-running");
+  const selectedSrc = getSelectedLqImageSrc();
+  if (auxTransferCardImage) auxTransferCardImage.src = selectedSrc || "./assets/images/kpc.png";
+  auxTransferCard.classList.remove("is-consumed", "is-inserted");
   lzjButton?.classList.remove("is-result-ready");
 
-  auxKpcSize = { width: cardRect.width, height: cardRect.height };
+  // v89：完全抽出这一帧直接变成所选卡片正面，不再执行任何 rotateY / animation。
+  // 正面大小继续使用用户当前设置的 flippedWidth，并保持卡片中心不跳。
   auxKpcAspectRatio = cardRect.height > 0 ? cardRect.width / cardRect.height : 1;
-  auxTransferCard.style.width = `${cardRect.width}px`;
-  auxTransferCard.style.height = `${cardRect.height}px`;
-  setAuxKpcPosition(left, top);
+  const configuredFrontWidth = ANIMATION_CONFIG.auxDevice.kpcDrag?.flippedWidth;
+  const frontWidth = Number.isFinite(configuredFrontWidth) && configuredFrontWidth > 0
+    ? configuredFrontWidth * scale
+    : cardRect.width;
+  const frontHeight = auxKpcAspectRatio > 0 ? frontWidth / auxKpcAspectRatio : cardRect.height;
+  const centerX = left + cardRect.width / 2;
+  const centerY = top + cardRect.height / 2;
+
+  auxKpcSize = { width: frontWidth, height: frontHeight };
+  auxTransferCard.style.width = `${frontWidth}px`;
+  auxTransferCard.style.height = `${frontHeight}px`;
+  setAuxKpcPosition(centerX - frontWidth / 2, centerY - frontHeight / 2);
+  auxKpcFrontReady = true; // 正面已就绪，用于允许龙召机插卡。
   auxTransferCard.classList.add("is-visible", "is-fully-extracted", "is-dragging");
 
-  // 原 KPC 现在只负责视觉退场；手势已经由 window + pointerId 管理，隐藏它不会断触摸。
+  // 原 KPC 只负责视觉退场；当前手势由 window + pointerId 管理。
   cardBox.classList.add("is-kpc-aux-hidden");
   auxKpcFullyExtracted = true;
 
-  // 从这一帧开始，自由拖动以当前手指位置为新原点。
+  // 同一个 pointermove 立即继续自由拖动，不 return 等待下一帧。
   auxKpcPointerStart = { x: event.clientX, y: event.clientY };
   auxKpcStartPosition = { ...auxKpcPosition };
   return true;
@@ -1283,14 +1280,14 @@ function moveAuxKpcDrag(event) {
   }
 
   // 完全离开卡盒后使用 compositor transform 跟手，不触发布局重排。
-  // 翻面后的卡片允许再次按住继续拖；这里保留移动前的屏幕 rect，用来判断是否真正“从上往下”跨过卡槽入口。
-  const previousCardRect = auxKpcFlipped ? getAuxFloatingCardRect() : null;
+  // 正面卡片允许持续拖动；这里保留移动前的屏幕 rect，用来判断是否真正“从上往下”跨过卡槽入口。
+  const previousCardRect = auxKpcFrontReady ? getAuxFloatingCardRect() : null;
   const dx = event.clientX - auxKpcPointerStart.x;
   const dy = event.clientY - auxKpcPointerStart.y;
   setAuxKpcPosition(auxKpcStartPosition.left + dx, auxKpcStartPosition.top + dy);
 
   // 只有从红框上方往下接触顶部入口线才允许插入；碰线即 chaka + 自动吸入。
-  if (auxKpcFlipped) tryInsertAuxKpcIntoSlot(event, previousCardRect);
+  if (auxKpcFrontReady) tryInsertAuxKpcIntoSlot(event, previousCardRect);
 }
 
 function getAuxCardSlotRect() {
@@ -1401,7 +1398,7 @@ function hideInsertedCardInSlot() {
 }
 
 function completeAuxCardInsertion(event) {
-  if (auxCardInserted || !auxKpcFlipped || !auxArmed) return false;
+  if (auxCardInserted || !auxKpcFrontReady || !auxArmed) return false;
   auxCardInserted = true;
   stopAuxKpcDrag(event?.pointerId ?? auxKpcPointerId);
   scene.classList.add("is-aux-card-inserted");
@@ -1418,78 +1415,11 @@ function completeAuxCardInsertion(event) {
 }
 
 function tryInsertAuxKpcIntoSlot(event, previousCardRect = null) {
-  if (!auxKpcFlipped || auxCardInserted || !auxArmed) return false;
+  if (!auxKpcFrontReady || auxCardInserted || !auxArmed) return false;
   if (!isAuxKpcEnteringSlot(previousCardRect)) return false;
   return completeAuxCardInsertion(event);
 }
 
-function shouldFlipAuxKpcOnRelease() {
-  // v63：整张卡完全从左侧抽出后，第一次松手就翻面。
-  // 不再要求额外向下拖到某个 Y 阈值。
-  return Boolean(auxTransferCard && auxKpcFullyExtracted && !auxKpcFlipped && !auxKpcFlipInProgress);
-}
-
-function finishAuxKpcFlip() {
-  if (!auxKpcFlipInProgress || !auxTransferCard || !auxTransferCardImage) return;
-
-  clearTimeout(auxKpcFlipSwapTimer);
-  clearTimeout(auxKpcFlipFallbackTimer);
-  auxKpcFlipSwapTimer = 0;
-  auxKpcFlipFallbackTimer = 0;
-
-  if (auxKpcFlipTargetSrc) auxTransferCardImage.src = auxKpcFlipTargetSrc;
-  auxKpcFlipTargetSrc = null;
-  auxKpcFlipInProgress = false;
-  auxKpcFlipped = true;
-  auxTransferCardImage.classList.remove("is-flip-running");
-  auxTransferCard.classList.add("is-visible", "is-flipped");
-  // 只有当前没有正在拖时才清掉 dragging。若用户在翻面尚未结束时已经重新碰卡并移动，拖动必须连续。
-  if (!auxKpcDragging) auxTransferCard.classList.remove("is-dragging");
-}
-
-function handleAuxKpcFlipAnimationEnd(event) {
-  if (event?.animationName && event.animationName !== "aux-kpc-card-flip") return;
-  finishAuxKpcFlip();
-}
-
-function flipAuxKpcToSelectedCard() {
-  if (!auxTransferCard || !auxTransferCardImage || auxKpcFlipped || auxKpcFlipInProgress) return;
-  const selectedSrc = getSelectedLqImageSrc();
-  if (!selectedSrc) return;
-
-  auxKpcFlipInProgress = true;
-  auxKpcFlipTargetSrc = selectedSrc;
-  auxTransferCard.classList.remove("is-flipped");
-  auxTransferCardImage.classList.remove("is-flip-running");
-
-  // 先切到用户设定的最终尺寸，再开始翻面。整个翻面过程中尺寸保持一致，不会先大后小。
-  const flippedWidth = ANIMATION_CONFIG.auxDevice.kpcDrag?.flippedWidth;
-  if (Number.isFinite(flippedWidth) && flippedWidth > 0) {
-    const newWidth = flippedWidth * (sceneScale || 1);
-    const newHeight = auxKpcAspectRatio > 0 ? newWidth / auxKpcAspectRatio : auxKpcSize.height;
-    const centerX = auxKpcPosition.left + auxKpcSize.width / 2;
-    const centerY = auxKpcPosition.top + auxKpcSize.height / 2;
-    auxKpcSize = { width: newWidth, height: newHeight };
-    auxTransferCard.style.width = `${newWidth}px`;
-    auxTransferCard.style.height = `${newHeight}px`;
-    setAuxKpcPosition(centerX - newWidth / 2, centerY - newHeight / 2);
-  }
-
-  void auxTransferCardImage.offsetWidth;
-  auxTransferCardImage.classList.add("is-flip-running");
-  const duration = (ANIMATION_CONFIG.auxDevice.kpcDrag?.flipDuration || 0.52) * 1000;
-
-  clearTimeout(auxKpcFlipSwapTimer);
-  clearTimeout(auxKpcFlipFallbackTimer);
-  auxKpcFlipSwapTimer = setTimeout(() => {
-    if (!auxKpcFlipInProgress || !auxTransferCardImage || !auxKpcFlipTargetSrc) return;
-    auxTransferCardImage.src = auxKpcFlipTargetSrc;
-  }, duration * 0.5);
-
-  // 真实结束以 CSS animationend 为准，避免 iPhone PWA 出现“画面翻完但 JS 锁还没解”的等待感。
-  // 这个计时器只作为 animationend 偶发丢失时的保险。
-  auxKpcFlipFallbackTimer = setTimeout(finishAuxKpcFlip, duration + 180);
-}
 function endAuxKpcDrag(event) {
   if (!auxKpcDragging || auxKpcPointerId !== event.pointerId) return;
   event.preventDefault();
@@ -1497,17 +1427,30 @@ function endAuxKpcDrag(event) {
 
   if (!auxKpcFullyExtracted) updateAuxKpcExtractionState(event);
   if (auxCardInserted) return;
+
+  // 完全抽出时已经直接切成正面；松手只结束当前拖动，不触发动画、不进入等待状态。
   stopAuxKpcDrag(event.pointerId);
-
-  // 完全抽出后的第一次松手：先用最终尺寸，再只反转一次成所选正面。
-  if (shouldFlipAuxKpcOnRelease()) {
-    flipAuxKpcToSelectedCard();
-    return;
-  }
-
-  // 顶部入口必须依据连续两帧的方向判断，因此 pointerup 不再做“只看当前位置”的兜底插入。
-  // 这样从左右/下方松手时不会绕过顶部单向入口。
 }
+
+// PWA / iPhone Safari 保险入口：自由卡片再次拖动不依赖 DOM 自身 hit-test。
+// 只要 pointerdown 落在卡片当前实际矩形内，就立即开始新一轮拖动。
+function handleAuxFloatingCardPointerDown(event) {
+  if (event.button !== undefined && event.button !== 0) return;
+  if (!auxKpcFullyExtracted || !auxKpcFrontReady || auxCardInserted || auxKpcDragging) return;
+  if (!auxOpen || !auxArmed) return;
+
+  const rect = getAuxFloatingCardRect();
+  const inside =
+    event.clientX >= rect.left &&
+    event.clientX <= rect.right &&
+    event.clientY >= rect.top &&
+    event.clientY <= rect.bottom;
+  if (!inside) return;
+
+  prepareChakaSfxFromGesture().catch(() => undefined);
+  beginAuxKpcDrag(event, true);
+}
+
 function resetCardGesture() {
   clearTimeout(insertionTimer);
   insertionTimer = 0;
@@ -2179,12 +2122,7 @@ kpcLayer.addEventListener("pointerdown", (event) => {
   }
   if (cardBox.classList.contains("is-kpc-ejected")) event.stopPropagation();
 });
-auxTransferCard?.addEventListener("pointerdown", (event) => {
-  prepareChakaSfxFromGesture().catch(() => undefined);
-  beginAuxKpcDrag(event, true);
-});
-auxTransferCardImage?.addEventListener("animationend", handleAuxKpcFlipAnimationEnd);
-auxTransferCardImage?.addEventListener("webkitAnimationEnd", handleAuxKpcFlipAnimationEnd);
+window.addEventListener("pointerdown", handleAuxFloatingCardPointerDown, { capture: true, passive: false });
 
 // PWA / iPhone Safari 优先：拖动生命周期统一由 window 捕获。
 // 这样卡片从卡盒内层切换为浮动层时，不依赖 DOM 中途转移 pointer capture。
@@ -2209,7 +2147,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=88", { updateViaCache: "none" })
+      .register("./sw.js?v=89", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

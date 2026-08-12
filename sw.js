@@ -1,11 +1,11 @@
-// Ryuki v88: PWA immediate post-flip drag + reliable chaka
-const CACHE_NAME = "ryuki-pwa-v88-immediate-drag-reliable-chaka";
+// Ryuki v89: direct-front extraction + PWA window hit-test drag + reliable chaka
+const CACHE_NAME = "ryuki-pwa-v89-direct-front-window-hit-test";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=88",
-  "./style.css?v=88",
-  "./script.js?v=88",
+  "./manifest.webmanifest?v=89",
+  "./style.css?v=89",
+  "./script.js?v=89",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

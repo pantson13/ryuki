@@ -1,4 +1,4 @@
-/* Ryuki v88: PWA immediate post-flip drag + reliable chaka */
+/* Ryuki v89: direct-front extraction + PWA window hit-test drag + reliable chaka */
 
 :root {
   color-scheme: dark;
@@ -1234,22 +1234,6 @@ body {
 .aux-card-cover-mask {
   display: none !important;
 }
-
-.aux-transfer-card-image.is-flip-running {
-  animation: aux-kpc-card-flip var(--kpc-flip-duration) cubic-bezier(0.42, 0, 0.2, 1) both;
-}
-
-@keyframes aux-kpc-card-flip {
-  0% { transform: rotateY(0deg); }
-  49% { transform: rotateY(90deg); }
-  51% { transform: rotateY(-90deg); }
-  100% { transform: rotateY(0deg); }
-}
-
-.aux-transfer-card.is-flipped {
-  /* 翻面后不改外层 transform；外层 transform 专门负责 GPU 拖动位置。 */
-}
-
 
 /* 左下角常驻四颗圆形按钮。位置和大小由 script.js 的 sideButtons 参数控制。 */
 .side-controls {
