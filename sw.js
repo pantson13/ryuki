@@ -1,11 +1,11 @@
-// Ryuki v90: stable scene pointer-capture drag + direct-front extraction + reliable chaka
-const CACHE_NAME = "ryuki-pwa-v90-stable-scene-capture-drag";
+// Ryuki v91: element-owned PWA drag + direct-front extraction + reliable chaka
+const CACHE_NAME = "ryuki-pwa-v91-element-owned-card-drag";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=90",
-  "./style.css?v=90",
-  "./script.js?v=90",
+  "./manifest.webmanifest?v=91",
+  "./style.css?v=91",
+  "./script.js?v=91",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",

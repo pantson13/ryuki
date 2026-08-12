@@ -1,4 +1,4 @@
-/* Ryuki v90: direct-front extraction + PWA window hit-test drag + reliable chaka */
+/* Ryuki v91: element-owned PWA card drag + direct-front extraction + reliable chaka */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -264,6 +264,7 @@ let auxArmed = false;
 let auxCardInserted = false;
 let auxKpcDragging = false;
 let auxKpcPointerId = null;
+let auxKpcCaptureTarget = null;
 let auxKpcPointerStart = { x: 0, y: 0 };
 let auxKpcStartPosition = { left: 0, top: 0 };
 let auxKpcPosition = { left: 0, top: 0 };
@@ -993,19 +994,22 @@ function stopAuxKpcDrag(pointerId = null) {
   if (!auxKpcDragging) return;
   if (pointerId !== null && auxKpcPointerId !== null && pointerId !== auxKpcPointerId) return;
 
-  // PWA / iPhone Safari：每一轮手势都固定由 .scene 持有 capture。
-  // 只在本轮 pointerup/cancel 时释放，绝不在手势中途从 KPC 转给浮动卡。
+  // PWA / iPhone Safari：每一轮手势由真正被按下的元素自己持有 capture。
+  // 抽卡轮由 kpcLayer 持有；松手后再拖正面卡则由 auxTransferCard 持有。
+  // 同一轮手势绝不中途换 capture，避免快速 release -> scene recapture 造成延迟。
   const activeId = auxKpcPointerId;
-  if (activeId !== null && scene?.hasPointerCapture?.(activeId)) {
+  const captureTarget = auxKpcCaptureTarget;
+  if (activeId !== null && captureTarget?.hasPointerCapture?.(activeId)) {
     try {
-      scene.releasePointerCapture(activeId);
+      captureTarget.releasePointerCapture(activeId);
     } catch (error) {
-      // Safari 在 pointercancel 后可能已自动释放；这里无需再次抛错。
+      // pointercancel 后 Safari 可能已经自动释放，无需重复抛错。
     }
   }
 
   auxKpcDragging = false;
   auxKpcPointerId = null;
+  auxKpcCaptureTarget = null;
   auxTransferCard?.classList.remove("is-dragging");
 }
 
@@ -1261,12 +1265,14 @@ function beginAuxKpcDrag(event, fromTransferCard = false) {
   auxKpcPullStartX = auxKpcPullX;
   if (auxKpcFullyExtracted || fromTransferCard) auxTransferCard?.classList.add("is-dragging");
 
-  // PWA 优先：新的手势开始时就由稳定的 scene 捕获当前 pointer。
-  // 这是“每轮手势一次 capture”，不是旧版那种抽到一半再跨 DOM 转移 capture。
+  // PWA 优先：拖动方式和开场卡盒保持一致。
+  // 谁收到这次 pointerdown，谁自己持有这一整轮 capture，直到 pointerup/cancel。
+  // 第一次抽卡是 kpcLayer；松手后重新拖正面卡是 auxTransferCard。
+  auxKpcCaptureTarget = fromTransferCard ? auxTransferCard : kpcLayer;
   try {
-    scene?.setPointerCapture?.(event.pointerId);
+    auxKpcCaptureTarget?.setPointerCapture?.(event.pointerId);
   } catch (error) {
-    // 极少数 Safari 状态下 capture 失败时，window 监听仍作为兜底。
+    // capture 偶发失败时仍保留当前状态；不做跨 DOM/scene 的二次 capture。
   }
 }
 
@@ -1447,25 +1453,8 @@ function endAuxKpcDrag(event) {
   stopAuxKpcDrag(event.pointerId);
 }
 
-// PWA / iPhone Safari 保险入口：自由卡片再次拖动不依赖 DOM 自身 hit-test。
-// 只要 pointerdown 落在卡片当前实际矩形内，就立即开始新一轮拖动。
-function handleAuxFloatingCardPointerDown(event) {
-  // touch/pen 的 button 值在 Safari 版本间并不值得信任；只对鼠标限制左键。
-  if (event.pointerType === "mouse" && event.button !== 0) return;
-  if (!auxKpcFullyExtracted || !auxKpcFrontReady || auxCardInserted || auxKpcDragging) return;
-  if (!auxOpen || !auxArmed) return;
-
-  const rect = getAuxFloatingCardRect();
-  const inside =
-    event.clientX >= rect.left &&
-    event.clientX <= rect.right &&
-    event.clientY >= rect.top &&
-    event.clientY <= rect.bottom;
-  if (!inside) return;
-
-  prepareChakaSfxFromGesture().catch(() => undefined);
-  beginAuxKpcDrag(event, true);
-}
+// 正面卡片重新拖动不再经过 window 命中中转。
+// 直接由 auxTransferCard 自己接 pointerdown，与开场 cardTrigger 的拖动模型一致。
 
 function resetCardGesture() {
   clearTimeout(insertionTimer);
@@ -2138,14 +2127,21 @@ kpcLayer.addEventListener("pointerdown", (event) => {
   }
   if (cardBox.classList.contains("is-kpc-ejected")) event.stopPropagation();
 });
-window.addEventListener("pointerdown", handleAuxFloatingCardPointerDown, { capture: true, passive: false });
+kpcLayer.addEventListener("pointermove", moveAuxKpcDrag, { passive: false });
+kpcLayer.addEventListener("pointerup", endAuxKpcDrag, { passive: false });
+kpcLayer.addEventListener("pointercancel", endAuxKpcDrag, { passive: false });
 
-// PWA / iPhone Safari 优先：拖动生命周期统一由 window 捕获。
-// 这样卡片从卡盒内层切换为浮动层时，不依赖 DOM 中途转移 pointer capture。
-// 只有 auxKpcDragging=true 时处理，所以不会干扰页面其他 pointer 交互。
-window.addEventListener("pointermove", moveAuxKpcDrag, { capture: true, passive: false });
-window.addEventListener("pointerup", endAuxKpcDrag, { capture: true, passive: false });
-window.addEventListener("pointercancel", endAuxKpcDrag, { capture: true, passive: false });
+// 松手后的正面卡直接自己负责下一轮拖动，不再经过 window -> scene capture。
+auxTransferCard?.addEventListener("pointerdown", (event) => {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  if (!auxKpcFullyExtracted || !auxKpcFrontReady || auxCardInserted || auxKpcDragging) return;
+  if (!auxOpen || !auxArmed) return;
+  prepareChakaSfxFromGesture().catch(() => undefined);
+  beginAuxKpcDrag(event, true);
+});
+auxTransferCard?.addEventListener("pointermove", moveAuxKpcDrag, { passive: false });
+auxTransferCard?.addEventListener("pointerup", endAuxKpcDrag, { passive: false });
+auxTransferCard?.addEventListener("pointercancel", endAuxKpcDrag, { passive: false });
 sideButtons[0]?.addEventListener("click", (event) => {
   event.preventDefault();
   event.stopPropagation();
@@ -2163,7 +2159,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=90", { updateViaCache: "none" })
+      .register("./sw.js?v=91", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });
