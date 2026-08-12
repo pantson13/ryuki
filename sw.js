@@ -1,11 +1,11 @@
-// Ryuki v84: v83 startup preserved + top-only Dragon Summoner card entry
-const CACHE_NAME = "ryuki-pwa-v84-top-entry-charu";
+// Ryuki v86: top-edge chaka trigger + automatic Dragon Summoner card intake
+const CACHE_NAME = "ryuki-pwa-v86-top-edge-chaka-auto-intake";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=84",
-  "./style.css?v=84",
-  "./script.js?v=84",
+  "./manifest.webmanifest?v=86",
+  "./style.css?v=86",
+  "./script.js?v=86",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -34,6 +34,7 @@ const APP_SHELL = [
   "./assets/audio/ydmusic.mp3",
   "./assets/audio/charu.mp3",
   "./assets/audio/chouka.mp3",
+  "./assets/audio/chaka.mp3",
   "./assets/audio/huagai1.mp3",
   "./assets/audio/huagai2.mp3",
   "./assets/audio/j.mp3",

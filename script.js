@@ -1,4 +1,4 @@
-/* Ryuki v84: PWA draggable flipped card + top-only Dragon Summoner slot entry */
+/* Ryuki v86: top-edge chaka trigger + automatic Dragon Summoner card intake */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -149,6 +149,7 @@ const AUDIO_CONFIG = {
   ydmusic: "./assets/audio/ydmusic.mp3",
   charu: "./assets/audio/charu.mp3",
   chouka: "./assets/audio/chouka.mp3",
+  chaka: "./assets/audio/chaka.mp3",
   huagai1: "./assets/audio/huagai1.mp3",
   huagai2: "./assets/audio/huagai2.mp3",
   guo: "./assets/audio/guo.mp3",
@@ -284,13 +285,13 @@ let auxSceneViewportOrigin = { left: 0, top: 0 };
 let auxTransferCardPortaled = false;
 let auxChoukaPlayed = false;
 let auxResultPlayed = false;
-let auxCharuPlaybackInUse = false;
 let lyfgTimer = 0;
 
 const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
 const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
 const charuAudio = new Audio(AUDIO_CONFIG.charu);
 const choukaAudio = new Audio(AUDIO_CONFIG.chouka);
+const chakaAudio = new Audio(AUDIO_CONFIG.chaka);
 const huagai1Audio = new Audio(AUDIO_CONFIG.huagai1);
 const huagai2Audio = new Audio(AUDIO_CONFIG.huagai2);
 const guoAudio = new Audio(AUDIO_CONFIG.guo);
@@ -302,12 +303,13 @@ kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
 charuAudio.preload = "auto";
 choukaAudio.preload = "auto";
+chakaAudio.preload = "auto";
 huagai1Audio.preload = "auto";
 huagai2Audio.preload = "auto";
 guoAudio.preload = "auto";
 Object.values(cardVoiceAudios).forEach((audio) => { audio.preload = "auto"; });
 [
-  kh1Audio, ydMusicAudio, charuAudio, choukaAudio,
+  kh1Audio, ydMusicAudio, charuAudio, choukaAudio, chakaAudio,
   huagai1Audio, huagai2Audio, guoAudio, ...Object.values(cardVoiceAudios),
 ].forEach((audio) => audio.load());
 
@@ -877,16 +879,6 @@ async function playSelectedCardVoiceWithLyfg() {
   }
 }
 
-function playAuxCardInsertCharu() {
-  // 复用已经在首次真实用户手势中 prime 过的 charuAudio，避免 PWA 在 pointermove 中另开新音频实例被拦截。
-  // auxCharuPlaybackInUse 会让 ended 事件只结束本次插卡音效，不重新触发卡盒阶段的 LQ/抽盒逻辑。
-  auxCharuPlaybackInUse = true;
-  return playAudio(charuAudio).catch((error) => {
-    auxCharuPlaybackInUse = false;
-    console.warn("龙召机插卡 charu 音效播放失败：", error);
-    return null;
-  });
-}
 
 function setAuxKpcPosition(left, top) {
   auxKpcPosition = { left, top };
@@ -953,8 +945,6 @@ function resetAuxDevice(options = {}) {
   setAuxKpcPullX(0);
   auxChoukaPlayed = false;
   auxResultPlayed = false;
-  if (auxCharuPlaybackInUse) stopAudio(charuAudio);
-  auxCharuPlaybackInUse = false;
   auxKpcPosition = { left: 0, top: 0 };
   restoreAuxTransferCardHome();
   scene.classList.remove("is-aux-open", "is-aux-armed", "is-aux-card-inserted", "is-aux-playing");
@@ -1191,7 +1181,7 @@ function moveAuxKpcDrag(event) {
   const dy = event.clientY - auxKpcPointerStart.y;
   setAuxKpcPosition(auxKpcStartPosition.left + dx, auxKpcStartPosition.top + dy);
 
-  // 只有从红框上方往下穿过顶部入口才允许插入；左右横穿、从下往上都不触发。
+  // 只有从红框上方往下接触顶部入口线才允许插入；碰线即 chaka + 自动吸入。
   if (auxKpcFlipped) tryInsertAuxKpcIntoSlot(event, previousCardRect);
 }
 
@@ -1250,11 +1240,11 @@ function isAuxKpcEnteringSlot(previousCardRect = null) {
   const wasAboveTopGate = previousCardRect.bottom <= targetRect.top + topTolerance;
   if (!wasAboveTopGate) return false;
 
-  // 当前帧卡片下边缘已经真正跨过顶部边界。
-  const crossedTopGate = cardRect.bottom >= targetRect.top + threshold;
-  if (!crossedTopGate) return false;
+  // 卡片下边缘只要第一次碰到卡槽上沿线就算命中，不要求先进入红框内部。
+  const touchedTopEdge = cardRect.bottom >= targetRect.top;
+  if (!touchedTopEdge) return false;
 
-  // 从顶部进入时还必须横向对准卡槽。中心点在槽宽范围内，并保留最小重叠量，避免只擦到一个角就触发。
+  // 从顶部进入时还必须横向对准卡槽。slotEnterThreshold 这里只作为横向最小重叠量。
   const overlapX = Math.min(cardRect.right, targetRect.right) - Math.max(cardRect.left, targetRect.left);
   const horizontallyAligned = cardRect.centerX >= targetRect.left && cardRect.centerX <= targetRect.right;
   return horizontallyAligned && overlapX >= threshold;
@@ -1266,19 +1256,36 @@ function showInsertedCardInSlot() {
   const cardRect = getAuxFloatingCardRect();
   if (!slotRect) return;
 
+  const scale = sceneScale || 1;
+  const slot = ANIMATION_CONFIG.auxDevice.cardSlot;
+  const finalX = (slot.cardX || 0) * scale;
+  const finalY = (slot.cardY || 0) * scale;
+  const finalWidth = (slot.cardWidth || 280) * scale;
+
   lzjInsertedCard.src = auxTransferCardImage.currentSrc || auxTransferCardImage.src;
-  // 让卡片切层时保持当前屏幕位置，只改变层级并由红框裁切，避免“吸进去”时跳一下。
+
+  // 第一步：在“刚碰到上沿线”的屏幕位置完成层级切换。
   const localX = cardRect.centerX - slotRect.centerX;
   const localY = cardRect.centerY - slotRect.centerY;
   lzjInsertedCard.style.width = `${auxKpcSize.width}px`;
   lzjInsertedCard.style.transform = `translate(-50%, -50%) translate3d(${localX}px, ${localY}px, 0)`;
+  lzjInsertedCard.classList.remove("is-auto-intake");
   lzjCardSlotMask?.classList.add("is-active");
   auxTransferCard?.classList.add("is-consumed");
-}
 
+  // 强制记录起始姿态后，下一帧自动吸入最终卡槽位置。
+  void lzjInsertedCard.offsetWidth;
+  requestAnimationFrame(() => {
+    if (!auxCardInserted || !lzjInsertedCard) return;
+    lzjInsertedCard.classList.add("is-auto-intake");
+    lzjInsertedCard.style.width = `${finalWidth}px`;
+    lzjInsertedCard.style.transform = `translate(-50%, -50%) translate3d(${finalX}px, ${finalY}px, 0)`;
+  });
+}
 function hideInsertedCardInSlot() {
   lzjCardSlotMask?.classList.remove("is-active");
   if (lzjInsertedCard) {
+    lzjInsertedCard.classList.remove("is-auto-intake");
     lzjInsertedCard.src = "./assets/images/kpc.png";
     lzjInsertedCard.style.removeProperty("width");
     lzjInsertedCard.style.removeProperty("transform");
@@ -1294,9 +1301,10 @@ function completeAuxCardInsertion(event) {
   auxTransferCard?.classList.add("is-inserted");
   showInsertedCardInSlot();
   lzjButton?.classList.add("is-result-ready");
-  // 龙召机卡片从顶部入口插入成功时播放 charu。
-  // 使用已 prime 的主 charuAudio，但用独立状态隔离它的 ended 副作用。
-  playAuxCardInsertCharu();
+  // 卡片下边缘碰到卡槽上沿线即视为插卡成功：立刻 chaka，并自动吸入槽内。
+  playAudio(chakaAudio).catch((error) => {
+    console.warn("龙召机插卡 chaka 音效播放失败：", error);
+  });
   return true;
 }
 
@@ -1411,9 +1419,9 @@ function resetToCard() {
   waterDisplacement.setAttribute("scale", "0");
   stopAudio(kh1Audio);
   stopAudio(ydMusicAudio);
-  auxCharuPlaybackInUse = false;
   stopAudio(charuAudio);
   stopAudio(choukaAudio);
+  stopAudio(chakaAudio);
   stopAudio(guoAudio);
   stopAudio(huagai1Audio);
   stopAudio(huagai2Audio);
@@ -1506,6 +1514,39 @@ function completeCardInsertion(pointerId) {
   });
 }
 
+function cancelCharuBg4Sync() {
+  if (charuBg4SyncFrame) {
+    cancelAnimationFrame(charuBg4SyncFrame);
+    charuBg4SyncFrame = 0;
+  }
+}
+
+function startCharuBg4Sync() {
+  cancelCharuBg4Sync();
+
+  const timecode = ANIMATION_CONFIG.bg4.startTimecode || { seconds: 1, frames: 0, fps: 30 };
+  const fps = Math.max(1, Number(timecode.fps) || 30);
+  const targetTime = (Number(timecode.seconds) || 0) + (Number(timecode.frames) || 0) / fps;
+
+  const sync = () => {
+    // charu 只属于“卡盒插腰带”流程，因此这里只检查腰带插卡状态。
+    if (!flowStarted || !insertionAudioInUse) {
+      charuBg4SyncFrame = 0;
+      return;
+    }
+
+    if (charuAudio.currentTime >= targetTime || charuAudio.ended) {
+      charuBg4SyncFrame = 0;
+      startBg4Merge();
+      return;
+    }
+
+    charuBg4SyncFrame = requestAnimationFrame(sync);
+  };
+
+  sync();
+}
+
 function startBg4Merge() {
   if (!flowStarted || bg4MergeStarted) return;
 
@@ -1543,12 +1584,7 @@ function hideInsertionGlows() {
 }
 
 function handleCharuEnded() {
-  // 龙召机插卡复用 charuAudio，但不能重新执行卡盒插腰带后的 LQ/抽盒收尾逻辑。
-  if (auxCharuPlaybackInUse) {
-    auxCharuPlaybackInUse = false;
-    return;
-  }
-
+  // charu 仅用于整个卡盒插入腰带。
   hideInsertionGlows();
   insertionAudioInUse = false;
   if (!flowStarted) return;
@@ -1934,6 +1970,7 @@ function startFromCard(event) {
   insertionAudioInUse = false;
   primeAudio(ydMusicAudio, () => ydMusicInUse);
   primeAudio(charuAudio, () => insertionAudioInUse);
+  primeAudio(chakaAudio, () => auxCardInserted);
 
   playAudio(kh1Audio).catch((error) => {
     console.warn("kh1 音效播放失败：", error);
@@ -2038,7 +2075,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=84", { updateViaCache: "none" })
+      .register("./sw.js?v=86", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

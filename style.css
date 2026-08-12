@@ -1,4 +1,4 @@
-/* Ryuki v84: v83 startup preserved; flipped card remains draggable; Dragon Summoner slot is top-entry only */
+/* Ryuki v86: top-edge chaka trigger + automatic Dragon Summoner intake */
 
 :root {
   color-scheme: dark;
@@ -998,6 +998,14 @@ body {
   user-select: none;
   -webkit-user-drag: none;
   pointer-events: none;
+}
+
+/* 碰到卡槽上沿线后，卡片从接触点自动吸入预设槽位。 */
+.lzj-inserted-card.is-auto-intake {
+  transition:
+    transform 0.22s cubic-bezier(0.22, 0.8, 0.25, 1),
+    width 0.22s cubic-bezier(0.22, 0.8, 0.25, 1);
+  will-change: transform, width;
 }
 
 .aux-transfer-card {
