@@ -1,4 +1,4 @@
-/* Ryuki v92: fixed scene-level PWA card drag + versioned audio */
+/* Ryuki v94: fixed scene-level PWA card drag + versioned audio */
 
 :root {
   color-scheme: dark;
@@ -1013,7 +1013,7 @@ body {
 
 .aux-transfer-card {
   position: absolute;
-  /* v92：固定挂在 scene；自由拖动时永远位于完整龙召机(z=9)上方。 */
+  /* v94：固定挂在 scene；自由拖动时永远位于完整龙召机(z=9)上方。 */
   z-index: 12;
   left: 0;
   top: 0;

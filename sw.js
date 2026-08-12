@@ -1,11 +1,12 @@
-// Ryuki v92: fixed scene-level card drag + versioned audio cache
-const CACHE_NAME = "ryuki-pwa-v92-fixed-card-audio-cache";
+// Ryuki v94: fixed scene-level card drag + versioned audio cache
+const BUILD = "94";
+const CACHE_NAME = "ryuki-pwa-v94-touch-first-drag-audio-cache";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=92",
-  "./style.css?v=92",
-  "./script.js?v=92",
+  "./manifest.webmanifest?v=94",
+  "./style.css?v=94",
+  "./script.js?v=94",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -30,20 +31,20 @@ const APP_SHELL = [
   "./assets/images/khzd.png",
   "./assets/images/khfg.png",
   "./assets/images/ydfg.png",
-  "./assets/audio/kh1.mp3?av=92",
-  "./assets/audio/ydmusic.mp3?av=92",
-  "./assets/audio/charu.mp3?av=92",
-  "./assets/audio/chouka.mp3?av=92",
-  "./assets/audio/chaka.mp3?av=92",
-  "./assets/audio/huagai1.mp3?av=92",
-  "./assets/audio/huagai2.mp3?av=92",
-  "./assets/audio/j.mp3?av=92",
-  "./assets/audio/q.mp3?av=92",
-  "./assets/audio/d.mp3?av=92",
-  "./assets/audio/l.mp3?av=92",
-  "./assets/audio/f.mp3?av=92",
-  "./assets/audio/hc.mp3?av=92",
-  "./assets/audio/guo.mp3?av=92",
+  "./assets/audio/kh1.mp3?av=94",
+  "./assets/audio/ydmusic.mp3?av=94",
+  "./assets/audio/charu.mp3?av=94",
+  "./assets/audio/chouka.mp3?av=94",
+  "./assets/audio/chaka.mp3?av=94",
+  "./assets/audio/huagai1.mp3?av=94",
+  "./assets/audio/huagai2.mp3?av=94",
+  "./assets/audio/j.mp3?av=94",
+  "./assets/audio/q.mp3?av=94",
+  "./assets/audio/d.mp3?av=94",
+  "./assets/audio/l.mp3?av=94",
+  "./assets/audio/f.mp3?av=94",
+  "./assets/audio/hc.mp3?av=94",
+  "./assets/audio/guo.mp3?av=94",
   "./assets/icons/icon-192.png?v=50",
   "./assets/icons/icon-512.png?v=50",
   "./assets/icons/icon-maskable-512.png?v=50",
@@ -80,7 +81,22 @@ self.addEventListener("activate", (event) => {
       .then((names) =>
         Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))),
       )
-      .then(() => self.clients.claim()),
+      .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true }))
+      .then((clients) =>
+        Promise.all(
+          clients.map((client) => {
+            try {
+              const url = new URL(client.url);
+              if (url.origin !== self.location.origin || url.searchParams.get("appv") === BUILD) return undefined;
+              url.searchParams.set("appv", BUILD);
+              return client.navigate(url.href);
+            } catch {
+              return undefined;
+            }
+          }),
+        ),
+      ),
   );
 });
 
@@ -104,7 +120,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // v92：音频使用 Network First。配合 ?av=92 资源版本，覆盖同名 mp3 后不会再随机命中旧媒体缓存。
+  // v94：音频使用 Network First。配合 ?av=94 资源版本，覆盖同名 mp3 后不会再随机命中旧媒体缓存。
   if (requestUrl.pathname.includes("/assets/audio/")) {
     event.respondWith(
       fetch(request, { cache: "no-store" })
