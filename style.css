@@ -1,4 +1,4 @@
-/* Ryuki v94: fixed scene-level PWA card drag + versioned audio */
+/* Ryuki v95: fixed scene-level PWA card drag + versioned audio */
 
 :root {
   color-scheme: dark;
@@ -1011,10 +1011,27 @@ body {
   will-change: transform, width;
 }
 
+
+/*
+ * iPhone / PWA 专用全屏拖卡层。
+ * 容器本身不抢页面事件；只有实际显示的卡片可以命中。
+ * 卡片从 100% 抽出到进入龙召机之前始终保持在同一个坐标系中。
+ */
+.card-drag-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 12;
+  pointer-events: none;
+  touch-action: none;
+  overflow: visible;
+}
+
 .aux-transfer-card {
   position: absolute;
-  /* v94：固定挂在 scene；自由拖动时永远位于完整龙召机(z=9)上方。 */
-  z-index: 12;
+  /* v96：固定挂在 cardDragLayer；自由拖动时永远位于完整龙召机(z=9)上方。 */
+  z-index: 1;
   left: 0;
   top: 0;
   display: block;

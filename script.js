@@ -1,11 +1,11 @@
-/* Ryuki v94: iPhone touch-first card drag + versioned audio cache */
+/* Ryuki v96: dedicated full-screen card drag layer + synchronized PWA build */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "94";
+const PWA_BUILD = "96";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 
@@ -148,21 +148,21 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=94",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=94",
-  charu: "./assets/audio/charu.mp3?av=94",
-  chouka: "./assets/audio/chouka.mp3?av=94",
-  chaka: "./assets/audio/chaka.mp3?av=94",
-  huagai1: "./assets/audio/huagai1.mp3?av=94",
-  huagai2: "./assets/audio/huagai2.mp3?av=94",
-  guo: "./assets/audio/guo.mp3?av=94",
+  kh1: "./assets/audio/kh1.mp3?av=96",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=96",
+  charu: "./assets/audio/charu.mp3?av=96",
+  chouka: "./assets/audio/chouka.mp3?av=96",
+  chaka: "./assets/audio/chaka.mp3?av=96",
+  huagai1: "./assets/audio/huagai1.mp3?av=96",
+  huagai2: "./assets/audio/huagai2.mp3?av=96",
+  guo: "./assets/audio/guo.mp3?av=96",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=94",
-    2: "./assets/audio/q.mp3?av=94",
-    3: "./assets/audio/d.mp3?av=94",
-    4: "./assets/audio/l.mp3?av=94",
-    5: "./assets/audio/f.mp3?av=94",
-    6: "./assets/audio/hc.mp3?av=94",
+    1: "./assets/audio/j.mp3?av=96",
+    2: "./assets/audio/q.mp3?av=96",
+    3: "./assets/audio/d.mp3?av=96",
+    4: "./assets/audio/l.mp3?av=96",
+    5: "./assets/audio/f.mp3?av=96",
+    6: "./assets/audio/hc.mp3?av=96",
   },
 };
 
@@ -212,6 +212,7 @@ const lzj2Image = document.querySelector("#lzj2Image");
 const lzj3Image = document.querySelector("#lzj3Image");
 const lzjCardSlotMask = document.querySelector("#lzjCardSlotMask");
 const lzjInsertedCard = document.querySelector("#lzjInsertedCard");
+const cardDragLayer = document.querySelector("#cardDragLayer");
 const auxTransferCard = document.querySelector("#auxTransferCard");
 const auxTransferCardImage = document.querySelector("#auxTransferCardImage");
 const auxCardCoverMask = document.querySelector("#auxCardCoverMask");
@@ -272,6 +273,7 @@ let auxKpcCaptureTarget = null;
 // iPhone/PWA 主通道：Touch Events 自己维护 identifier，不依赖 Pointer Capture。
 let auxTouchDragActive = false;
 let auxTouchIdentifier = null;
+let auxTouchLastPoint = null;
 let auxKpcPointerStart = { x: 0, y: 0 };
 let auxKpcStartPosition = { left: 0, top: 0 };
 let auxKpcPosition = { left: 0, top: 0 };
@@ -287,7 +289,7 @@ let auxKpcFullExtractDistance = 0;
 let auxKpcSize = { width: 0, height: 0 };
 let auxKpcAspectRatio = 1;
 let auxDockViewportOrigin = { left: 0, top: 0 };
-let auxSceneViewportOrigin = { left: 0, top: 0 };
+let auxDragLayerViewportOrigin = { left: 0, top: 0 };
 let auxChoukaPlayed = false;
 let auxResultPlayed = false;
 let lyfgTimer = 0;
@@ -1042,7 +1044,7 @@ function resetAuxDevice(options = {}) {
   auxKpcSize = { width: 0, height: 0 };
   auxKpcAspectRatio = 1;
   auxDockViewportOrigin = { left: 0, top: 0 };
-  auxSceneViewportOrigin = { left: 0, top: 0 };
+  auxDragLayerViewportOrigin = { left: 0, top: 0 };
   auxKpcPullX = 0;
   auxKpcPullStartX = 0;
   setAuxKpcPullX(0);
@@ -1155,7 +1157,7 @@ function getSelectedLqImageSrc() {
 function handoffAuxKpcToFloatingCard(event) {
   if (!auxTransferCard || !kpcLayer || !auxKpcOriginalRect || auxKpcFullyExtracted) return false;
 
-  // v94：浮动卡从页面初始化开始就是 .scene 的固定子元素。
+  // v96：浮动卡从页面初始化开始就是 cardDragLayer 的固定子元素。
   // 100% 抽出时只切换视觉与坐标，不再在活跃触摸期间 reparent DOM。
 
   // pointermove 内不再读取布局。当前位置由抽卡起始 rect + 当前 pullX 算出。
@@ -1166,8 +1168,8 @@ function handoffAuxKpcToFloatingCard(event) {
     width: auxKpcOriginalRect.width,
     height: auxKpcOriginalRect.height,
   };
-  const left = cardRect.left - auxSceneViewportOrigin.left;
-  const top = cardRect.top - auxSceneViewportOrigin.top;
+  const left = cardRect.left - auxDragLayerViewportOrigin.left;
+  const top = cardRect.top - auxDragLayerViewportOrigin.top;
 
   const selectedSrc = getSelectedLqImageSrc();
   if (auxTransferCardImage) auxTransferCardImage.src = selectedSrc || "./assets/images/kpc.png";
@@ -1192,7 +1194,7 @@ function handoffAuxKpcToFloatingCard(event) {
   auxKpcFrontReady = true; // 正面已就绪，用于允许龙召机插卡。
   auxTransferCard.classList.add("is-visible", "is-fully-extracted", "is-dragging");
 
-  // 原 KPC 只负责视觉退场；浮动卡 DOM 始终固定在 scene，不发生父级切换。
+  // 原 KPC 只负责视觉退场；浮动卡 DOM 始终固定在 cardDragLayer，不发生父级切换。
   cardBox.classList.add("is-kpc-aux-hidden");
   auxKpcFullyExtracted = true;
 
@@ -1216,9 +1218,9 @@ function prepareAuxKpcCard() {
   // 只在开始抽卡时读一次尺寸，之后 pointermove 纯数学计算，避免 iPhone/PWA 强制重排。
   const startRect = kpcLayer.getBoundingClientRect();
   const boxRect = cardBox.getBoundingClientRect();
-  const sceneRect = scene.getBoundingClientRect();
+  const dragLayerRect = cardDragLayer?.getBoundingClientRect?.() || scene.getBoundingClientRect();
   const dockRect = auxDock?.getBoundingClientRect();
-  auxSceneViewportOrigin = { left: sceneRect.left, top: sceneRect.top };
+  auxDragLayerViewportOrigin = { left: dragLayerRect.left, top: dragLayerRect.top };
   if (dockRect) auxDockViewportOrigin = { left: dockRect.left, top: dockRect.top };
   auxKpcOriginalRect = {
     left: startRect.left,
@@ -1325,9 +1327,9 @@ function getAuxCardSlotRect() {
 }
 
 function getAuxFloatingCardRect() {
-  // v94：auxTransferCard 永远是 scene 直接子元素，因此只使用 scene 坐标原点。
-  const left = auxSceneViewportOrigin.left + auxKpcPosition.left;
-  const top = auxSceneViewportOrigin.top + auxKpcPosition.top;
+  // v96：auxTransferCard 永远位于固定全屏 cardDragLayer，因此只使用拖卡层坐标原点。
+  const left = auxDragLayerViewportOrigin.left + auxKpcPosition.left;
+  const top = auxDragLayerViewportOrigin.top + auxKpcPosition.top;
   return {
     left,
     top,
@@ -1338,6 +1340,27 @@ function getAuxFloatingCardRect() {
     centerX: left + auxKpcSize.width / 2,
     centerY: top + auxKpcSize.height / 2,
   };
+}
+
+function getAuxFloatingCardHitRect() {
+  // 新一轮触摸开始时只读一次真实 DOM 命中矩形。
+  // 拖动中的每一帧仍使用纯数学 rect，避免 iPhone 强制重排。
+  if (auxTransferCard?.classList.contains("is-visible")) {
+    const rect = auxTransferCard.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      return {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+        centerX: rect.left + rect.width / 2,
+        centerY: rect.top + rect.height / 2,
+      };
+    }
+  }
+  return getAuxFloatingCardRect();
 }
 
 function isAuxKpcEnteringSlot(previousCardRect = null) {
@@ -1453,7 +1476,7 @@ function handleAuxFloatingCardGlobalPointerDown(event) {
   if (!auxKpcFullyExtracted || !auxKpcFrontReady || auxCardInserted || auxKpcDragging) return;
   if (!auxOpen || !auxArmed || !auxTransferCard?.classList.contains("is-visible")) return;
 
-  const rect = getAuxFloatingCardRect();
+  const rect = getAuxFloatingCardHitRect();
   const inside =
     event.clientX >= rect.left &&
     event.clientX <= rect.right &&
@@ -1491,17 +1514,47 @@ function findTouchByIdentifier(touchList, identifier) {
 
 // iPhone Safari / PWA 专用拖卡入口。
 // 只用 touch.identifier + 屏幕坐标维持手势，不 set/releasePointerCapture，也不依赖 Safari DOM hit-test。
+function clearAuxTouchSession() {
+  // iPhone Safari/PWA：touchend/touchcancel 的 changedTouches 在少数情况下可能不包含
+  // 我们记录的 identifier。不能因此把旧拖动状态永久留在内存里。
+  if (auxKpcDragging && typeof auxKpcPointerId === "string" && auxKpcPointerId.startsWith("touch:")) {
+    stopAuxKpcDrag(auxKpcPointerId);
+  } else {
+    auxTouchDragActive = false;
+    auxTouchIdentifier = null;
+    auxKpcDragging = false;
+    if (typeof auxKpcPointerId === "string" && auxKpcPointerId.startsWith("touch:")) auxKpcPointerId = null;
+    auxKpcCaptureTarget = null;
+    auxTransferCard?.classList.remove("is-dragging");
+  }
+  auxTouchDragActive = false;
+  auxTouchIdentifier = null;
+  auxTouchLastPoint = null;
+}
+
 function handleAuxTouchStart(event) {
-  if (auxTouchDragActive || auxKpcDragging || event.touches?.length > 1) return;
   const touch = event.changedTouches?.[0];
   if (!touch) return;
+
+  // 本项目是单指拖拽。新的 touchstart 一旦带来不同 identifier，就把上一轮视为已经结束。
+  // 不依赖 Safari 是否还把旧 identifier 短暂残留在 event.touches 中，避免松手后的等待窗口。
+  if (auxTouchDragActive || auxKpcDragging) {
+    const sameActiveTouch = auxTouchIdentifier !== null && touch.identifier === auxTouchIdentifier;
+    if (sameActiveTouch) return;
+    clearAuxTouchSession();
+  }
+
   if (!flowStarted || !auxOpen || !auxArmed || auxCardInserted) return;
   if (!cardBox.classList.contains("is-inserted")) return;
+
+  // 每一轮新触摸都刷新固定拖卡层的屏幕原点，处理 iPhone 动态视口变化。
+  const dragLayerRect = cardDragLayer?.getBoundingClientRect?.();
+  if (dragLayerRect) auxDragLayerViewportOrigin = { left: dragLayerRect.left, top: dragLayerRect.top };
 
   let fromTransferCard = false;
 
   if (auxKpcFullyExtracted && auxKpcFrontReady && auxTransferCard?.classList.contains("is-visible")) {
-    if (!pointInsideRect(touch.clientX, touch.clientY, getAuxFloatingCardRect())) return;
+    if (!pointInsideRect(touch.clientX, touch.clientY, getAuxFloatingCardHitRect())) return;
     fromTransferCard = true;
   } else if (!auxKpcFullyExtracted) {
     const kpcRect = kpcLayer?.getBoundingClientRect?.();
@@ -1514,32 +1567,46 @@ function handleAuxTouchStart(event) {
   prepareChakaSfxFromGesture().catch(() => undefined);
 
   auxTouchIdentifier = touch.identifier;
+  auxTouchLastPoint = { identifier: touch.identifier, clientX: touch.clientX, clientY: touch.clientY };
   auxTouchDragActive = true;
   beginAuxKpcDrag(makeAuxTouchEvent(touch, event), fromTransferCard, { usePointerCapture: false });
 
-  if (!auxKpcDragging) {
-    auxTouchDragActive = false;
-    auxTouchIdentifier = null;
-  }
+  if (!auxKpcDragging) clearAuxTouchSession();
 }
 
 function handleAuxTouchMove(event) {
   if (!auxTouchDragActive || !auxKpcDragging || auxTouchIdentifier === null) return;
   const touch = findTouchByIdentifier(event.touches, auxTouchIdentifier);
   if (!touch) return;
+  auxTouchLastPoint = { identifier: touch.identifier, clientX: touch.clientX, clientY: touch.clientY };
   event.preventDefault();
   moveAuxKpcDrag(makeAuxTouchEvent(touch, event));
 }
 
 function handleAuxTouchEnd(event) {
   if (!auxTouchDragActive || auxTouchIdentifier === null) return;
-  const touch = findTouchByIdentifier(event.changedTouches, auxTouchIdentifier);
-  if (!touch) return;
-  event.preventDefault();
-  endAuxKpcDrag(makeAuxTouchEvent(touch, event));
-  // endAuxKpcDrag 在正常路径会清理；这里再兜底一次，防止插卡时已提前 stop。
-  auxTouchDragActive = false;
-  auxTouchIdentifier = null;
+
+  // 如果旧手指仍在 touches 中，这个 end/cancel 属于别的触点，不结束当前拖动。
+  if (findTouchByIdentifier(event.touches, auxTouchIdentifier)) return;
+
+  // 优先使用 changedTouches；若 Safari 没带回该 identifier，则使用最后一个 move 坐标。
+  const changed = findTouchByIdentifier(event.changedTouches, auxTouchIdentifier);
+  const point = changed || auxTouchLastPoint;
+
+  if (auxKpcDragging && point) {
+    endAuxKpcDrag(makeAuxTouchEvent(point, event));
+  }
+
+  // 不对 touchend/cancel preventDefault；scene 已 touch-action:none。
+  // 最关键的是无条件清掉上一轮 session，让下一次 touchstart 立即可用。
+  clearAuxTouchSession();
+}
+
+function handleAuxTouchEnvironmentReset() {
+  // PWA 被系统打断、切后台、控制中心覆盖时也不能留下半死不活的拖动 session。
+  if (auxTouchDragActive || (typeof auxKpcPointerId === "string" && auxKpcPointerId.startsWith("touch:"))) {
+    clearAuxTouchSession();
+  }
 }
 
 function resetCardGesture() {
@@ -2222,6 +2289,10 @@ window.addEventListener("touchstart", handleAuxTouchStart, { capture: true, pass
 window.addEventListener("touchmove", handleAuxTouchMove, { capture: true, passive: false });
 window.addEventListener("touchend", handleAuxTouchEnd, { capture: true, passive: false });
 window.addEventListener("touchcancel", handleAuxTouchEnd, { capture: true, passive: false });
+window.addEventListener("blur", handleAuxTouchEnvironmentReset);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) handleAuxTouchEnvironmentReset();
+});
 
 // Pointer Events 只保留给鼠标/触控笔，不参与 iPhone touch 拖卡。
 window.addEventListener("pointerdown", (event) => {
