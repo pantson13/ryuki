@@ -1,4 +1,4 @@
-/* Ryuki v78: reliable WebAudio kaca playback for iPhone PWA */
+/* Ryuki v80: first-insertion-safe WebAudio kaca pipeline for iPhone PWA */
 
 /*
  * iPhone 16 Pro Max 参数区
@@ -298,12 +298,13 @@ const cardVoiceAudios = Object.fromEntries(
   Object.entries(AUDIO_CONFIG.cardVoices).map(([key, src]) => [key, new Audio(src)]),
 );
 
-// iPhone/PWA：kaca 是短促插卡音效，改用已解锁的 Web Audio Buffer 播放。
-// 插卡命中发生在 pointermove，Safari 对这里直接 HTMLAudio.play() 并不稳定；
-// AudioContext 会在真实 pointerdown/click 手势中预先 resume，之后命中卡槽即可可靠 start()。
+// iPhone/PWA：kaca 走独立 Web Audio 通道。
+// 关键点：网络数据提前 fetch；第一次真实用户手势里同步发起 AudioContext.resume()，
+// 并建立唯一的 ready Promise。插卡命中时等待这个 Promise，再 start()，彻底消除首次竞态。
 let sfxAudioContext = null;
 let kacaAudioBuffer = null;
-let kacaBufferPromise = null;
+let kacaBytesPromise = null;
+let kacaReadyPromise = null;
 let activeKacaSource = null;
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
@@ -319,6 +320,9 @@ Object.values(cardVoiceAudios).forEach((audio) => { audio.preload = "auto"; });
   kh1Audio, ydMusicAudio, kacaAudio, charuAudio, choukaAudio,
   huagai1Audio, chakaAudio, huagai2Audio, guoAudio, ...Object.values(cardVoiceAudios),
 ].forEach((audio) => audio.load());
+
+// 尽早读取 kaca 的原始音频数据；解锁/解码仍留到真实用户手势。
+preloadKacaBytes();
 
 function applyPhoneLayout() {
   // 背景覆盖完整动态视口；前景继续按 iPhone 16 Pro Max 的 440:956
@@ -499,48 +503,68 @@ function getSfxAudioContext() {
   return sfxAudioContext;
 }
 
-function preloadKacaBuffer() {
-  if (kacaAudioBuffer) return Promise.resolve(kacaAudioBuffer);
-  if (kacaBufferPromise) return kacaBufferPromise;
+// 网络读取不需要用户手势，页面加载后就提前开始。
+// 这里只保存原始字节，不提前创建/解锁 AudioContext，避免 iOS 首次状态混乱。
+function preloadKacaBytes() {
+  if (kacaBytesPromise) return kacaBytesPromise;
 
-  const context = getSfxAudioContext();
-  if (!context) return Promise.resolve(null);
-
-  kacaBufferPromise = fetch(AUDIO_CONFIG.kaca, { cache: "force-cache" })
+  kacaBytesPromise = fetch(AUDIO_CONFIG.kaca, { cache: "force-cache" })
     .then((response) => {
       if (!response.ok) throw new Error(`kaca fetch failed: ${response.status}`);
       return response.arrayBuffer();
     })
-    .then((arrayBuffer) => context.decodeAudioData(arrayBuffer))
-    .then((buffer) => {
-      kacaAudioBuffer = buffer;
-      return buffer;
-    })
     .catch((error) => {
-      console.warn("kaca WebAudio 预加载失败，将使用 HTMLAudio 兜底：", error);
+      console.warn("kaca 音频数据预加载失败：", error);
+      kacaBytesPromise = null;
       return null;
-    })
-    .finally(() => {
-      if (!kacaAudioBuffer) kacaBufferPromise = null;
     });
 
-  return kacaBufferPromise;
+  return kacaBytesPromise;
 }
 
-function unlockSfxAudio() {
+// 必须从真实 click / pointerdown 中调用。
+// resume() 在函数进入后立即发起，之后异步 decode 可以慢慢完成；
+// 返回的 kacaReadyPromise 是第一次和后续插卡共同等待的唯一准备状态。
+function prepareKacaFromUserGesture() {
   const context = getSfxAudioContext();
   if (!context) return Promise.resolve(false);
 
-  const resume = context.state === "suspended" ? context.resume() : Promise.resolve();
-  return Promise.resolve(resume)
-    .then(() => {
-      preloadKacaBuffer();
-      return context.state === "running";
-    })
+  let resumePromise = Promise.resolve();
+  try {
+    if (context.state !== "running") {
+      // 这一句必须发生在当前真实用户手势的同步调用栈里。
+      resumePromise = context.resume();
+    }
+  } catch (error) {
+    console.warn("WebAudio resume 发起失败：", error);
+    return Promise.resolve(false);
+  }
+
+  // 每次真实按下都把 resume 链接进 ready Promise，处理 PWA 从后台回来后再次 suspended 的情况。
+  const decodePromise = kacaAudioBuffer
+    ? Promise.resolve(kacaAudioBuffer)
+    : preloadKacaBytes().then((bytes) => {
+        if (!bytes) return null;
+        if (kacaAudioBuffer) return kacaAudioBuffer;
+        // Safari 的 decodeAudioData 可能接管 ArrayBuffer，复制一份最稳妥。
+        return context.decodeAudioData(bytes.slice(0)).then((buffer) => {
+          kacaAudioBuffer = buffer;
+          return buffer;
+        });
+      });
+
+  kacaReadyPromise = Promise.all([Promise.resolve(resumePromise), decodePromise])
+    .then(([, buffer]) => Boolean(buffer && context.state === "running"))
     .catch((error) => {
-      console.warn("WebAudio 解锁失败：", error);
+      console.warn("kaca WebAudio 准备失败：", error);
       return false;
     });
+
+  return kacaReadyPromise;
+}
+
+function unlockSfxAudio() {
+  return prepareKacaFromUserGesture();
 }
 
 function stopKacaReliable() {
@@ -555,25 +579,42 @@ function stopKacaReliable() {
   stopAudio(kacaAudio);
 }
 
-function playKacaReliable() {
+async function playKacaReliable() {
   const context = getSfxAudioContext();
-  if (context && context.state === "running" && kacaAudioBuffer) {
-    if (activeKacaSource) {
-      try { activeKacaSource.stop(); } catch {}
+
+  if (context) {
+    // 正常情况下 ready Promise 已在首次 click / 本次拖动 pointerdown 中创建。
+    // 这里绝不再依赖“命中瞬间刚好已经 running”这种竞态判断。
+    const ready = kacaAudioBuffer && context.state === "running"
+      ? true
+      : await (kacaReadyPromise || Promise.resolve(false));
+
+    if (ready && kacaAudioBuffer && context.state === "running") {
+      if (activeKacaSource) {
+        try { activeKacaSource.stop(); } catch {}
+      }
+
+      const source = context.createBufferSource();
+      source.buffer = kacaAudioBuffer;
+      source.connect(context.destination);
+      source.onended = () => {
+        if (activeKacaSource === source) activeKacaSource = null;
+      };
+      activeKacaSource = source;
+      source.start(0);
+      return true;
     }
-    const source = context.createBufferSource();
-    source.buffer = kacaAudioBuffer;
-    source.connect(context.destination);
-    source.onended = () => {
-      if (activeKacaSource === source) activeKacaSource = null;
-    };
-    activeKacaSource = source;
-    source.start(0);
-    return Promise.resolve();
   }
 
-  // 极端情况下 buffer 尚未完成解码，保留原 HTMLAudio 作为兜底。
-  return playAudio(kacaAudio);
+  // 只有 Web Audio 真正不可用/准备失败才兜底 HTMLAudio。
+  // 现代 iPhone PWA 正常流程不会走到这里。
+  try {
+    await playAudio(kacaAudio);
+    return true;
+  } catch (error) {
+    console.warn("kaca HTMLAudio 兜底播放失败：", error);
+    return false;
+  }
 }
 
 function cancelCharuBg4Sync() {
@@ -1548,8 +1589,8 @@ function completeCardInsertion(pointerId) {
   cardTrigger.classList.add("is-hidden");
   activePointerId = null;
 
-  // iPhone/PWA：在这次真实 pointerup 用户手势内直接启动 kaca，再立刻启动 charu。
-  // 不再依赖 transitionstart / 80ms 计时器，否则 Safari 首次插卡可能吞掉 kaca。
+  // iPhone/PWA：插槽命中发生在 pointermove；kaca 不再直接依赖该事件的媒体权限。
+  // 首次真实手势已提前建立 WebAudio ready Promise，这里等待准备完成后稳定播放 kaca，再立刻启动 charu。
   playInsertionAudio();
 
   // 下一绘制帧启动“吸入卡槽”的位移。
@@ -1624,8 +1665,6 @@ function playInsertionAudio() {
   insertionAudioFallback = 0;
   insertionAudioInUse = true;
 
-  // v62：kaca 与 charu 都直接在“卡盒进入插槽”的同一个 pointermove 用户手势中发起 play()。
-  // 不再等待 kaca.play() 的 Promise 再启动 charu，避免 iPhone/PWA 丢失用户激活或吞掉第一声 kaca。
   stopKacaReliable();
   stopAudio(charuAudio);
   kacaAudio.muted = false;
@@ -1633,33 +1672,36 @@ function playInsertionAudio() {
   kacaAudio.volume = 1;
   charuAudio.volume = 1;
 
-  let kacaPromise;
-  let charuPromise;
-  try {
-    kacaPromise = playKacaReliable();
-  } catch (error) {
-    console.warn("kaca 音效播放失败：", error);
-  }
-  try {
-    charuPromise = charuAudio.play();
-  } catch (error) {
-    console.warn("charu 音效播放失败：", error);
-  }
+  // PWA 首次插卡：先等待首次真实用户手势已经建立的 WebAudio ready Promise。
+  // 一旦 kaca 的 BufferSource.start() 真正执行，立即启动 charu，保证顺序稳定：kaca -> charu。
+  Promise.resolve(playKacaReliable())
+    .catch((error) => {
+      console.warn("kaca 音效播放失败：", error);
+      return false;
+    })
+    .then(() => {
+      if (!flowStarted || !insertionAudioInUse) return;
 
-  if (kacaPromise instanceof Promise) {
-    kacaPromise.catch((error) => console.warn("kaca 音效播放失败：", error));
-  }
-
-  if (charuPromise instanceof Promise) {
-    charuPromise
-      .then(() => startCharuBg4Sync())
-      .catch((error) => {
+      let charuPromise;
+      try {
+        charuPromise = charuAudio.play();
+      } catch (error) {
         console.warn("charu 音效播放失败：", error);
         hideInsertionGlows();
-      });
-  } else {
-    startCharuBg4Sync();
-  }
+        return;
+      }
+
+      if (charuPromise instanceof Promise) {
+        charuPromise
+          .then(() => startCharuBg4Sync())
+          .catch((error) => {
+            console.warn("charu 音效播放失败：", error);
+            hideInsertionGlows();
+          });
+      } else {
+        startCharuBg4Sync();
+      }
+    });
 }
 
 function handleCardTransitionStart(event) {
@@ -2006,7 +2048,7 @@ function startFromCard(event) {
   ydMusicInUse = false;
   insertionAudioInUse = false;
   unlockSfxAudio();
-  preloadKacaBuffer();
+  preloadKacaBytes();
   primeAudio(ydMusicAudio, () => ydMusicInUse);
   // kaca 不再对同一个 HTMLAudio 做异步 prime，避免和真正插卡播放发生竞态。
   primeAudio(charuAudio, () => insertionAudioInUse);
@@ -2105,7 +2147,7 @@ applyPhoneLayout();
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=79", { updateViaCache: "none" })
+      .register("./sw.js?v=80", { updateViaCache: "none" })
       .catch((error) => {
         console.warn("PWA 离线服务注册失败：", error);
       });

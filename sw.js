@@ -1,11 +1,11 @@
-// Ryuki v79: PWA-stable KPC drag lifecycle + reliable WebAudio kaca
-const CACHE_NAME = "ryuki-pwa-v79-pwa-stable-kpc-drag";
+// Ryuki v80: first-insertion-safe WebAudio kaca + PWA-stable KPC drag
+const CACHE_NAME = "ryuki-pwa-v80-first-kaca-ready";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=79",
-  "./style.css?v=79",
-  "./script.js?v=79",
+  "./manifest.webmanifest?v=80",
+  "./style.css?v=80",
+  "./script.js?v=80",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
