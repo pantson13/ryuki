@@ -5,7 +5,7 @@
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "103";
+const PWA_BUILD = "104";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 
@@ -159,28 +159,28 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=103",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=103",
-  charu: "./assets/audio/charu.mp3?av=103",
-  mocha: "./assets/audio/mocha.mp3?av=103",
-  chouka: "./assets/audio/chouka.mp3?av=103",
-  chaka: "./assets/audio/chaka.mp3?av=103",
-  huagai1: "./assets/audio/huagai1.mp3?av=103",
-  huagai2: "./assets/audio/huagai2.mp3?av=103",
-  guo: "./assets/audio/guo.mp3?av=103",
+  kh1: "./assets/audio/kh1.mp3?av=104",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=104",
+  charu: "./assets/audio/charu.mp3?av=104",
+  mocha: "./assets/audio/mocha.mp3?av=104",
+  chouka: "./assets/audio/chouka.mp3?av=104",
+  chaka: "./assets/audio/chaka.mp3?av=104",
+  huagai1: "./assets/audio/huagai1.mp3?av=104",
+  huagai2: "./assets/audio/huagai2.mp3?av=104",
+  guo: "./assets/audio/guo.mp3?av=104",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=103",
-    2: "./assets/audio/q.mp3?av=103",
-    3: "./assets/audio/d.mp3?av=103",
-    4: "./assets/audio/l.mp3?av=103",
-    5: "./assets/audio/f.mp3?av=103",
-    6: "./assets/audio/hc.mp3?av=103",
+    1: "./assets/audio/j.mp3?av=104",
+    2: "./assets/audio/q.mp3?av=104",
+    3: "./assets/audio/d.mp3?av=104",
+    4: "./assets/audio/l.mp3?av=104",
+    5: "./assets/audio/f.mp3?av=104",
+    6: "./assets/audio/hc.mp3?av=104",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=103",
-    4: "./assets/audio/longjiao.mp3?av=103",
-    5: "./assets/audio/bsj.mp3?av=103",
+    1: "./assets/audio/jianjianglin.mp3?av=104",
+    4: "./assets/audio/longjiao.mp3?av=104",
+    5: "./assets/audio/bsj.mp3?av=104",
   },
 };
 
@@ -560,9 +560,8 @@ function primeAudio(audio, isInUse) {
 }
 
 
-// 卡盒拖动音效：每一轮真正拖动只播放一次 mocha。
-// pointerdown 只负责解锁 Web Audio；首次移动超过阈值时播放一次，后续移动不重复。
-const MOCHA_DRAG_START_THRESHOLD = 4;
+// 卡盒点击音效：每一轮按下整个卡盒时只播放一次 mocha。
+// 不再等待拖动距离；pointerdown 立即触发，本轮后续 move 不重复。
 let mochaPlayedThisDrag = false;
 let mochaSfxContext = null;
 let mochaSfxBuffer = null;
@@ -651,7 +650,7 @@ function startMochaBufferOnce() {
 
 function beginMochaDragGesture() {
   mochaPlayedThisDrag = false;
-  // 真实 pointerdown/touch 手势里提前解锁，真正拖动时只负责启动一次。
+  // 真实 pointerdown 手势里提前解锁。
   prepareMochaSfxFromGesture().catch(() => {});
 }
 
@@ -2205,6 +2204,7 @@ function handleCardPointerDown(event) {
   isDragging = true;
   cardTrigger.classList.add("is-dragging");
   beginMochaDragGesture();
+  playMochaOnceForDrag();
   cardTrigger.setPointerCapture?.(event.pointerId);
 }
 
@@ -2214,7 +2214,6 @@ function handleCardPointerMove(event) {
   const deltaX = event.clientX - pointerStart.x;
   const deltaY = event.clientY - pointerStart.y;
   externalCardPointerTravel = Math.max(externalCardPointerTravel, Math.hypot(deltaX, deltaY));
-  if (externalCardPointerTravel >= MOCHA_DRAG_START_THRESHOLD) playMochaOnceForDrag();
 
   event.preventDefault();
   const nextX = Math.max(
@@ -2283,6 +2282,7 @@ function handleExtractPointerDown(event) {
   isExtracting = true;
   cardBox.classList.add("is-extracting");
   beginMochaDragGesture();
+  playMochaOnceForDrag();
   cardBox.setPointerCapture?.(event.pointerId);
 }
 
@@ -2290,12 +2290,6 @@ function handleExtractPointerMove(event) {
   if (!extractReady || !isExtracting || extractPointerId !== event.pointerId) return;
   event.preventDefault();
   event.stopPropagation();
-
-  const pointerTravel = Math.hypot(
-    event.clientX - extractPointerStart.x,
-    event.clientY - extractPointerStart.y,
-  );
-  if (pointerTravel >= MOCHA_DRAG_START_THRESHOLD) playMochaOnceForDrag();
 
   const deltaX = (event.clientX - extractPointerStart.x) / sceneScale;
   // v61：卡盒插入腰带后只能沿水平方向向右抽出。
