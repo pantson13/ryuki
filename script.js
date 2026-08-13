@@ -5,7 +5,7 @@
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "101";
+const PWA_BUILD = "102";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 
@@ -159,27 +159,28 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=101",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=101",
-  charu: "./assets/audio/charu.mp3?av=101",
-  chouka: "./assets/audio/chouka.mp3?av=101",
-  chaka: "./assets/audio/chaka.mp3?av=101",
-  huagai1: "./assets/audio/huagai1.mp3?av=101",
-  huagai2: "./assets/audio/huagai2.mp3?av=101",
-  guo: "./assets/audio/guo.mp3?av=101",
+  kh1: "./assets/audio/kh1.mp3?av=102",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=102",
+  charu: "./assets/audio/charu.mp3?av=102",
+  mocha: "./assets/audio/mocha.mp3?av=102",
+  chouka: "./assets/audio/chouka.mp3?av=102",
+  chaka: "./assets/audio/chaka.mp3?av=102",
+  huagai1: "./assets/audio/huagai1.mp3?av=102",
+  huagai2: "./assets/audio/huagai2.mp3?av=102",
+  guo: "./assets/audio/guo.mp3?av=102",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=101",
-    2: "./assets/audio/q.mp3?av=101",
-    3: "./assets/audio/d.mp3?av=101",
-    4: "./assets/audio/l.mp3?av=101",
-    5: "./assets/audio/f.mp3?av=101",
-    6: "./assets/audio/hc.mp3?av=101",
+    1: "./assets/audio/j.mp3?av=102",
+    2: "./assets/audio/q.mp3?av=102",
+    3: "./assets/audio/d.mp3?av=102",
+    4: "./assets/audio/l.mp3?av=102",
+    5: "./assets/audio/f.mp3?av=102",
+    6: "./assets/audio/hc.mp3?av=102",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=101",
-    4: "./assets/audio/longjiao.mp3?av=101",
-    5: "./assets/audio/bsj.mp3?av=101",
+    1: "./assets/audio/jianjianglin.mp3?av=102",
+    4: "./assets/audio/longjiao.mp3?av=102",
+    5: "./assets/audio/bsj.mp3?av=102",
   },
 };
 
@@ -333,6 +334,7 @@ const chakaBytesPromise = fetch(AUDIO_CONFIG.chaka, { cache: "no-store" })
 const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
 const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
 const charuAudio = new Audio(AUDIO_CONFIG.charu);
+const mochaAudio = new Audio(AUDIO_CONFIG.mocha);
 const choukaAudio = new Audio(AUDIO_CONFIG.chouka);
 const chakaAudio = new Audio(AUDIO_CONFIG.chaka);
 const huagai1Audio = new Audio(AUDIO_CONFIG.huagai1);
@@ -348,6 +350,7 @@ const cardVoiceFollowUpAudios = Object.fromEntries(
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
 charuAudio.preload = "auto";
+mochaAudio.preload = "auto";
 choukaAudio.preload = "auto";
 chakaAudio.preload = "auto";
 huagai1Audio.preload = "auto";
@@ -356,7 +359,7 @@ guoAudio.preload = "auto";
 Object.values(cardVoiceAudios).forEach((audio) => { audio.preload = "auto"; });
 Object.values(cardVoiceFollowUpAudios).forEach((audio) => { audio.preload = "auto"; });
 [
-  kh1Audio, ydMusicAudio, charuAudio, choukaAudio, chakaAudio,
+  kh1Audio, ydMusicAudio, charuAudio, mochaAudio, choukaAudio, chakaAudio,
   huagai1Audio, huagai2Audio, guoAudio, ...Object.values(cardVoiceAudios),
   ...Object.values(cardVoiceFollowUpAudios),
 ].forEach((audio) => audio.load());
@@ -554,6 +557,45 @@ function primeAudio(audio, isInUse) {
     .catch(() => {
       audio.muted = false;
     });
+}
+
+
+// 卡盒拖动音效：iPhone PWA 下在真实 pointerdown 内静音预启动，
+// 实际移动超过阈值后再取消静音；松手/插入/抽出完成立即停止。
+const MOCHA_DRAG_START_THRESHOLD = 4;
+let mochaGesturePrimed = false;
+let mochaDragAudible = false;
+
+function primeMochaDragAudio() {
+  stopAudio(mochaAudio);
+  mochaAudio.loop = true;
+  mochaAudio.muted = true;
+  mochaGesturePrimed = true;
+  mochaDragAudible = false;
+
+  const promise = mochaAudio.play();
+  if (promise instanceof Promise) {
+    promise.catch((error) => {
+      mochaGesturePrimed = false;
+      mochaDragAudible = false;
+      mochaAudio.muted = false;
+      console.warn("mocha 拖动音效预启动失败：", error);
+    });
+  }
+}
+
+function activateMochaDragAudio() {
+  if (!mochaGesturePrimed || mochaDragAudible) return;
+  mochaDragAudible = true;
+  mochaAudio.muted = false;
+}
+
+function stopMochaDragAudio() {
+  mochaGesturePrimed = false;
+  mochaDragAudible = false;
+  mochaAudio.loop = false;
+  mochaAudio.muted = false;
+  stopAudio(mochaAudio);
 }
 
 function getChakaAudioContext() {
@@ -1826,6 +1868,7 @@ function resetToCard() {
   stopAudio(kh1Audio);
   stopAudio(ydMusicAudio);
   stopAudio(charuAudio);
+  stopMochaDragAudio();
   stopAudio(choukaAudio);
   stopAudio(chakaAudio);
   stopAudio(guoAudio);
@@ -1864,6 +1907,8 @@ function resetToCard() {
 
 function completeCardInsertion(pointerId) {
   if (!dragReady || !isDragging || !parallelReached) return;
+
+  stopMochaDragAudio();
 
   dragReady = false;
   isDragging = false;
@@ -2074,6 +2119,7 @@ function handleCardPointerDown(event) {
   dragOrigin = { ...cardDragPosition };
   isDragging = true;
   cardTrigger.classList.add("is-dragging");
+  primeMochaDragAudio();
   cardTrigger.setPointerCapture?.(event.pointerId);
 }
 
@@ -2083,6 +2129,7 @@ function handleCardPointerMove(event) {
   const deltaX = event.clientX - pointerStart.x;
   const deltaY = event.clientY - pointerStart.y;
   externalCardPointerTravel = Math.max(externalCardPointerTravel, Math.hypot(deltaX, deltaY));
+  if (externalCardPointerTravel >= MOCHA_DRAG_START_THRESHOLD) activateMochaDragAudio();
 
   event.preventDefault();
   const nextX = Math.max(
@@ -2122,6 +2169,8 @@ function handleCardPointerEnd(event) {
     cardTrigger.releasePointerCapture(event.pointerId);
   }
 
+  stopMochaDragAudio();
+
   // 松手后保留卡盒当前位置；下次按住时从这里继续拖动。
   isDragging = false;
   activePointerId = null;
@@ -2148,6 +2197,7 @@ function handleExtractPointerDown(event) {
   extractOrigin = { ...cardExtractPosition };
   isExtracting = true;
   cardBox.classList.add("is-extracting");
+  primeMochaDragAudio();
   cardBox.setPointerCapture?.(event.pointerId);
 }
 
@@ -2155,6 +2205,12 @@ function handleExtractPointerMove(event) {
   if (!extractReady || !isExtracting || extractPointerId !== event.pointerId) return;
   event.preventDefault();
   event.stopPropagation();
+
+  const pointerTravel = Math.hypot(
+    event.clientX - extractPointerStart.x,
+    event.clientY - extractPointerStart.y,
+  );
+  if (pointerTravel >= MOCHA_DRAG_START_THRESHOLD) activateMochaDragAudio();
 
   const deltaX = (event.clientX - extractPointerStart.x) / sceneScale;
   // v61：卡盒插入腰带后只能沿水平方向向右抽出。
@@ -2164,6 +2220,7 @@ function handleExtractPointerMove(event) {
 }
 
 function completeCardExtraction(pointerId) {
+  stopMochaDragAudio();
   extractReady = false;
   isExtracting = false;
   cardWasExtracted = true;
@@ -2195,6 +2252,8 @@ function completeCardExtraction(pointerId) {
 
 function handleExtractPointerEnd(event) {
   if (extractPointerId !== event.pointerId) return;
+
+  stopMochaDragAudio();
 
   if (cardBox.hasPointerCapture?.(event.pointerId)) {
     cardBox.releasePointerCapture(event.pointerId);
