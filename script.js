@@ -5,7 +5,7 @@
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "102";
+const PWA_BUILD = "103";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 
@@ -159,28 +159,28 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=102",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=102",
-  charu: "./assets/audio/charu.mp3?av=102",
-  mocha: "./assets/audio/mocha.mp3?av=102",
-  chouka: "./assets/audio/chouka.mp3?av=102",
-  chaka: "./assets/audio/chaka.mp3?av=102",
-  huagai1: "./assets/audio/huagai1.mp3?av=102",
-  huagai2: "./assets/audio/huagai2.mp3?av=102",
-  guo: "./assets/audio/guo.mp3?av=102",
+  kh1: "./assets/audio/kh1.mp3?av=103",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=103",
+  charu: "./assets/audio/charu.mp3?av=103",
+  mocha: "./assets/audio/mocha.mp3?av=103",
+  chouka: "./assets/audio/chouka.mp3?av=103",
+  chaka: "./assets/audio/chaka.mp3?av=103",
+  huagai1: "./assets/audio/huagai1.mp3?av=103",
+  huagai2: "./assets/audio/huagai2.mp3?av=103",
+  guo: "./assets/audio/guo.mp3?av=103",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=102",
-    2: "./assets/audio/q.mp3?av=102",
-    3: "./assets/audio/d.mp3?av=102",
-    4: "./assets/audio/l.mp3?av=102",
-    5: "./assets/audio/f.mp3?av=102",
-    6: "./assets/audio/hc.mp3?av=102",
+    1: "./assets/audio/j.mp3?av=103",
+    2: "./assets/audio/q.mp3?av=103",
+    3: "./assets/audio/d.mp3?av=103",
+    4: "./assets/audio/l.mp3?av=103",
+    5: "./assets/audio/f.mp3?av=103",
+    6: "./assets/audio/hc.mp3?av=103",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=102",
-    4: "./assets/audio/longjiao.mp3?av=102",
-    5: "./assets/audio/bsj.mp3?av=102",
+    1: "./assets/audio/jianjianglin.mp3?av=103",
+    4: "./assets/audio/longjiao.mp3?av=103",
+    5: "./assets/audio/bsj.mp3?av=103",
   },
 };
 
@@ -560,41 +560,126 @@ function primeAudio(audio, isInUse) {
 }
 
 
-// 卡盒拖动音效：iPhone PWA 下在真实 pointerdown 内静音预启动，
-// 实际移动超过阈值后再取消静音；松手/插入/抽出完成立即停止。
+// 卡盒拖动音效：每一轮真正拖动只播放一次 mocha。
+// pointerdown 只负责解锁 Web Audio；首次移动超过阈值时播放一次，后续移动不重复。
 const MOCHA_DRAG_START_THRESHOLD = 4;
-let mochaGesturePrimed = false;
-let mochaDragAudible = false;
+let mochaPlayedThisDrag = false;
+let mochaSfxContext = null;
+let mochaSfxBuffer = null;
+let mochaSfxDecodePromise = null;
+let mochaSfxSource = null;
+const mochaBytesPromise = fetch(AUDIO_CONFIG.mocha, { cache: "no-store" })
+  .then((response) => {
+    if (!response.ok) throw new Error(`mocha fetch ${response.status}`);
+    return response.arrayBuffer();
+  })
+  .catch((error) => {
+    console.warn("mocha 预加载失败，将使用 HTMLAudio 兜底：", error);
+    return null;
+  });
 
-function primeMochaDragAudio() {
-  stopAudio(mochaAudio);
-  mochaAudio.loop = true;
-  mochaAudio.muted = true;
-  mochaGesturePrimed = true;
-  mochaDragAudible = false;
+function getMochaAudioContext() {
+  if (mochaSfxContext) return mochaSfxContext;
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+  try {
+    mochaSfxContext = new AudioContextCtor();
+  } catch (error) {
+    console.warn("无法创建 mocha Web AudioContext：", error);
+    mochaSfxContext = null;
+  }
+  return mochaSfxContext;
+}
 
-  const promise = mochaAudio.play();
-  if (promise instanceof Promise) {
-    promise.catch((error) => {
-      mochaGesturePrimed = false;
-      mochaDragAudible = false;
-      mochaAudio.muted = false;
-      console.warn("mocha 拖动音效预启动失败：", error);
-    });
+async function prepareMochaSfxFromGesture() {
+  const context = getMochaAudioContext();
+  if (!context) return false;
+  try {
+    if (context.state === "suspended") await context.resume();
+  } catch (error) {
+    console.warn("mocha AudioContext resume 失败：", error);
+    return false;
+  }
+
+  if (mochaSfxBuffer) return context.state === "running";
+  if (!mochaSfxDecodePromise) {
+    mochaSfxDecodePromise = mochaBytesPromise
+      .then((bytes) => {
+        if (!bytes) return null;
+        return new Promise((resolve, reject) => {
+          context.decodeAudioData(bytes.slice(0), resolve, reject);
+        });
+      })
+      .then((buffer) => {
+        mochaSfxBuffer = buffer;
+        return buffer;
+      })
+      .catch((error) => {
+        console.warn("mocha Web Audio 解码失败：", error);
+        mochaSfxDecodePromise = null;
+        return null;
+      });
+  }
+
+  await mochaSfxDecodePromise;
+  return Boolean(mochaSfxBuffer && context.state === "running");
+}
+
+function startMochaBufferOnce() {
+  const context = mochaSfxContext;
+  if (!context || context.state !== "running" || !mochaSfxBuffer) return false;
+  try {
+    if (mochaSfxSource) {
+      try { mochaSfxSource.stop(); } catch {}
+      mochaSfxSource.disconnect?.();
+    }
+    const source = context.createBufferSource();
+    source.buffer = mochaSfxBuffer;
+    source.connect(context.destination);
+    source.onended = () => {
+      if (mochaSfxSource === source) mochaSfxSource = null;
+      source.disconnect?.();
+    };
+    mochaSfxSource = source;
+    source.start(0);
+    return true;
+  } catch (error) {
+    console.warn("mocha Web Audio 播放失败：", error);
+    return false;
   }
 }
 
-function activateMochaDragAudio() {
-  if (!mochaGesturePrimed || mochaDragAudible) return;
-  mochaDragAudible = true;
-  mochaAudio.muted = false;
+function beginMochaDragGesture() {
+  mochaPlayedThisDrag = false;
+  // 真实 pointerdown/touch 手势里提前解锁，真正拖动时只负责启动一次。
+  prepareMochaSfxFromGesture().catch(() => {});
 }
 
-function stopMochaDragAudio() {
-  mochaGesturePrimed = false;
-  mochaDragAudible = false;
-  mochaAudio.loop = false;
-  mochaAudio.muted = false;
+function playMochaOnceForDrag() {
+  if (mochaPlayedThisDrag) return;
+  mochaPlayedThisDrag = true;
+
+  if (startMochaBufferOnce()) return;
+  prepareMochaSfxFromGesture()
+    .then((ready) => {
+      if (ready && startMochaBufferOnce()) return;
+      playAudio(mochaAudio);
+    })
+    .catch(() => playAudio(mochaAudio));
+}
+
+function endMochaDragGesture() {
+  // 只复位“本轮是否已经播放”的门闩，不截断已经开始的单次音效。
+  mochaPlayedThisDrag = false;
+}
+
+function stopMochaAudioCompletely() {
+  mochaPlayedThisDrag = false;
+  if (mochaSfxSource) {
+    try { mochaSfxSource.stop(); } catch {}
+    mochaSfxSource.disconnect?.();
+    mochaSfxSource = null;
+  }
   stopAudio(mochaAudio);
 }
 
@@ -1868,7 +1953,7 @@ function resetToCard() {
   stopAudio(kh1Audio);
   stopAudio(ydMusicAudio);
   stopAudio(charuAudio);
-  stopMochaDragAudio();
+  stopMochaAudioCompletely();
   stopAudio(choukaAudio);
   stopAudio(chakaAudio);
   stopAudio(guoAudio);
@@ -1908,7 +1993,7 @@ function resetToCard() {
 function completeCardInsertion(pointerId) {
   if (!dragReady || !isDragging || !parallelReached) return;
 
-  stopMochaDragAudio();
+  endMochaDragGesture();
 
   dragReady = false;
   isDragging = false;
@@ -2119,7 +2204,7 @@ function handleCardPointerDown(event) {
   dragOrigin = { ...cardDragPosition };
   isDragging = true;
   cardTrigger.classList.add("is-dragging");
-  primeMochaDragAudio();
+  beginMochaDragGesture();
   cardTrigger.setPointerCapture?.(event.pointerId);
 }
 
@@ -2129,7 +2214,7 @@ function handleCardPointerMove(event) {
   const deltaX = event.clientX - pointerStart.x;
   const deltaY = event.clientY - pointerStart.y;
   externalCardPointerTravel = Math.max(externalCardPointerTravel, Math.hypot(deltaX, deltaY));
-  if (externalCardPointerTravel >= MOCHA_DRAG_START_THRESHOLD) activateMochaDragAudio();
+  if (externalCardPointerTravel >= MOCHA_DRAG_START_THRESHOLD) playMochaOnceForDrag();
 
   event.preventDefault();
   const nextX = Math.max(
@@ -2169,7 +2254,7 @@ function handleCardPointerEnd(event) {
     cardTrigger.releasePointerCapture(event.pointerId);
   }
 
-  stopMochaDragAudio();
+  endMochaDragGesture();
 
   // 松手后保留卡盒当前位置；下次按住时从这里继续拖动。
   isDragging = false;
@@ -2197,7 +2282,7 @@ function handleExtractPointerDown(event) {
   extractOrigin = { ...cardExtractPosition };
   isExtracting = true;
   cardBox.classList.add("is-extracting");
-  primeMochaDragAudio();
+  beginMochaDragGesture();
   cardBox.setPointerCapture?.(event.pointerId);
 }
 
@@ -2210,7 +2295,7 @@ function handleExtractPointerMove(event) {
     event.clientX - extractPointerStart.x,
     event.clientY - extractPointerStart.y,
   );
-  if (pointerTravel >= MOCHA_DRAG_START_THRESHOLD) activateMochaDragAudio();
+  if (pointerTravel >= MOCHA_DRAG_START_THRESHOLD) playMochaOnceForDrag();
 
   const deltaX = (event.clientX - extractPointerStart.x) / sceneScale;
   // v61：卡盒插入腰带后只能沿水平方向向右抽出。
@@ -2220,7 +2305,7 @@ function handleExtractPointerMove(event) {
 }
 
 function completeCardExtraction(pointerId) {
-  stopMochaDragAudio();
+  endMochaDragGesture();
   extractReady = false;
   isExtracting = false;
   cardWasExtracted = true;
@@ -2253,7 +2338,7 @@ function completeCardExtraction(pointerId) {
 function handleExtractPointerEnd(event) {
   if (extractPointerId !== event.pointerId) return;
 
-  stopMochaDragAudio();
+  endMochaDragGesture();
 
   if (cardBox.hasPointerCapture?.(event.pointerId)) {
     cardBox.releasePointerCapture(event.pointerId);
