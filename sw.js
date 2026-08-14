@@ -1,12 +1,12 @@
-// Ryuki v104: card-box drag mocha audio
-const BUILD = "104";
-const CACHE_NAME = "ryuki-pwa-v104-cardbox-mocha-drag";
+// Ryuki v106: card-box press mocha audio
+const BUILD = "106";
+const CACHE_NAME = "ryuki-pwa-v106-center-actions";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./manifest.webmanifest?v=104",
-  "./style.css?v=104",
-  "./script.js?v=104",
+  "./manifest.webmanifest?v=106",
+  "./style.css?v=106",
+  "./script.js?v=106",
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
@@ -31,24 +31,26 @@ const APP_SHELL = [
   "./assets/images/khzd.png",
   "./assets/images/khfg.png",
   "./assets/images/ydfg.png",
-  "./assets/audio/kh1.mp3?av=104",
-  "./assets/audio/ydmusic.mp3?av=104",
-  "./assets/audio/charu.mp3?av=104",
-  "./assets/audio/mocha.mp3?av=104",
-  "./assets/audio/chouka.mp3?av=104",
-  "./assets/audio/chaka.mp3?av=104",
-  "./assets/audio/huagai1.mp3?av=104",
-  "./assets/audio/huagai2.mp3?av=104",
-  "./assets/audio/j.mp3?av=104",
-  "./assets/audio/q.mp3?av=104",
-  "./assets/audio/d.mp3?av=104",
-  "./assets/audio/l.mp3?av=104",
-  "./assets/audio/f.mp3?av=104",
-  "./assets/audio/hc.mp3?av=104",
-  "./assets/audio/jianjianglin.mp3?av=104",
-  "./assets/audio/longjiao.mp3?av=104",
-  "./assets/audio/bsj.mp3?av=104",
-  "./assets/audio/guo.mp3?av=104",
+  "./assets/audio/kh1.mp3?av=106",
+  "./assets/audio/ydmusic.mp3?av=106",
+  "./assets/audio/charu.mp3?av=106",
+  "./assets/audio/mocha.mp3?av=106",
+  "./assets/audio/chouka.mp3?av=106",
+  "./assets/audio/chaka.mp3?av=106",
+  "./assets/audio/huagai1.mp3?av=106",
+  "./assets/audio/huagai2.mp3?av=106",
+  "./assets/audio/j.mp3?av=106",
+  "./assets/audio/q.mp3?av=106",
+  "./assets/audio/d.mp3?av=106",
+  "./assets/audio/l.mp3?av=106",
+  "./assets/audio/f.mp3?av=106",
+  "./assets/audio/hc.mp3?av=106",
+  "./assets/audio/jianjianglin.mp3?av=106",
+  "./assets/audio/longjiao.mp3?av=106",
+  "./assets/audio/bsj.mp3?av=106",
+  "./assets/audio/guo.mp3?av=106",
+  "./assets/audio/boxing.mp3?av=106",
+  "./assets/audio/jianji.mp3?av=106",
   "./assets/icons/icon-192.png?v=50",
   "./assets/icons/icon-512.png?v=50",
   "./assets/icons/icon-maskable-512.png?v=50",
@@ -124,7 +126,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // v104：音频使用 Network First。配合 ?av=104 资源版本，覆盖同名 mp3 后不会再随机命中旧媒体缓存。
+  // v106：音频使用 Network First。配合 ?av=106 资源版本，覆盖同名 mp3 后不会再随机命中旧媒体缓存。
   if (requestUrl.pathname.includes("/assets/audio/")) {
     event.respondWith(
       fetch(request, { cache: "no-store" })

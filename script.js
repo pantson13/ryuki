@@ -1,11 +1,11 @@
-/* Ryuki v100: hidden debug areas + chained card voice follow-ups */
+/* Ryuki v106: bg4 center action buttons + boxing / jianji */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "104";
+const PWA_BUILD = "106";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 
@@ -63,6 +63,14 @@ const ANIMATION_CONFIG = {
     y: 420,
     size: 84,
     gap: 20,
+  },
+  centerButtons: {
+    // bg4 完整结束后出现的两颗圆形按钮。group x / y 为整体相对场景中心的位置。
+    // button1 / button2 的 x / y / size 都可单独调整，方便后续替换图标。
+    x: 0,
+    y: 40,
+    button1: { x: -90, y: 0, size: 110 },
+    button2: { x: 90, y: 0, size: 110 },
   },
   auxDevice: {
     // BS 按钮。x / y / width 可自行调整。
@@ -159,28 +167,30 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=104",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=104",
-  charu: "./assets/audio/charu.mp3?av=104",
-  mocha: "./assets/audio/mocha.mp3?av=104",
-  chouka: "./assets/audio/chouka.mp3?av=104",
-  chaka: "./assets/audio/chaka.mp3?av=104",
-  huagai1: "./assets/audio/huagai1.mp3?av=104",
-  huagai2: "./assets/audio/huagai2.mp3?av=104",
-  guo: "./assets/audio/guo.mp3?av=104",
+  kh1: "./assets/audio/kh1.mp3?av=106",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=106",
+  charu: "./assets/audio/charu.mp3?av=106",
+  mocha: "./assets/audio/mocha.mp3?av=106",
+  chouka: "./assets/audio/chouka.mp3?av=106",
+  chaka: "./assets/audio/chaka.mp3?av=106",
+  huagai1: "./assets/audio/huagai1.mp3?av=106",
+  huagai2: "./assets/audio/huagai2.mp3?av=106",
+  guo: "./assets/audio/guo.mp3?av=106",
+  boxing: "./assets/audio/boxing.mp3?av=106",
+  jianji: "./assets/audio/jianji.mp3?av=106",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=104",
-    2: "./assets/audio/q.mp3?av=104",
-    3: "./assets/audio/d.mp3?av=104",
-    4: "./assets/audio/l.mp3?av=104",
-    5: "./assets/audio/f.mp3?av=104",
-    6: "./assets/audio/hc.mp3?av=104",
+    1: "./assets/audio/j.mp3?av=106",
+    2: "./assets/audio/q.mp3?av=106",
+    3: "./assets/audio/d.mp3?av=106",
+    4: "./assets/audio/l.mp3?av=106",
+    5: "./assets/audio/f.mp3?av=106",
+    6: "./assets/audio/hc.mp3?av=106",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=104",
-    4: "./assets/audio/longjiao.mp3?av=104",
-    5: "./assets/audio/bsj.mp3?av=104",
+    1: "./assets/audio/jianjianglin.mp3?av=106",
+    4: "./assets/audio/longjiao.mp3?av=106",
+    5: "./assets/audio/bsj.mp3?av=106",
   },
 };
 
@@ -237,6 +247,7 @@ const auxTransferCardImage = document.querySelector("#auxTransferCardImage");
 const auxCardCoverMask = document.querySelector("#auxCardCoverMask");
 const cardCoverLayer = cardBox?.querySelector(".card-cover");
 const sideButtons = [...document.querySelectorAll(".side-control-button")];
+const centerActionButtons = [...document.querySelectorAll(".center-action-button")];
 const lyfgImage = document.querySelector("#lyfgImage");
 const beltArt = document.querySelector("#beltArt");
 const characterReveal = document.querySelector(".character-reveal");
@@ -264,6 +275,7 @@ let insertionAudioFallback = 0;
 let insertionTimer = 0;
 let charuFinished = true;
 let bg4MergeStarted = false;
+let centerActionsUnlocked = false;
 let bg5TransitionTimer = 0;
 let shatterCleanupTimer = 0;
 let shatterAnimationFrame = 0;
@@ -340,6 +352,8 @@ const chakaAudio = new Audio(AUDIO_CONFIG.chaka);
 const huagai1Audio = new Audio(AUDIO_CONFIG.huagai1);
 const huagai2Audio = new Audio(AUDIO_CONFIG.huagai2);
 const guoAudio = new Audio(AUDIO_CONFIG.guo);
+const boxingAudio = new Audio(AUDIO_CONFIG.boxing);
+const jianjiAudio = new Audio(AUDIO_CONFIG.jianji);
 const cardVoiceAudios = Object.fromEntries(
   Object.entries(AUDIO_CONFIG.cardVoices).map(([key, src]) => [key, new Audio(src)]),
 );
@@ -356,6 +370,8 @@ chakaAudio.preload = "auto";
 huagai1Audio.preload = "auto";
 huagai2Audio.preload = "auto";
 guoAudio.preload = "auto";
+boxingAudio.preload = "auto";
+jianjiAudio.preload = "auto";
 Object.values(cardVoiceAudios).forEach((audio) => { audio.preload = "auto"; });
 Object.values(cardVoiceFollowUpAudios).forEach((audio) => { audio.preload = "auto"; });
 [
@@ -380,7 +396,7 @@ function applyPhoneLayout() {
   );
   sceneScale = scale;
 
-  const { sequenceDuration, stageTwo, move, bg3, bg4, bg5, shatter, lq, sideButtons, auxDevice, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
+  const { sequenceDuration, stageTwo, move, bg3, bg4, bg5, shatter, lq, sideButtons, centerButtons, auxDevice, beltLayers, card, beltGlow } = ANIMATION_CONFIG;
 
   scene.style.setProperty("--belt-width", `${SOURCE_BELT_WIDTH * scale}px`);
   scene.style.setProperty("--final-x", `${move.x * scale}px`);
@@ -406,6 +422,14 @@ function applyPhoneLayout() {
   scene.style.setProperty("--side-buttons-y", `${sideButtons.y * scale}px`);
   scene.style.setProperty("--side-button-size", `${sideButtons.size * scale}px`);
   scene.style.setProperty("--side-button-gap", `${sideButtons.gap * scale}px`);
+  scene.style.setProperty("--center-buttons-x", `${centerButtons.x * scale}px`);
+  scene.style.setProperty("--center-buttons-y", `${centerButtons.y * scale}px`);
+  scene.style.setProperty("--center-button-1-x", `${centerButtons.button1.x * scale}px`);
+  scene.style.setProperty("--center-button-1-y", `${centerButtons.button1.y * scale}px`);
+  scene.style.setProperty("--center-button-1-size", `${centerButtons.button1.size * scale}px`);
+  scene.style.setProperty("--center-button-2-x", `${centerButtons.button2.x * scale}px`);
+  scene.style.setProperty("--center-button-2-y", `${centerButtons.button2.y * scale}px`);
+  scene.style.setProperty("--center-button-2-size", `${centerButtons.button2.size * scale}px`);
   scene.style.setProperty("--bs-x", `${auxDevice.bs.x * scale}px`);
   scene.style.setProperty("--bs-y", `${auxDevice.bs.y * scale}px`);
   scene.style.setProperty("--bs-width", `${auxDevice.bs.width * scale}px`);
@@ -560,126 +584,13 @@ function primeAudio(audio, isInUse) {
 }
 
 
-// 卡盒点击音效：每一轮按下整个卡盒时只播放一次 mocha。
-// 不再等待拖动距离；pointerdown 立即触发，本轮后续 move 不重复。
-let mochaPlayedThisDrag = false;
-let mochaSfxContext = null;
-let mochaSfxBuffer = null;
-let mochaSfxDecodePromise = null;
-let mochaSfxSource = null;
-const mochaBytesPromise = fetch(AUDIO_CONFIG.mocha, { cache: "no-store" })
-  .then((response) => {
-    if (!response.ok) throw new Error(`mocha fetch ${response.status}`);
-    return response.arrayBuffer();
-  })
-  .catch((error) => {
-    console.warn("mocha 预加载失败，将使用 HTMLAudio 兜底：", error);
-    return null;
+// 卡盒点击音效：真实 pointerdown 内同步播放一次。
+// iPhone Safari/PWA 不走异步 Web Audio 准备链，避免离开用户手势后播放被拦截。
+function playMochaOnCardBoxPress() {
+  mochaAudio.muted = false;
+  playAudio(mochaAudio).catch((error) => {
+    console.warn("mocha 音效播放失败：", error);
   });
-
-function getMochaAudioContext() {
-  if (mochaSfxContext) return mochaSfxContext;
-  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextCtor) return null;
-  try {
-    mochaSfxContext = new AudioContextCtor();
-  } catch (error) {
-    console.warn("无法创建 mocha Web AudioContext：", error);
-    mochaSfxContext = null;
-  }
-  return mochaSfxContext;
-}
-
-async function prepareMochaSfxFromGesture() {
-  const context = getMochaAudioContext();
-  if (!context) return false;
-  try {
-    if (context.state === "suspended") await context.resume();
-  } catch (error) {
-    console.warn("mocha AudioContext resume 失败：", error);
-    return false;
-  }
-
-  if (mochaSfxBuffer) return context.state === "running";
-  if (!mochaSfxDecodePromise) {
-    mochaSfxDecodePromise = mochaBytesPromise
-      .then((bytes) => {
-        if (!bytes) return null;
-        return new Promise((resolve, reject) => {
-          context.decodeAudioData(bytes.slice(0), resolve, reject);
-        });
-      })
-      .then((buffer) => {
-        mochaSfxBuffer = buffer;
-        return buffer;
-      })
-      .catch((error) => {
-        console.warn("mocha Web Audio 解码失败：", error);
-        mochaSfxDecodePromise = null;
-        return null;
-      });
-  }
-
-  await mochaSfxDecodePromise;
-  return Boolean(mochaSfxBuffer && context.state === "running");
-}
-
-function startMochaBufferOnce() {
-  const context = mochaSfxContext;
-  if (!context || context.state !== "running" || !mochaSfxBuffer) return false;
-  try {
-    if (mochaSfxSource) {
-      try { mochaSfxSource.stop(); } catch {}
-      mochaSfxSource.disconnect?.();
-    }
-    const source = context.createBufferSource();
-    source.buffer = mochaSfxBuffer;
-    source.connect(context.destination);
-    source.onended = () => {
-      if (mochaSfxSource === source) mochaSfxSource = null;
-      source.disconnect?.();
-    };
-    mochaSfxSource = source;
-    source.start(0);
-    return true;
-  } catch (error) {
-    console.warn("mocha Web Audio 播放失败：", error);
-    return false;
-  }
-}
-
-function beginMochaDragGesture() {
-  mochaPlayedThisDrag = false;
-  // 真实 pointerdown 手势里提前解锁。
-  prepareMochaSfxFromGesture().catch(() => {});
-}
-
-function playMochaOnceForDrag() {
-  if (mochaPlayedThisDrag) return;
-  mochaPlayedThisDrag = true;
-
-  if (startMochaBufferOnce()) return;
-  prepareMochaSfxFromGesture()
-    .then((ready) => {
-      if (ready && startMochaBufferOnce()) return;
-      playAudio(mochaAudio);
-    })
-    .catch(() => playAudio(mochaAudio));
-}
-
-function endMochaDragGesture() {
-  // 只复位“本轮是否已经播放”的门闩，不截断已经开始的单次音效。
-  mochaPlayedThisDrag = false;
-}
-
-function stopMochaAudioCompletely() {
-  mochaPlayedThisDrag = false;
-  if (mochaSfxSource) {
-    try { mochaSfxSource.stop(); } catch {}
-    mochaSfxSource.disconnect?.();
-    mochaSfxSource = null;
-  }
-  stopAudio(mochaAudio);
 }
 
 function getChakaAudioContext() {
@@ -1061,6 +972,24 @@ function startMirrorShatter() {
   }, durationMs + 260);
 }
 
+function syncCenterActionButtons() {
+  const cardStillInBelt = cardBox.classList.contains("is-inserted") || cardBox.classList.contains("is-inserting");
+  const shouldShow = Boolean(
+    centerActionsUnlocked &&
+    flowStarted &&
+    cardStillInBelt &&
+    !auxOpen &&
+    !isExtracting &&
+    !cardWasExtracted
+  );
+  scene.classList.toggle("show-center-actions", shouldShow);
+}
+
+function setCenterActionsUnlocked(unlocked) {
+  centerActionsUnlocked = Boolean(unlocked);
+  syncCenterActionButtons();
+}
+
 function hideLqPanel() {
   scene.classList.remove("show-lq");
   lqButtons.forEach((button) => button.classList.remove("is-selected"));
@@ -1271,6 +1200,7 @@ function resetAuxDevice(options = {}) {
     auxCardCoverMask.style.removeProperty("height");
   }
   if (!options.keepKpcHidden) cardBox.classList.remove("is-kpc-aux-hidden");
+  syncCenterActionButtons();
 }
 
 function toggleAuxDock(event) {
@@ -1285,6 +1215,7 @@ function toggleAuxDock(event) {
   }
 
   auxOpen = true;
+  syncCenterActionButtons();
   auxArmed = false;
   auxCardInserted = false;
   auxKpcHasBeenPulled = false;
@@ -1952,10 +1883,12 @@ function resetToCard() {
   stopAudio(kh1Audio);
   stopAudio(ydMusicAudio);
   stopAudio(charuAudio);
-  stopMochaAudioCompletely();
+  stopAudio(mochaAudio);
   stopAudio(choukaAudio);
   stopAudio(chakaAudio);
   stopAudio(guoAudio);
+  stopAudio(boxingAudio);
+  stopAudio(jianjiAudio);
   stopAudio(huagai1Audio);
   stopAudio(huagai2Audio);
   Object.values(cardVoiceAudios).forEach(stopAudio);
@@ -1965,6 +1898,8 @@ function resetToCard() {
   insertionAudioInUse = false;
   charuFinished = true;
   bg4MergeStarted = false;
+  centerActionsUnlocked = false;
+  scene.classList.remove("show-center-actions");
   selectedLq = null;
   selectedLqAspectRatio = null;
   extractReady = false;
@@ -1992,7 +1927,6 @@ function resetToCard() {
 function completeCardInsertion(pointerId) {
   if (!dragReady || !isDragging || !parallelReached) return;
 
-  endMochaDragGesture();
 
   dragReady = false;
   isDragging = false;
@@ -2000,6 +1934,7 @@ function completeCardInsertion(pointerId) {
   reinsertReady = false;
   extractedStageTwoReplayActive = false;
   bg4MergeStarted = false;
+  setCenterActionsUnlocked(false);
   insertionAudioInUse = false;
   cancelCharuBg4Sync();
   stopAudio(charuAudio);
@@ -2110,6 +2045,8 @@ function finishBg4Merge(event) {
   // 四张 bg4 完成汇合后先显示腰带后方的 bg5，并带白色外发光 0.5 秒。
   scene.classList.remove("show-bg4", "show-bg3");
   scene.classList.add("show-bg5");
+  // bg4 完整汇合结束：此刻解锁界面中间两颗动作按钮。
+  setCenterActionsUnlocked(true);
   clearTimeout(bg5TransitionTimer);
   bg5TransitionTimer = setTimeout(finishBg5Transition, ANIMATION_CONFIG.bg5.duration * 1000);
 }
@@ -2193,6 +2130,8 @@ function enableCardDrag(options = {}) {
 }
 
 function handleCardPointerDown(event) {
+  // 最开始点击卡盒，以及之后每次重新按下可拖卡盒，都立即播放一次 mocha。
+  playMochaOnCardBoxPress();
   if (!dragReady || !cardTrigger.classList.contains("is-draggable")) return;
 
   event.preventDefault();
@@ -2203,8 +2142,6 @@ function handleCardPointerDown(event) {
   dragOrigin = { ...cardDragPosition };
   isDragging = true;
   cardTrigger.classList.add("is-dragging");
-  beginMochaDragGesture();
-  playMochaOnceForDrag();
   cardTrigger.setPointerCapture?.(event.pointerId);
 }
 
@@ -2253,7 +2190,6 @@ function handleCardPointerEnd(event) {
     cardTrigger.releasePointerCapture(event.pointerId);
   }
 
-  endMochaDragGesture();
 
   // 松手后保留卡盒当前位置；下次按住时从这里继续拖动。
   isDragging = false;
@@ -2281,8 +2217,8 @@ function handleExtractPointerDown(event) {
   extractOrigin = { ...cardExtractPosition };
   isExtracting = true;
   cardBox.classList.add("is-extracting");
-  beginMochaDragGesture();
-  playMochaOnceForDrag();
+  syncCenterActionButtons();
+  playMochaOnCardBoxPress();
   cardBox.setPointerCapture?.(event.pointerId);
 }
 
@@ -2299,10 +2235,10 @@ function handleExtractPointerMove(event) {
 }
 
 function completeCardExtraction(pointerId) {
-  endMochaDragGesture();
   extractReady = false;
   isExtracting = false;
   cardWasExtracted = true;
+  syncCenterActionButtons();
   reinsertReady = false;
   extractedStageTwoReplayActive = false;
 
@@ -2332,7 +2268,6 @@ function completeCardExtraction(pointerId) {
 function handleExtractPointerEnd(event) {
   if (extractPointerId !== event.pointerId) return;
 
-  endMochaDragGesture();
 
   if (cardBox.hasPointerCapture?.(event.pointerId)) {
     cardBox.releasePointerCapture(event.pointerId);
@@ -2342,6 +2277,7 @@ function handleExtractPointerEnd(event) {
   cardBox.classList.remove("is-extracting");
   isExtracting = false;
   extractPointerId = null;
+  syncCenterActionButtons();
 
   // 只有向右拖够阈值才算成功，上下位移不参与抽出判定。
   if (rightDistance >= ANIMATION_CONFIG.card.extract.threshold) {
@@ -2642,6 +2578,20 @@ sideButtons[0]?.addEventListener("click", (event) => {
   event.stopPropagation();
   playAudio(guoAudio).catch((error) => {
     console.warn("guo 音效播放失败：", error);
+  });
+});
+centerActionButtons[0]?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  playAudio(boxingAudio).catch((error) => {
+    console.warn("boxing 音效播放失败：", error);
+  });
+});
+centerActionButtons[1]?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  playAudio(jianjiAudio).catch((error) => {
+    console.warn("jianji 音效播放失败：", error);
   });
 });
 auxTransferCard?.addEventListener("contextmenu", (event) => event.preventDefault());

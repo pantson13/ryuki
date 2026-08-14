@@ -1283,6 +1283,61 @@ body {
   display: none !important;
 }
 
+/* bg4 完成后出现的中间两颗圆形按钮。位置和大小由 script.js 的 centerButtons 参数控制。 */
+.center-actions {
+  position: absolute;
+  z-index: 13;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(var(--center-buttons-x), var(--center-buttons-y), 0);
+  transition: opacity 0.18s linear;
+}
+
+.scene.show-center-actions .center-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.center-action-button {
+  position: absolute;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: 2px solid rgb(255 255 255 / 72%);
+  background: rgb(10 16 22 / 58%);
+  box-shadow:
+    inset 0 0 14px rgb(255 255 255 / 12%),
+    0 0 14px rgb(80 180 255 / 28%);
+  appearance: none;
+  -webkit-appearance: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+
+.center-action-button-1 {
+  left: var(--center-button-1-x);
+  top: var(--center-button-1-y);
+  width: var(--center-button-1-size);
+  height: var(--center-button-1-size);
+}
+
+.center-action-button-2 {
+  left: var(--center-button-2-x);
+  top: var(--center-button-2-y);
+  width: var(--center-button-2-size);
+  height: var(--center-button-2-size);
+}
+
+.center-action-button:active {
+  transform: translate(-50%, -50%) scale(0.92);
+}
+
 /* 左下角常驻四颗圆形按钮。位置和大小由 script.js 的 sideButtons 参数控制。 */
 .side-controls {
   position: absolute;
