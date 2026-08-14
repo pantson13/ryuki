@@ -1,4 +1,4 @@
-/* Ryuki v95: fixed scene-level PWA card drag + versioned audio */
+/* Ryuki v114: stable detached card-box visual hit sync + touch drag */
 
 :root {
   color-scheme: dark;
@@ -461,6 +461,12 @@ body {
 
 .card-trigger.is-dragging {
   cursor: grabbing;
+  transition: none;
+}
+
+/* 腰带内卡盒抽出后切换到外部 cardTrigger 时必须瞬时交接。
+ * 禁止沿用 card-unit 的插入 transition，否则视觉位置会落后于 JS 的 cardDragPosition。 */
+.card-trigger.is-detached-draggable {
   transition: none;
 }
 

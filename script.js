@@ -1,11 +1,11 @@
-/* Ryuki v113: detached card-box native touch drag + guarded state machine + atomic PWA */
+/* Ryuki v114: detached card-box visual hit sync + native touch drag + guarded state machine + atomic PWA */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "113";
+const PWA_BUILD = "114";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -180,30 +180,30 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=113",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=113",
-  charu: "./assets/audio/charu.mp3?av=113",
-  mocha: "./assets/audio/mocha.mp3?av=113",
-  chouka: "./assets/audio/chouka.mp3?av=113",
-  chaka: "./assets/audio/chaka.mp3?av=113",
-  huagai1: "./assets/audio/huagai1.mp3?av=113",
-  huagai2: "./assets/audio/huagai2.mp3?av=113",
-  guo: "./assets/audio/guo.mp3?av=113",
-  boxing: "./assets/audio/boxing.mp3?av=113",
-  jianji: "./assets/audio/jianji.mp3?av=113",
+  kh1: "./assets/audio/kh1.mp3?av=114",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=114",
+  charu: "./assets/audio/charu.mp3?av=114",
+  mocha: "./assets/audio/mocha.mp3?av=114",
+  chouka: "./assets/audio/chouka.mp3?av=114",
+  chaka: "./assets/audio/chaka.mp3?av=114",
+  huagai1: "./assets/audio/huagai1.mp3?av=114",
+  huagai2: "./assets/audio/huagai2.mp3?av=114",
+  guo: "./assets/audio/guo.mp3?av=114",
+  boxing: "./assets/audio/boxing.mp3?av=114",
+  jianji: "./assets/audio/jianji.mp3?av=114",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=113",
-    2: "./assets/audio/q.mp3?av=113",
-    3: "./assets/audio/d.mp3?av=113",
-    4: "./assets/audio/l.mp3?av=113",
-    5: "./assets/audio/f.mp3?av=113",
-    6: "./assets/audio/hc.mp3?av=113",
+    1: "./assets/audio/j.mp3?av=114",
+    2: "./assets/audio/q.mp3?av=114",
+    3: "./assets/audio/d.mp3?av=114",
+    4: "./assets/audio/l.mp3?av=114",
+    5: "./assets/audio/f.mp3?av=114",
+    6: "./assets/audio/hc.mp3?av=114",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=113",
-    4: "./assets/audio/longjiao.mp3?av=113",
-    5: "./assets/audio/bsj.mp3?av=113",
+    1: "./assets/audio/jianjianglin.mp3?av=114",
+    4: "./assets/audio/longjiao.mp3?av=114",
+    5: "./assets/audio/bsj.mp3?av=114",
   },
 };
 
@@ -2122,7 +2122,7 @@ function resetCardGesture() {
   isDragging = false;
   parallelReached = false;
   activePointerId = null;
-  cardTrigger.classList.remove("is-draggable", "is-dragging", "is-replay-waiting");
+  cardTrigger.classList.remove("is-draggable", "is-dragging", "is-replay-waiting", "is-detached-draggable");
   cardTrigger.setAttribute("aria-label", "启动卡盒与腰带动画");
   setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
 }
@@ -2513,7 +2513,7 @@ function enableCardDrag(options = {}) {
   if (!preservePosition) {
     setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
   }
-  cardTrigger.classList.remove("is-waiting", "is-replay-waiting");
+  cardTrigger.classList.remove("is-waiting", "is-replay-waiting", "is-detached-draggable");
   cardTrigger.classList.add("is-draggable");
   cardTrigger.setAttribute(
     "aria-label",
@@ -2542,15 +2542,39 @@ function suppressExtractedCardSyntheticClick(duration = 420) {
 
 
 function getDetachedCardTouchHitRect() {
-  const sceneRect = scene.getBoundingClientRect();
   const hit = ANIMATION_CONFIG.card.detachedHitArea || {};
-  const visualWidth = ANIMATION_CONFIG.card.width;
-  // .card-unit CSS 固定 aspect-ratio: 485 / 353。
-  const visualHeight = visualWidth * (353 / 485);
-  const width = (visualWidth + Math.max(0, hit.paddingX || 0) * 2) * sceneScale;
-  const height = (visualHeight + Math.max(0, hit.paddingY || 0) * 2) * sceneScale;
-  const centerX = sceneRect.left + sceneRect.width / 2 + (cardDragPosition.x + (hit.offsetX || 0)) * sceneScale;
-  const centerY = sceneRect.top + sceneRect.height / 2 + (cardDragPosition.y + (hit.offsetY || 0)) * sceneScale;
+  const paddingX = Math.max(0, hit.paddingX || 0) * sceneScale;
+  const paddingY = Math.max(0, hit.paddingY || 0) * sceneScale;
+  const offsetX = (hit.offsetX || 0) * sceneScale;
+  const offsetY = (hit.offsetY || 0) * sceneScale;
+
+  // DETACHED 只在 touchstart 做一次命中，因此这里直接以用户此刻真正看到的
+  // cardTrigger DOM 矩形为准。这样即使 WebKit 在层切换/动态视口时产生一帧
+  // 合成偏移，触碰区仍跟着视觉卡盒，而不是跟着一套提前算好的目标坐标。
+  const visualRect = cardTrigger.getBoundingClientRect();
+  if (visualRect.width > 1 && visualRect.height > 1) {
+    const centerX = visualRect.left + visualRect.width / 2 + offsetX;
+    const centerY = visualRect.top + visualRect.height / 2 + offsetY;
+    const width = visualRect.width + paddingX * 2;
+    const height = visualRect.height + paddingY * 2;
+    return {
+      left: centerX - width / 2,
+      right: centerX + width / 2,
+      top: centerY - height / 2,
+      bottom: centerY + height / 2,
+      width,
+      height,
+    };
+  }
+
+  // 极端情况下 DOM 还没产生尺寸，才回退到设计坐标计算。
+  const sceneRect = scene.getBoundingClientRect();
+  const visualWidth = ANIMATION_CONFIG.card.width * sceneScale;
+  const visualHeight = ANIMATION_CONFIG.card.width * (353 / 485) * sceneScale;
+  const centerX = sceneRect.left + sceneRect.width / 2 + cardDragPosition.x * sceneScale + offsetX;
+  const centerY = sceneRect.top + sceneRect.height / 2 + cardDragPosition.y * sceneScale + offsetY;
+  const width = visualWidth + paddingX * 2;
+  const height = visualHeight + paddingY * 2;
   return {
     left: centerX - width / 2,
     right: centerX + width / 2,
@@ -2772,7 +2796,10 @@ function completeCardExtraction(pointerId) {
   cardBox.classList.remove("is-extracting", "is-extractable", "is-kpc-ejected");
   cardBox.classList.add("is-detached");
   cardTrigger.classList.remove("is-hidden", "is-ready", "is-waiting", "is-dragging");
-  cardTrigger.classList.add("is-draggable");
+  // 腰带内 cardBox → 外部 cardTrigger 的交接必须瞬时完成。
+  // 若继续继承 card-unit 的 1.25s transform transition，视觉卡盒会在旧位置与
+  // cardDragPosition 最终位置之间滑动，导致触碰区与看到的位置短暂分离。
+  cardTrigger.classList.add("is-draggable", "is-detached-draggable");
   cardTrigger.setAttribute("aria-label", "点击卡盒重新启动第二阶段；也可继续拖动");
   dragReady = true;
   activePointerId = null;
@@ -2921,7 +2948,7 @@ function replayStageTwoFromExtractedCard(event) {
   dragReady = false;
   isDragging = false;
   activePointerId = null;
-  cardTrigger.classList.remove("is-draggable", "is-dragging");
+  cardTrigger.classList.remove("is-draggable", "is-dragging", "is-detached-draggable");
   cardTrigger.classList.add("is-replay-waiting");
   cardTrigger.setAttribute("aria-label", "第二阶段播放中，完成后可重新插入卡盒");
 
