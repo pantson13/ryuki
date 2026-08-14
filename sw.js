@@ -1,25 +1,40 @@
-// Ryuki v107: atomic PWA update + fresh critical audio
-const BUILD = "107";
-const CACHE_NAME = "ryuki-pwa-v107-atomic";
+// Ryuki v109: atomic core update. A build is either complete or it never activates.
+const BUILD = "109";
+const CACHE_PREFIX = "ryuki-pwa-";
+const CACHE_NAME = "ryuki-pwa-v109-stable";
+const INSTALL_CACHE_NAME = `${CACHE_NAME}-install`;
 const INDEX_FALLBACK = `./index.html?appv=${BUILD}`;
 
-// 这些文件必须全部成功下载，新版才有资格进入 waiting。
-// charu / mocha 被列为关键资源，避免“新 JS + 旧/缺失关键音效”的半版本。
+// 主流程所需文件必须作为同一个完整版本安装成功。
+// 任意一项失败，install 直接失败，旧 Service Worker 与旧缓存继续完整运行。
 const REQUIRED_ASSETS = [
   INDEX_FALLBACK,
   `./manifest.webmanifest?v=${BUILD}`,
   `./style.css?v=${BUILD}`,
   `./script.js?v=${BUILD}`,
-  `./assets/audio/charu.mp3?av=${BUILD}`,
-  `./assets/audio/mocha.mp3?av=${BUILD}`,
-];
 
-const OPTIONAL_ASSETS = [
   "./assets/images/bg.png",
   "./assets/images/bg2.png",
   "./assets/images/bg3.png",
   "./assets/images/bg4.png",
   "./assets/images/bg5.png",
+  "./assets/images/ydbg.png",
+  "./assets/images/ydup.png",
+  "./assets/images/yddown.png",
+  "./assets/images/khdc.png",
+  "./assets/images/kpc.png",
+  "./assets/images/khzd.png",
+  "./assets/images/khfg.png",
+  "./assets/images/ydfg.png",
+
+  `./assets/audio/kh1.mp3?av=${BUILD}`,
+  `./assets/audio/ydmusic.mp3?av=${BUILD}`,
+  `./assets/audio/charu.mp3?av=${BUILD}`,
+  `./assets/audio/mocha.mp3?av=${BUILD}`,
+];
+
+// 不影响第二阶段/整卡盒主流程的资源允许后续按需缓存。
+const OPTIONAL_ASSETS = [
   "./assets/images/lq1.png",
   "./assets/images/lq2.png",
   "./assets/images/lq3.png",
@@ -31,16 +46,6 @@ const OPTIONAL_ASSETS = [
   "./assets/images/lzj2.png",
   "./assets/images/lzj3.png",
   "./assets/images/lyfg.png",
-  "./assets/images/ydbg.png",
-  "./assets/images/ydup.png",
-  "./assets/images/yddown.png",
-  "./assets/images/khdc.png",
-  "./assets/images/kpc.png",
-  "./assets/images/khzd.png",
-  "./assets/images/khfg.png",
-  "./assets/images/ydfg.png",
-  `./assets/audio/kh1.mp3?av=${BUILD}`,
-  `./assets/audio/ydmusic.mp3?av=${BUILD}`,
   `./assets/audio/chouka.mp3?av=${BUILD}`,
   `./assets/audio/chaka.mp3?av=${BUILD}`,
   `./assets/audio/huagai1.mp3?av=${BUILD}`,
@@ -73,43 +78,66 @@ async function fetchFresh(path) {
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
+    // 安装阶段先写独立临时缓存。任何一步失败都会把本 build 的临时/半成品缓存清干净。
+    await caches.delete(INSTALL_CACHE_NAME);
+    try {
+      const installCache = await caches.open(INSTALL_CACHE_NAME);
 
-    // 原子核心安装：任何 REQUIRED_ASSETS 失败都会 reject install。旧 SW/旧缓存继续完整运行。
-    for (const path of REQUIRED_ASSETS) {
-      const response = await fetchFresh(path);
-      await cache.put(scopedUrl(path), response);
+      for (const path of REQUIRED_ASSETS) {
+        const response = await fetchFresh(path);
+        await installCache.put(scopedUrl(path), response);
+      }
+
+      await Promise.allSettled(
+        OPTIONAL_ASSETS.map(async (path) => {
+          const response = await fetchFresh(path);
+          await installCache.put(scopedUrl(path), response);
+        }),
+      );
+
+      // 关键资源全部成功后才提交为正式缓存。
+      await caches.delete(CACHE_NAME);
+      const finalCache = await caches.open(CACHE_NAME);
+      const requests = await installCache.keys();
+      for (const request of requests) {
+        const response = await installCache.match(request);
+        if (!response) throw new Error(`install cache missing: ${request.url}`);
+        await finalCache.put(request, response);
+      }
+      await caches.delete(INSTALL_CACHE_NAME);
+    } catch (error) {
+      await Promise.all([
+        caches.delete(INSTALL_CACHE_NAME),
+        caches.delete(CACHE_NAME),
+      ]);
+      throw error;
     }
 
-    // 非关键图片/附加音效允许按需补齐，但绝不影响核心版本一致性。
-    await Promise.allSettled(
-      OPTIONAL_ASSETS.map(async (path) => {
-        const response = await fetchFresh(path);
-        await cache.put(scopedUrl(path), response);
-      }),
-    );
-
-    // 注意：这里故意不 skipWaiting。当前正在运行的旧页面继续由旧 SW 完整控制。
+    // 不主动 skipWaiting。旧页面在新 build 完整安装前后都不会被半途换零件。
   })());
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") {
-    self.skipWaiting();
-  }
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const names = await caches.keys();
-    await Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)));
+    // 只清理 Ryuki 自己的旧缓存，避免误删同一域名下其他 PWA/页面的 CacheStorage。
+    await Promise.all(
+      names
+        .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
+        .map((name) => caches.delete(name)),
+    );
+    // 仍然 claim 当前页面，兼容从旧 v107/v108 SW 升级时旧页面的 controllerchange 自动换版逻辑。
     await self.clients.claim();
   })());
 });
 
-function canonicalAudioRequest(request) {
+function canonicalRequest(request) {
   const url = new URL(request.url);
-  // sid 只用于绕过 Safari/媒体对象的会话级旧响应，不让 CacheStorage 生成无限多份。
+  // sid 只用于区分浏览器媒体会话；同一 build 永远映射到安装时已经验证过的 canonical 字节。
   url.searchParams.delete("sid");
   return new Request(url.href, { method: "GET" });
 }
@@ -121,52 +149,42 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(request.url);
   if (requestUrl.origin !== self.location.origin) return;
 
-  // 原子导航：只要当前 SW 仍是激活版本，就只返回它安装时已验证完整的 index。
-  // 新版本通过 Service Worker update 在后台安装；完整安装并接管后，下一次 reload 才整体切版。
+  // 当前激活 build 的首页固定从其原子缓存返回。新 build 完整安装并接管后才整体换页。
   if (request.mode === "navigate") {
     event.respondWith((async () => {
       const cachedIndex = await caches.match(scopedUrl(INDEX_FALLBACK));
       if (cachedIndex) return cachedIndex;
+      return fetch(request, { cache: "no-store" });
+    })());
+    return;
+  }
 
-      // 理论上 REQUIRED_ASSETS 保证这里一定命中；仅为首次/异常缓存状态保留网络兜底。
+  // 带 ?av=BUILD 的音频属于不可变 build 资源：Cache First。
+  // 这样同一次 v109 绝不会一会播放安装时的 charu、一会又被网络上的另一份覆盖。
+  if (requestUrl.pathname.includes("/assets/audio/") && requestUrl.searchParams.get("av") === BUILD) {
+    const cacheKey = canonicalRequest(request);
+    event.respondWith((async () => {
+      const cached = await caches.match(cacheKey);
+      if (cached) return cached;
       const response = await fetch(request, { cache: "no-store" });
       if (response.ok) {
         const cache = await caches.open(CACHE_NAME);
-        await cache.put(scopedUrl(INDEX_FALLBACK), response.clone());
+        await cache.put(cacheKey, response.clone());
       }
       return response;
     })());
     return;
   }
 
-  // 音频永远 Network First + no-store。charu 的 sid 请求成功后缓存到 canonical ?av=107 键，
-  // 失败时也只回退当前 build 的 canonical 音频，不会跨 build 命中旧缓存。
-  if (requestUrl.pathname.includes("/assets/audio/")) {
-    const cacheKey = canonicalAudioRequest(request);
-    event.respondWith(
-      fetch(request, { cache: "no-store" })
-        .then(async (response) => {
-          if (response.ok) {
-            const cache = await caches.open(CACHE_NAME);
-            await cache.put(cacheKey, response.clone());
-          }
-          return response;
-        })
-        .catch(() => caches.match(cacheKey)),
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request, { cache: "no-store" }).then(async (response) => {
-        if (response.ok) {
-          const cache = await caches.open(CACHE_NAME);
-          await cache.put(request, response.clone());
-        }
-        return response;
-      });
-    }),
-  );
+  // 其余静态资源同样优先当前 build 缓存，未命中才请求网络并补入当前缓存。
+  event.respondWith((async () => {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    const response = await fetch(request, { cache: "no-store" });
+    if (response.ok) {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  })());
 });

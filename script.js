@@ -1,11 +1,11 @@
-/* Ryuki v107: atomic PWA update + stable mocha/charu media */
+/* Ryuki v109: guarded state machine + atomic PWA + critical Web Audio */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "107";
+const PWA_BUILD = "109";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -160,7 +160,7 @@ const ANIMATION_CONFIG = {
       // 先经过腰带右侧的平行位置，再允许插入凹槽。
       parallel: { x: 360, y: -950, toleranceX: 100, toleranceY: 220 },
       // 凹槽中心沿用 move + card.insert，只在此范围内判定插入成功。
-      slotTolerance: { x: 140, y: 130 },
+      slotTolerance: { x: 75, y: 90 },
     },
     layers: {
       // kpc：正数向右/向下，width 控制大小（原图宽 437）。
@@ -177,30 +177,30 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=107",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=107",
-  charu: "./assets/audio/charu.mp3?av=107",
-  mocha: "./assets/audio/mocha.mp3?av=107",
-  chouka: "./assets/audio/chouka.mp3?av=107",
-  chaka: "./assets/audio/chaka.mp3?av=107",
-  huagai1: "./assets/audio/huagai1.mp3?av=107",
-  huagai2: "./assets/audio/huagai2.mp3?av=107",
-  guo: "./assets/audio/guo.mp3?av=107",
-  boxing: "./assets/audio/boxing.mp3?av=107",
-  jianji: "./assets/audio/jianji.mp3?av=107",
+  kh1: "./assets/audio/kh1.mp3?av=109",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=109",
+  charu: "./assets/audio/charu.mp3?av=109",
+  mocha: "./assets/audio/mocha.mp3?av=109",
+  chouka: "./assets/audio/chouka.mp3?av=109",
+  chaka: "./assets/audio/chaka.mp3?av=109",
+  huagai1: "./assets/audio/huagai1.mp3?av=109",
+  huagai2: "./assets/audio/huagai2.mp3?av=109",
+  guo: "./assets/audio/guo.mp3?av=109",
+  boxing: "./assets/audio/boxing.mp3?av=109",
+  jianji: "./assets/audio/jianji.mp3?av=109",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=107",
-    2: "./assets/audio/q.mp3?av=107",
-    3: "./assets/audio/d.mp3?av=107",
-    4: "./assets/audio/l.mp3?av=107",
-    5: "./assets/audio/f.mp3?av=107",
-    6: "./assets/audio/hc.mp3?av=107",
+    1: "./assets/audio/j.mp3?av=109",
+    2: "./assets/audio/q.mp3?av=109",
+    3: "./assets/audio/d.mp3?av=109",
+    4: "./assets/audio/l.mp3?av=109",
+    5: "./assets/audio/f.mp3?av=109",
+    6: "./assets/audio/hc.mp3?av=109",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=107",
-    4: "./assets/audio/longjiao.mp3?av=107",
-    5: "./assets/audio/bsj.mp3?av=107",
+    1: "./assets/audio/jianjianglin.mp3?av=109",
+    4: "./assets/audio/longjiao.mp3?av=109",
+    5: "./assets/audio/bsj.mp3?av=109",
   },
 };
 
@@ -269,6 +269,35 @@ const waterDisplacement = document.querySelector("#waterDisplacement");
 let rippleAnimationFrame = 0;
 let lastRippleUpdate = 0;
 let sceneTimers = [];
+
+// 主流程只允许一个明确阶段生效。关键异步事件必须同时通过 phase + runId 双重校验，
+// 防止 Safari 延迟派发 ended / transition / animation 事件时越级进入后续流程。
+const FLOW_PHASE = Object.freeze({
+  IDLE: "idle",
+  FIRST_STAGE: "first-stage",
+  STAGE_TWO: "stage-two",
+  CARD_DRAG: "card-drag",
+  INSERTING: "inserting",
+  INSERTED: "inserted",
+  READY: "ready",
+  EXTRACTING: "extracting",
+  DETACHED: "detached",
+  REPLAY_STAGE_TWO: "replay-stage-two",
+});
+
+let flowPhase = FLOW_PHASE.IDLE;
+let insertionRunCounter = 0;
+let activeInsertionRunId = 0;
+
+function setFlowPhase(nextPhase) {
+  flowPhase = nextPhase;
+  scene.dataset.flowPhase = nextPhase;
+}
+
+function isFlowPhase(...phases) {
+  return phases.includes(flowPhase);
+}
+
 let flowStarted = false;
 let ydMusicInUse = false;
 let insertionAudioInUse = false;
@@ -277,14 +306,15 @@ let dragReady = false;
 let isDragging = false;
 let parallelReached = false;
 let activePointerId = null;
-let stageTwoAudioFallback = 0;
-let stageTwoSyncFrame = 0;
 let stageTwoFlipFallback = 0;
 let stageTwoFinishFallback = 0;
 let insertionAudioFallback = 0;
 let insertionTimer = 0;
 let charuFinished = true;
 let bg4MergeStarted = false;
+let bg4RunId = 0;
+let bg4StartedAt = 0;
+let bg5RunId = 0;
 let centerActionsUnlocked = false;
 let bg5TransitionTimer = 0;
 let shatterCleanupTimer = 0;
@@ -292,6 +322,7 @@ let shatterAnimationFrame = 0;
 let charuBg4SyncFrame = 0;
 let selectedLq = null;
 let selectedLqAspectRatio = null;
+let cardVoiceRunToken = 0;
 let extractReady = false;
 let isExtracting = false;
 let extractPointerId = null;
@@ -340,39 +371,149 @@ let lzjReturnTransitionHandler = null;
 let lzjReturnToken = 0;
 let lyfgTimer = 0;
 
-// mocha 使用 v104 已在 iPhone PWA 验证过的 Web Audio 路径。
-// 字节在后台先取，真正 pointerdown 时只负责恢复 AudioContext 并启动一次 BufferSource。
-let mochaSfxContext = null;
-let mochaSfxBuffer = null;
-let mochaSfxDecodePromise = null;
-let mochaSfxSource = null;
-const mochaBytesPromise = fetch(AUDIO_CONFIG.mocha, { cache: "no-store" })
-  .then((response) => {
-    if (!response.ok) throw new Error(`mocha fetch ${response.status}`);
-    return response.arrayBuffer();
-  })
-  .catch((error) => {
-    console.warn("mocha 预加载失败，将使用 HTMLAudio 兜底：", error);
-    return null;
-  });
+// mocha + charu 共用一个在第一阶段真实点击中解锁的 Web AudioContext。
+// 两个关键音效的字节都带 build + session 参数并以 no-store 获取；同一 App 会话只使用这份确定的字节。
+let criticalSfxContext = null;
+const criticalSfxBuffers = { mocha: null, charu: null };
+const criticalSfxDecodePromises = { mocha: null, charu: null };
+const criticalSfxBytePromises = { mocha: null, charu: null };
+const criticalSfxSources = { mocha: null, charu: null };
+let charuPlaybackMode = null;
+let charuPlaybackStartedAt = 0;
+let charuPlaybackRunId = 0;
+
+function getSessionAudioUrl(src, label) {
+  const url = new URL(src, window.location.href);
+  url.searchParams.set("sid", `${AUDIO_SESSION_ID}-${label}`);
+  return url.href;
+}
+
+// 关键音效允许重试。旧版在页面启动时只 fetch 一次，首次网络/SW 抖动后会整轮 App 永久拿不到 buffer。
+function getCriticalAudioBytes(name) {
+  if (criticalSfxBytePromises[name]) return criticalSfxBytePromises[name];
+  criticalSfxBytePromises[name] = fetch(getSessionAudioUrl(AUDIO_CONFIG[name], name), { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) throw new Error(`${name} fetch ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .catch((error) => {
+      console.warn(`${name} 关键音效读取失败，后续手势会重试：`, error);
+      criticalSfxBytePromises[name] = null;
+      return null;
+    });
+  return criticalSfxBytePromises[name];
+}
+
+function getCriticalSfxContext() {
+  if (criticalSfxContext) return criticalSfxContext;
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+  try {
+    criticalSfxContext = new AudioContextCtor();
+  } catch (error) {
+    console.warn("无法创建关键音效 AudioContext：", error);
+    criticalSfxContext = null;
+  }
+  return criticalSfxContext;
+}
+
+function decodeCriticalSfx(name) {
+  if (criticalSfxBuffers[name]) return Promise.resolve(criticalSfxBuffers[name]);
+  if (criticalSfxDecodePromises[name]) return criticalSfxDecodePromises[name];
+  const context = getCriticalSfxContext();
+  if (!context) return Promise.resolve(null);
+
+  criticalSfxDecodePromises[name] = getCriticalAudioBytes(name)
+    .then((bytes) => {
+      if (!bytes) return null;
+      return new Promise((resolve, reject) => {
+        context.decodeAudioData(bytes.slice(0), resolve, reject);
+      });
+    })
+    .then((buffer) => {
+      if (!buffer) {
+        criticalSfxDecodePromises[name] = null;
+        return null;
+      }
+      criticalSfxBuffers[name] = buffer;
+      return buffer;
+    })
+    .catch((error) => {
+      console.warn(`${name} Web Audio 解码失败，后续手势会重试：`, error);
+      criticalSfxDecodePromises[name] = null;
+      criticalSfxBytePromises[name] = null;
+      return null;
+    });
+  return criticalSfxDecodePromises[name];
+}
+
+async function prepareCriticalSfxFromGesture(names = ["mocha", "charu"]) {
+  const context = getCriticalSfxContext();
+  if (!context) return false;
+  try {
+    if (context.state === "suspended") await context.resume();
+  } catch (error) {
+    console.warn("关键音效 AudioContext resume 失败：", error);
+    return false;
+  }
+  await Promise.all(names.map((name) => decodeCriticalSfx(name)));
+  return context.state === "running" && names.every((name) => Boolean(criticalSfxBuffers[name]));
+}
+
+function stopCriticalSfx(name) {
+  const source = criticalSfxSources[name];
+  if (!source) return;
+  try { source.onended = null; source.stop(); } catch {}
+  source.disconnect?.();
+  criticalSfxSources[name] = null;
+}
+
+function startCriticalSfx(name, onended = null) {
+  const context = criticalSfxContext;
+  const buffer = criticalSfxBuffers[name];
+  if (!context || context.state !== "running" || !buffer) return false;
+  stopCriticalSfx(name);
+  try {
+    const source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(context.destination);
+    source.onended = () => {
+      if (criticalSfxSources[name] === source) criticalSfxSources[name] = null;
+      source.disconnect?.();
+      onended?.();
+    };
+    criticalSfxSources[name] = source;
+    source.start(0);
+    return true;
+  } catch (error) {
+    console.warn(`${name} Web Audio 播放失败：`, error);
+    return false;
+  }
+}
 
 let chakaSfxContext = null;
 let chakaSfxBuffer = null;
 let chakaSfxDecodePromise = null;
+let chakaSfxBytePromise = null;
 let chakaSfxSource = null;
-const chakaBytesPromise = fetch(AUDIO_CONFIG.chaka, { cache: "no-store" })
-  .then((response) => {
-    if (!response.ok) throw new Error(`chaka fetch ${response.status}`);
-    return response.arrayBuffer();
-  })
-  .catch((error) => {
-    console.warn("chaka 预加载失败，将使用 HTMLAudio 兜底：", error);
-    return null;
-  });
+
+function getChakaAudioBytes() {
+  if (chakaSfxBytePromise) return chakaSfxBytePromise;
+  chakaSfxBytePromise = fetch(AUDIO_CONFIG.chaka, { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) throw new Error(`chaka fetch ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .catch((error) => {
+      console.warn("chaka 读取失败，后续手势会重试：", error);
+      chakaSfxBytePromise = null;
+      return null;
+    });
+  return chakaSfxBytePromise;
+}
 
 const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
 const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
-const charuAudio = new Audio();
 const mochaAudio = new Audio(AUDIO_CONFIG.mocha);
 const choukaAudio = new Audio(AUDIO_CONFIG.chouka);
 const chakaAudio = new Audio(AUDIO_CONFIG.chaka);
@@ -390,7 +531,6 @@ const cardVoiceFollowUpAudios = Object.fromEntries(
 
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
-charuAudio.preload = "none";
 mochaAudio.preload = "auto";
 choukaAudio.preload = "auto";
 chakaAudio.preload = "auto";
@@ -582,193 +722,92 @@ function stopAudio(audio) {
 
 function playAudio(audio) {
   stopAudio(audio);
-  const playPromise = audio.play();
-  return playPromise instanceof Promise ? playPromise : Promise.resolve();
+  try {
+    const playPromise = audio.play();
+    return playPromise instanceof Promise ? playPromise : Promise.resolve();
+  } catch (error) {
+    return Promise.reject(error);
+  }
 }
 
 function primeAudio(audio, isInUse) {
   audio.muted = true;
-  const playPromise = audio.play();
-
-  if (!(playPromise instanceof Promise)) {
-    audio.pause();
-    audio.currentTime = 0;
+  let playPromise;
+  try {
+    playPromise = audio.play();
+  } catch (error) {
     audio.muted = false;
-    return;
+    return Promise.resolve(false);
   }
 
-  playPromise
+  if (!(playPromise instanceof Promise)) {
+    if (!isInUse()) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    audio.muted = false;
+    return Promise.resolve(true);
+  }
+
+  return playPromise
     .then(() => {
       if (!isInUse()) {
         audio.pause();
         audio.currentTime = 0;
       }
       audio.muted = false;
+      return true;
     })
     .catch(() => {
       audio.muted = false;
+      return false;
     });
 }
 
 
-// 卡盒每次按下只触发一次 mocha。Web Audio Context 在真实 pointerdown 中恢复，
-// Buffer 解码可以异步完成；Context 一旦被手势解锁，稍后 source.start() 仍能可靠播放。
-function getMochaAudioContext() {
-  if (mochaSfxContext) return mochaSfxContext;
-  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextCtor) return null;
-  try {
-    mochaSfxContext = new AudioContextCtor();
-  } catch (error) {
-    console.warn("无法创建 mocha Web AudioContext：", error);
-    mochaSfxContext = null;
-  }
-  return mochaSfxContext;
-}
-
-async function prepareMochaSfxFromGesture() {
-  const context = getMochaAudioContext();
-  if (!context) return false;
-
-  try {
-    if (context.state === "suspended") await context.resume();
-  } catch (error) {
-    console.warn("mocha AudioContext resume 失败：", error);
-    return false;
-  }
-
-  if (mochaSfxBuffer) return context.state === "running";
-  if (!mochaSfxDecodePromise) {
-    mochaSfxDecodePromise = mochaBytesPromise
-      .then((bytes) => {
-        if (!bytes) return null;
-        return new Promise((resolve, reject) => {
-          context.decodeAudioData(bytes.slice(0), resolve, reject);
-        });
-      })
-      .then((buffer) => {
-        mochaSfxBuffer = buffer;
-        return buffer;
-      })
-      .catch((error) => {
-        console.warn("mocha Web Audio 解码失败：", error);
-        mochaSfxDecodePromise = null;
-        return null;
-      });
-  }
-
-  await mochaSfxDecodePromise;
-  return Boolean(mochaSfxBuffer && context.state === "running");
-}
-
-function startMochaBufferOnce() {
-  const context = mochaSfxContext;
-  if (!context || context.state !== "running" || !mochaSfxBuffer) return false;
-
-  try {
-    // 每次新的卡盒按下重新从头播放一次；不循环。
-    if (mochaSfxSource) {
-      try { mochaSfxSource.stop(); } catch {}
-      mochaSfxSource.disconnect?.();
-    }
-    const source = context.createBufferSource();
-    source.buffer = mochaSfxBuffer;
-    source.connect(context.destination);
-    source.onended = () => {
-      if (mochaSfxSource === source) mochaSfxSource = null;
-      source.disconnect?.();
-    };
-    mochaSfxSource = source;
-    source.start(0);
-    return true;
-  } catch (error) {
-    console.warn("mocha Web Audio 播放失败：", error);
-    return false;
-  }
-}
-
+// 卡盒每次按下只触发一次 mocha。正常情况下它已在第一阶段点击中完成 Context 解锁和解码，
+// 所以第二阶段第一次拖动不再同时承担“解锁 + 解码 + 播放”三件事。
 function playMochaOnCardBoxPress() {
-  // 调用本函数的位置都在 pointerdown。先在当前用户手势里恢复 Context。
-  const preparation = prepareMochaSfxFromGesture();
-  if (startMochaBufferOnce()) return;
+  // 已解码时直接走 Web Audio，延迟最低。
+  if (startCriticalSfx("mocha")) return;
 
-  preparation
-    .then((ready) => {
-      if (ready && startMochaBufferOnce()) return;
-      // 极少数不支持 Web Audio 的浏览器才退回 HTMLAudio。
-      mochaAudio.muted = false;
-      return playAudio(mochaAudio);
-    })
-    .catch((error) => {
-      console.warn("mocha 音效播放失败：", error);
-    });
+  // 首次尚未解码时，HTMLAudio.play() 必须在当前真实 pointerdown 调用栈里立即执行。
+  // 不能等异步 decode 完成后再 play，否则 iPhone PWA 可能把它判定为脱离用户手势。
+  mochaAudio.muted = false;
+  playAudio(mochaAudio).catch((error) => {
+    console.warn("mocha HTMLAudio 首次播放失败：", error);
+  });
+
+  // 同时后台准备 Web Audio，下一次按卡盒直接使用 buffer；本次不再二次补播，避免重复声音。
+  prepareCriticalSfxFromGesture(["mocha"]).catch((error) => {
+    console.warn("mocha Web Audio 准备失败：", error);
+  });
 }
 
 function stopMochaAudioCompletely() {
-  if (mochaSfxSource) {
-    try { mochaSfxSource.stop(); } catch {}
-    mochaSfxSource.disconnect?.();
-    mochaSfxSource = null;
-  }
+  stopCriticalSfx("mocha");
   stopAudio(mochaAudio);
 }
 
-// charu 不在 App 启动/第一阶段提前读取。腰带已经出现、用户第一次按住可拖卡盒时，
-// 使用本次 App 会话专属 URL 重新装载并在这个真实手势里静音解锁。
-let charuSessionSourceReady = false;
-let charuGesturePrimed = false;
-let charuPrimePromise = null;
-
-function getCharuSessionUrl() {
-  const url = new URL(AUDIO_CONFIG.charu, window.location.href);
-  url.searchParams.set("sid", AUDIO_SESSION_ID);
-  return url.href;
+function stopCharuPlayback() {
+  charuPlaybackRunId = 0;
+  charuPlaybackMode = null;
+  charuPlaybackStartedAt = 0;
+  clearTimeout(insertionAudioFallback);
+  insertionAudioFallback = 0;
+  stopCriticalSfx("charu");
 }
 
-function ensureFreshCharuSource() {
-  if (charuSessionSourceReady) return;
-  stopAudio(charuAudio);
-  charuAudio.src = getCharuSessionUrl();
-  charuAudio.preload = "auto";
-  charuAudio.load();
-  charuSessionSourceReady = true;
+function getCharuPlaybackTime(runId) {
+  if (
+    runId !== activeInsertionRunId ||
+    runId !== charuPlaybackRunId ||
+    charuPlaybackMode !== "webaudio" ||
+    !criticalSfxContext
+  ) return -1;
+  return Math.max(0, criticalSfxContext.currentTime - charuPlaybackStartedAt);
 }
 
-function prepareCharuForInsertionFromGesture() {
-  ensureFreshCharuSource();
-  if (charuGesturePrimed || charuPrimePromise || insertionAudioInUse) return;
-
-  charuAudio.muted = true;
-  let promise;
-  try {
-    promise = charuAudio.play();
-  } catch (error) {
-    charuAudio.muted = false;
-    console.warn("charu 手势预解锁失败：", error);
-    return;
-  }
-
-  if (!(promise instanceof Promise)) {
-    if (!insertionAudioInUse) stopAudio(charuAudio);
-    charuAudio.muted = false;
-    charuGesturePrimed = true;
-    return;
-  }
-
-  charuPrimePromise = promise
-    .then(() => {
-      charuGesturePrimed = true;
-      if (!insertionAudioInUse) stopAudio(charuAudio);
-      charuAudio.muted = false;
-    })
-    .catch((error) => {
-      charuAudio.muted = false;
-      console.warn("charu 手势预解锁失败：", error);
-    })
-    .finally(() => {
-      charuPrimePromise = null;
-    });
-}
 
 function getChakaAudioContext() {
   if (chakaSfxContext) return chakaSfxContext;
@@ -796,9 +835,12 @@ async function prepareChakaSfxFromGesture() {
 
   if (chakaSfxBuffer) return context.state === "running";
   if (!chakaSfxDecodePromise) {
-    chakaSfxDecodePromise = chakaBytesPromise
+    chakaSfxDecodePromise = getChakaAudioBytes()
       .then((bytes) => {
-        if (!bytes) return null;
+        if (!bytes) {
+          chakaSfxDecodePromise = null;
+          return null;
+        }
         return new Promise((resolve, reject) => {
           context.decodeAudioData(bytes.slice(0), resolve, reject);
         });
@@ -808,8 +850,9 @@ async function prepareChakaSfxFromGesture() {
         return buffer;
       })
       .catch((error) => {
-        console.warn("chaka Web Audio 解码失败：", error);
+        console.warn("chaka Web Audio 解码失败，后续手势会重试：", error);
         chakaSfxDecodePromise = null;
+        chakaSfxBytePromise = null;
         return null;
       });
   }
@@ -845,15 +888,13 @@ function startChakaBufferNow() {
 function playChakaReliable() {
   if (startChakaBufferNow()) return Promise.resolve(true);
 
-  return prepareChakaSfxFromGesture()
-    .then((ready) => {
-      if (ready && startChakaBufferNow()) return true;
-      return playAudio(chakaAudio).then(() => true);
-    })
-    .catch((error) => {
-      console.warn("chaka 可靠播放链失败，尝试 HTMLAudio：", error);
-      return playAudio(chakaAudio).then(() => true);
-    });
+  // chaka 触发点本身就在真实拖动 pointermove 中。首次 buffer 未就绪时必须现在就调用 play()，
+  // 不能等异步 decode 结束后才播放，否则 iPhone PWA 可能丢失用户手势权限。
+  const immediatePlay = playAudio(chakaAudio).then(() => true);
+  prepareChakaSfxFromGesture().catch((error) => {
+    console.warn("chaka Web Audio 后台准备失败：", error);
+  });
+  return immediatePlay;
 }
 
 function setCardDragPosition(x, y) {
@@ -1172,6 +1213,7 @@ function hideLqPanel() {
   lqButtons.forEach((button) => button.classList.remove("is-selected"));
   selectedLq = null;
   selectedLqAspectRatio = null;
+  cardVoiceRunToken += 1;
   cardBox.classList.remove("is-kpc-ejected");
   if (auxOpen || auxArmed || auxCardInserted || auxKpcHasBeenPulled || auxKpcDragging) resetAuxDevice();
 }
@@ -1224,43 +1266,38 @@ function selectLqCard(event) {
   cardBox.classList.remove("is-kpc-ejected");
 }
 
-function getSelectedCardVoiceAudio() {
-  return selectedLq ? cardVoiceAudios[selectedLq] || null : null;
-}
-
-function playSelectedCardVoice() {
-  const audio = getSelectedCardVoiceAudio();
-  if (!audio) return Promise.resolve(null);
-  return playAudio(audio).catch((error) => {
-    console.warn(`LQ${selectedLq} 对应卡片音效播放失败：`, error);
-    return null;
-  });
-}
-
 async function playSelectedCardVoiceWithLyfg() {
   const cardId = selectedLq ? String(selectedLq) : "";
   const audio = cardId ? cardVoiceAudios[cardId] || null : null;
   const followUpAudio = cardId ? cardVoiceFollowUpAudios[cardId] || null : null;
-  if (!audio) {
-    lyfgImage?.classList.remove("is-active");
-    return;
-  }
+  const runToken = ++cardVoiceRunToken;
 
-  // 每次开始新的读卡流程，先停掉可能残留的追加音效，避免重复叠播。
+  // 每次新读卡先停止所有上一轮基础/追加音效。旧 ended listener 即使晚到也会被 token 拦住。
+  Object.values(cardVoiceAudios).forEach(stopAudio);
   Object.values(cardVoiceFollowUpAudios).forEach(stopAudio);
 
   clearTimeout(lyfgTimer);
   lyfgTimer = 0;
   lyfgImage?.classList.remove("is-active");
 
-  const cleanupBaseVoice = () => {
-    lyfgImage?.classList.remove("is-active");
+  if (!audio) return;
+
+  const detachBaseListeners = () => {
     audio.removeEventListener("ended", handleBaseVoiceEnded);
     audio.removeEventListener("error", handleBaseVoiceError);
   };
 
+  const cleanupCurrentRun = () => {
+    detachBaseListeners();
+    if (runToken === cardVoiceRunToken) lyfgImage?.classList.remove("is-active");
+  };
+
   const handleBaseVoiceEnded = () => {
-    cleanupBaseVoice();
+    if (runToken !== cardVoiceRunToken) {
+      detachBaseListeners();
+      return;
+    }
+    cleanupCurrentRun();
     // j→jianjianglin、l→longjiao、f→bsj；其余卡片没有追加音效。
     if (followUpAudio) {
       playAudio(followUpAudio).catch((error) => {
@@ -1270,7 +1307,11 @@ async function playSelectedCardVoiceWithLyfg() {
   };
 
   const handleBaseVoiceError = () => {
-    cleanupBaseVoice();
+    if (runToken !== cardVoiceRunToken) {
+      detachBaseListeners();
+      return;
+    }
+    cleanupCurrentRun();
   };
 
   audio.addEventListener("ended", handleBaseVoiceEnded, { once: true });
@@ -1278,13 +1319,15 @@ async function playSelectedCardVoiceWithLyfg() {
 
   try {
     await playAudio(audio);
+    if (runToken !== cardVoiceRunToken) return;
     // 只有基础卡片音效真正开始播放后才显示 lyfg。
     lyfgImage?.classList.add("is-active");
   } catch (error) {
-    cleanupBaseVoice();
+    cleanupCurrentRun();
     console.warn(`LQ${cardId} 对应卡片音效播放失败：`, error);
   }
 }
+
 
 function setAuxKpcPosition(left, top) {
   auxKpcPosition = { left, top };
@@ -2017,7 +2060,47 @@ function handleAuxTouchEnd(event) {
 }
 
 function handleAuxTouchEnvironmentReset() {
-  if (auxTouchDragActive || auxKpcDragging || auxTouchIdentifier !== null) clearAuxTouchSession();
+  // blur / 切后台时 Pointer Events 不一定补发 pointercancel。
+  // 无论当前是 iPhone touch 还是桌面 pointer，都必须完整结束这一轮单卡拖动。
+  if (auxKpcDragging) stopAuxKpcDrag(auxKpcPointerId);
+  auxTouchDragActive = false;
+  auxTouchIdentifier = null;
+  auxTouchLastPoint = null;
+  auxKpcCaptureTarget = null;
+  auxTransferCard?.classList.remove("is-dragging");
+}
+
+function resetPrimaryPointerEnvironment() {
+  // 外部整卡盒：只结束当前手势并保留当前位置，不偷偷推进/回退主流程。
+  if (activePointerId !== null) {
+    try {
+      if (cardTrigger.hasPointerCapture?.(activePointerId)) cardTrigger.releasePointerCapture(activePointerId);
+    } catch {}
+    activePointerId = null;
+    isDragging = false;
+    cardTrigger.classList.remove("is-dragging");
+  }
+
+  // 腰带内整卡盒：切后台相当于本轮抽出手势取消，安全回到卡槽。
+  if (extractPointerId !== null || isExtracting || isFlowPhase(FLOW_PHASE.EXTRACTING)) {
+    const pointerId = extractPointerId;
+    try {
+      if (pointerId !== null && cardBox.hasPointerCapture?.(pointerId)) cardBox.releasePointerCapture(pointerId);
+    } catch {}
+    extractPointerId = null;
+    isExtracting = false;
+    cardBox.classList.remove("is-extracting");
+    if (isFlowPhase(FLOW_PHASE.EXTRACTING)) {
+      setFlowPhase(FLOW_PHASE.READY);
+      setCardExtractPosition(0, 0);
+    }
+    syncCenterActionButtons();
+  }
+}
+
+function handleInteractionEnvironmentReset() {
+  resetPrimaryPointerEnvironment();
+  handleAuxTouchEnvironmentReset();
 }
 
 function resetCardGesture() {
@@ -2034,10 +2117,6 @@ function resetCardGesture() {
 
 function resetToCard() {
   clearSceneTimers();
-  clearTimeout(stageTwoAudioFallback);
-  stageTwoAudioFallback = 0;
-  cancelAnimationFrame(stageTwoSyncFrame);
-  stageTwoSyncFrame = 0;
   clearTimeout(stageTwoFlipFallback);
   stageTwoFlipFallback = 0;
   clearTimeout(stageTwoFinishFallback);
@@ -2056,10 +2135,12 @@ function resetToCard() {
   shatterCanvas.getContext("2d")?.clearRect(0, 0, shatterCanvas.width, shatterCanvas.height);
   cancelAnimationFrame(rippleAnimationFrame);
   cancelCharuBg4Sync();
+  cancelBgSequence();
   waterDisplacement.setAttribute("scale", "0");
   stopAudio(kh1Audio);
   stopAudio(ydMusicAudio);
-  stopAudio(charuAudio);
+  activeInsertionRunId = 0;
+  stopCharuPlayback();
   stopMochaAudioCompletely();
   stopAudio(choukaAudio);
   stopAudio(chakaAudio);
@@ -2075,6 +2156,9 @@ function resetToCard() {
   insertionAudioInUse = false;
   charuFinished = true;
   bg4MergeStarted = false;
+  bg4RunId = 0;
+  bg4StartedAt = 0;
+  bg5RunId = 0;
   centerActionsUnlocked = false;
   scene.classList.remove("show-center-actions");
   selectedLq = null;
@@ -2088,6 +2172,7 @@ function resetToCard() {
   suppressExtractedCardClick = false;
   setCardExtractPosition(0, 0);
   flowStarted = false;
+  setFlowPhase(FLOW_PHASE.IDLE);
   resetCardGesture();
 
   scene.classList.add("is-resetting");
@@ -2102,19 +2187,28 @@ function resetToCard() {
 }
 
 function completeCardInsertion(pointerId) {
-  if (!dragReady || !isDragging || !parallelReached) return;
+  if (
+    !isFlowPhase(FLOW_PHASE.CARD_DRAG) ||
+    !dragReady ||
+    !isDragging ||
+    !parallelReached
+  ) return;
 
+  const runId = ++insertionRunCounter;
+  activeInsertionRunId = runId;
+  setFlowPhase(FLOW_PHASE.INSERTING);
 
   dragReady = false;
   isDragging = false;
   cardWasExtracted = false;
   reinsertReady = false;
   extractedStageTwoReplayActive = false;
-  bg4MergeStarted = false;
+  cancelBgSequence();
+  bg4RunId = runId;
   setCenterActionsUnlocked(false);
   insertionAudioInUse = false;
   cancelCharuBg4Sync();
-  stopAudio(charuAudio);
+  stopCharuPlayback();
   clearTimeout(bg5TransitionTimer);
   bg5TransitionTimer = 0;
   charuFinished = false;
@@ -2123,7 +2217,6 @@ function completeCardInsertion(pointerId) {
     cardTrigger.releasePointerCapture(pointerId);
   }
 
-  // 用当前拖动位置作为腰带内部卡盒的接棒起点，避免跳回旧位置。
   const handoffX = cardDragPosition.x - ANIMATION_CONFIG.move.x;
   const handoffY = cardDragPosition.y - ANIMATION_CONFIG.move.y;
   scene.style.setProperty("--card-handoff-x", `${handoffX * sceneScale}px`);
@@ -2140,25 +2233,30 @@ function completeCardInsertion(pointerId) {
   cardTrigger.classList.add("is-hidden");
   activePointerId = null;
 
-  // 卡盒命中腰带卡槽后直接启动 charu。
-  playInsertionAudio();
-
-  // 下一绘制帧启动“吸入卡槽”的位移。
+  // 先提交插入视觉状态，再启动 charu。声音不会早于卡盒开始吸入。
   requestAnimationFrame(() => {
-    if (!flowStarted) return;
+    if (
+      !flowStarted ||
+      runId !== activeInsertionRunId ||
+      !isFlowPhase(FLOW_PHASE.INSERTING)
+    ) return;
 
-    // 卡盒确认进入凹槽后，背景与插卡位移在同一绘制帧开始变化。
     scene.classList.add("show-final-background");
     cardBox.classList.remove("is-handoff");
-    cardBox.classList.add("is-inserting");
-    // 插入位移开始的同一帧立即显示 ydfg / khfg，不再等待插入动画完成。
-    cardBox.classList.add("is-card-powered");
+    cardBox.classList.add("is-inserting", "is-card-powered");
     belt.classList.add("is-card-powered");
-    // bg4 不在插卡瞬间启动；等 charu 真正播放到 1.00 秒再进场。
 
+    playInsertionAudio(runId);
+
+    clearTimeout(insertionTimer);
     insertionTimer = setTimeout(() => {
+      if (
+        runId !== activeInsertionRunId ||
+        !isFlowPhase(FLOW_PHASE.INSERTING, FLOW_PHASE.INSERTED)
+      ) return;
       cardBox.classList.remove("is-inserting");
       cardBox.classList.add("is-inserted");
+      if (isFlowPhase(FLOW_PHASE.INSERTING)) setFlowPhase(FLOW_PHASE.INSERTED);
     }, ANIMATION_CONFIG.card.duration * 1000);
   });
 }
@@ -2170,7 +2268,7 @@ function cancelCharuBg4Sync() {
   }
 }
 
-function startCharuBg4Sync() {
+function startCharuBg4Sync(runId) {
   cancelCharuBg4Sync();
 
   const timecode = ANIMATION_CONFIG.bg4.startTimecode || { seconds: 1, frames: 0, fps: 30 };
@@ -2178,15 +2276,20 @@ function startCharuBg4Sync() {
   const targetTime = (Number(timecode.seconds) || 0) + (Number(timecode.frames) || 0) / fps;
 
   const sync = () => {
-    // charu 只属于“卡盒插腰带”流程，因此这里只检查腰带插卡状态。
-    if (!flowStarted || !insertionAudioInUse) {
+    if (
+      runId !== activeInsertionRunId ||
+      runId !== charuPlaybackRunId ||
+      !insertionAudioInUse ||
+      !isFlowPhase(FLOW_PHASE.INSERTING, FLOW_PHASE.INSERTED)
+    ) {
       charuBg4SyncFrame = 0;
       return;
     }
 
-    if (charuAudio.currentTime >= targetTime || charuAudio.ended) {
+    const playbackTime = getCharuPlaybackTime(runId);
+    if (playbackTime >= targetTime) {
       charuBg4SyncFrame = 0;
-      startBg4Merge();
+      startBg4Merge(runId);
       return;
     }
 
@@ -2196,36 +2299,75 @@ function startCharuBg4Sync() {
   sync();
 }
 
-function startBg4Merge() {
-  if (!flowStarted || bg4MergeStarted) return;
+function cancelBgSequence({ forceBg3 = false } = {}) {
+  bg4MergeStarted = false;
+  bg4RunId = 0;
+  bg4StartedAt = 0;
+  bg5RunId = 0;
+  clearTimeout(bg5TransitionTimer);
+  bg5TransitionTimer = 0;
+  scene.classList.remove("show-bg4", "show-bg5");
+  if (forceBg3) scene.classList.add("show-bg3");
+}
+
+function startBg4Merge(runId = activeInsertionRunId) {
+  if (
+    !flowStarted ||
+    runId !== activeInsertionRunId ||
+    !isFlowPhase(FLOW_PHASE.INSERTING, FLOW_PHASE.INSERTED, FLOW_PHASE.READY) ||
+    bg4MergeStarted
+  ) return;
 
   bg4MergeStarted = true;
-  scene.classList.remove("show-bg3");
+  bg4RunId = runId;
+  bg4StartedAt = performance.now();
+  bg5RunId = 0;
+  scene.classList.remove("show-bg3", "show-bg5");
   scene.classList.add("show-bg4");
 
-  // Safari 极少数情况下不派发 animationend，按同一时长保底完成换图。
+  // timeout 同样绑定本轮 runId。旧轮次的兜底定时器晚到时不能结束新一轮 bg4。
   sceneTimers.push(
-    setTimeout(finishBg4Merge, ANIMATION_CONFIG.bg4.duration * 1000 + 80),
+    setTimeout(() => finishBg4Merge(null, runId, true), ANIMATION_CONFIG.bg4.duration * 1000 + 80),
   );
 }
 
-function finishBg5Transition() {
-  if (!flowStarted || !scene.classList.contains("show-bg5")) return;
+function finishBg5Transition(runId = bg5RunId) {
+  if (
+    !flowStarted ||
+    runId !== activeInsertionRunId ||
+    runId !== bg5RunId ||
+    !scene.classList.contains("show-bg5")
+  ) return;
   scene.classList.remove("show-bg5");
   scene.classList.add("show-bg3");
 }
 
-function finishBg4Merge(event) {
+function finishBg4Merge(event, runId = bg4RunId, fromFallback = false) {
   if (event && event.animationName !== "bg4-merge-center") return;
-  if (!flowStarted || !bg4MergeStarted || scene.classList.contains("show-bg5") || scene.classList.contains("show-bg3")) return;
+  if (
+    !flowStarted ||
+    !bg4MergeStarted ||
+    runId !== activeInsertionRunId ||
+    runId !== bg4RunId ||
+    scene.classList.contains("show-bg5") ||
+    scene.classList.contains("show-bg3")
+  ) return;
 
-  // 四张 bg4 完成汇合后先显示腰带后方的 bg5，并带白色外发光 0.5 秒。
+  // Safari 偶尔会把上一轮 animationend 晚派发到下一轮。新 bg4 尚未跑够最短时间时直接忽略该旧事件。
+  if (!fromFallback) {
+    const elapsed = performance.now() - bg4StartedAt;
+    if (elapsed < ANIMATION_CONFIG.bg4.duration * 1000 - 90) return;
+  }
+
   scene.classList.remove("show-bg4", "show-bg3");
   scene.classList.add("show-bg5");
-  // bg4 完整汇合结束：此刻解锁界面中间两颗动作按钮。
+  bg5RunId = runId;
   setCenterActionsUnlocked(true);
   clearTimeout(bg5TransitionTimer);
-  bg5TransitionTimer = setTimeout(finishBg5Transition, ANIMATION_CONFIG.bg5.duration * 1000);
+  bg5TransitionTimer = setTimeout(
+    () => finishBg5Transition(runId),
+    ANIMATION_CONFIG.bg5.duration * 1000,
+  );
 }
 
 function hideInsertionGlows() {
@@ -2234,63 +2376,123 @@ function hideInsertionGlows() {
   belt.classList.remove("is-card-powered");
 }
 
-function handleCharuEnded() {
-  // charu 仅用于整个卡盒插入腰带。
+function completeInsertionAfterCharu(runId) {
+  if (
+    runId !== activeInsertionRunId ||
+    !isFlowPhase(FLOW_PHASE.INSERTING, FLOW_PHASE.INSERTED)
+  ) return;
+
+  clearTimeout(insertionAudioFallback);
+  insertionAudioFallback = 0;
+  cancelCharuBg4Sync();
+  if (!bg4MergeStarted) startBg4Merge(runId);
+
   hideInsertionGlows();
   insertionAudioInUse = false;
-  if (!flowStarted) return;
-  // charu 真正结束后，左下方六张 lq 入场，同时允许把卡盒从腰带里拖出来。
+  charuPlaybackRunId = 0;
+  charuPlaybackMode = null;
+  setFlowPhase(FLOW_PHASE.READY);
   showLqPanel();
   enableCardExtraction();
 }
 
-function playInsertionAudio() {
-  if (!flowStarted || insertionAudioInUse) return;
-
-  // 正常路径已在卡盒 pointerdown 中完成；这里仅做极端情况下的同步兜底。
-  ensureFreshCharuSource();
-
-  clearTimeout(insertionAudioFallback);
-  insertionAudioFallback = 0;
-  insertionAudioInUse = true;
-
-  stopAudio(charuAudio);
-  charuAudio.muted = false;
-  charuAudio.volume = 1;
-
-  // 卡盒插入腰带后直接播放 charu，并继续使用 charu 时间轴同步 bg4。
-  let charuPromise;
-  try {
-    charuPromise = charuAudio.play();
-  } catch (error) {
-    console.warn("charu 音效播放失败：", error);
-    hideInsertionGlows();
-    insertionAudioInUse = false;
-    return;
-  }
-
-  if (charuPromise instanceof Promise) {
-    charuPromise
-      .then(() => startCharuBg4Sync())
-      .catch((error) => {
-        console.warn("charu 音效播放失败：", error);
-        hideInsertionGlows();
-        insertionAudioInUse = false;
-      });
-  } else {
-    startCharuBg4Sync();
-  }
+function handleCharuEnded(runId) {
+  // 只接受当前这一轮“真正插卡”产生的 ended。任何旧 source、reset 后晚到的 ended 都作废。
+  if (
+    runId !== activeInsertionRunId ||
+    runId !== charuPlaybackRunId ||
+    !insertionAudioInUse ||
+    charuPlaybackMode !== "webaudio" ||
+    !isFlowPhase(FLOW_PHASE.INSERTING, FLOW_PHASE.INSERTED)
+  ) return;
+  completeInsertionAfterCharu(runId);
 }
 
-function handleCardTransitionStart(event) {
-  if (event.propertyName === "transform" && cardBox.classList.contains("is-inserting")) {
-    // 浏览器确认卡盒位移真正开始时确保 charu 已启动；insertionAudioInUse 会防止重复播放。
-    playInsertionAudio();
-  }
+function recoverInsertionWithoutCharu(runId) {
+  if (
+    runId !== activeInsertionRunId ||
+    !insertionAudioInUse ||
+    !isFlowPhase(FLOW_PHASE.INSERTING, FLOW_PHASE.INSERTED)
+  ) return;
+
+  console.warn("charu 在限定时间内未能启动，启用视觉流程兜底，避免界面卡死。");
+  insertionAudioInUse = false;
+  charuPlaybackRunId = 0;
+  charuPlaybackMode = null;
+  cancelCharuBg4Sync();
+  if (!bg4MergeStarted) startBg4Merge(runId);
+
+  // 音频真的不可用时也不让状态机永久卡在 INSERTING；等主要 bg4/bg5 视觉完成后再开放后续操作。
+  sceneTimers.push(setTimeout(() => {
+    if (
+      runId !== activeInsertionRunId ||
+      !isFlowPhase(FLOW_PHASE.INSERTING, FLOW_PHASE.INSERTED)
+    ) return;
+    hideInsertionGlows();
+    setFlowPhase(FLOW_PHASE.READY);
+    showLqPanel();
+    enableCardExtraction();
+  }, (ANIMATION_CONFIG.bg4.duration + ANIMATION_CONFIG.bg5.duration) * 1000));
+}
+
+function playInsertionAudio(runId) {
+  if (
+    !flowStarted ||
+    runId !== activeInsertionRunId ||
+    !isFlowPhase(FLOW_PHASE.INSERTING, FLOW_PHASE.INSERTED) ||
+    insertionAudioInUse
+  ) return;
+
+  insertionAudioInUse = true;
+  charuPlaybackRunId = runId;
+
+  const startWebAudio = () => {
+    if (
+      runId !== activeInsertionRunId ||
+      !insertionAudioInUse ||
+      !isFlowPhase(FLOW_PHASE.INSERTING, FLOW_PHASE.INSERTED)
+    ) return false;
+
+    stopCriticalSfx("charu");
+    charuPlaybackRunId = runId;
+    charuPlaybackMode = "webaudio";
+    const started = startCriticalSfx("charu", () => handleCharuEnded(runId));
+    if (!started) {
+      charuPlaybackMode = null;
+      return false;
+    }
+
+    clearTimeout(insertionAudioFallback);
+    insertionAudioFallback = 0;
+    charuPlaybackStartedAt = criticalSfxContext.currentTime;
+    startCharuBg4Sync(runId);
+    return true;
+  };
+
+  if (startWebAudio()) return;
+
+  // 此时 Context 正常情况下已在第一阶段点击或第二阶段 pointerdown 中解锁。
+  // 如果 buffer 尚未完成，允许重试读取/解码，但不再创建第二个 HTMLAudio charu 播放通道。
+  prepareCriticalSfxFromGesture(["charu"])
+    .then((ready) => {
+      if (
+        runId !== activeInsertionRunId ||
+        !insertionAudioInUse ||
+        !isFlowPhase(FLOW_PHASE.INSERTING, FLOW_PHASE.INSERTED)
+      ) return;
+      if (ready) startWebAudio();
+    })
+    .catch((error) => {
+      console.warn("charu 关键音效准备失败：", error);
+    });
+
+  clearTimeout(insertionAudioFallback);
+  insertionAudioFallback = setTimeout(() => recoverInsertionWithoutCharu(runId), 1800);
 }
 
 function enableCardDrag(options = {}) {
   const preservePosition = options.preservePosition ?? cardWasExtracted;
+  setFlowPhase(FLOW_PHASE.CARD_DRAG);
   dragReady = true;
   isDragging = false;
   parallelReached = false;
@@ -2310,12 +2512,19 @@ function enableCardDrag(options = {}) {
 }
 
 function handleCardPointerDown(event) {
-  // 每次按下整个卡盒都播放一次 mocha。
-  playMochaOnCardBoxPress();
-  if (!dragReady || !cardTrigger.classList.contains("is-draggable")) return;
-
-  // 腰带已经出现，此时才准备本次会话的最新 charu，避免启动阶段锁住旧媒体。
-  prepareCharuForInsertionFromGesture();
+  // 初始卡盒点击和真正可拖阶段都允许响一次 mocha。
+  // CARD_DRAG 的真实触摸还会再次确认 mocha + charu 的 Context 已解锁，但绝不会提前播放 charu。
+  if (isFlowPhase(FLOW_PHASE.CARD_DRAG)) {
+    prepareCriticalSfxFromGesture(["mocha", "charu"]).catch(() => undefined);
+  }
+  if (isFlowPhase(FLOW_PHASE.IDLE, FLOW_PHASE.CARD_DRAG, FLOW_PHASE.DETACHED)) {
+    playMochaOnCardBoxPress();
+  }
+  if (
+    !isFlowPhase(FLOW_PHASE.CARD_DRAG) ||
+    !dragReady ||
+    !cardTrigger.classList.contains("is-draggable")
+  ) return;
 
   event.preventDefault();
   event.stopPropagation();
@@ -2329,7 +2538,7 @@ function handleCardPointerDown(event) {
 }
 
 function handleCardPointerMove(event) {
-  if (!dragReady || activePointerId !== event.pointerId) return;
+  if (!isFlowPhase(FLOW_PHASE.CARD_DRAG) || !dragReady || activePointerId !== event.pointerId) return;
 
   const deltaX = event.clientX - pointerStart.x;
   const deltaY = event.clientY - pointerStart.y;
@@ -2389,7 +2598,7 @@ function handleCardPointerEnd(event) {
 }
 
 function handleExtractPointerDown(event) {
-  if (!extractReady || !cardBox.classList.contains("is-extractable")) return;
+  if (!isFlowPhase(FLOW_PHASE.READY) || !extractReady || !cardBox.classList.contains("is-extractable")) return;
   if (auxOpen) return;
   if (event.target === kpcLayer && (cardBox.classList.contains("is-kpc-ejected") || auxArmed)) return;
 
@@ -2399,6 +2608,7 @@ function handleExtractPointerDown(event) {
   extractPointerStart = { x: event.clientX, y: event.clientY };
   extractOrigin = { ...cardExtractPosition };
   isExtracting = true;
+  setFlowPhase(FLOW_PHASE.EXTRACTING);
   cardBox.classList.add("is-extracting");
   syncCenterActionButtons();
   playMochaOnCardBoxPress();
@@ -2406,7 +2616,7 @@ function handleExtractPointerDown(event) {
 }
 
 function handleExtractPointerMove(event) {
-  if (!extractReady || !isExtracting || extractPointerId !== event.pointerId) return;
+  if (!isFlowPhase(FLOW_PHASE.EXTRACTING) || !extractReady || !isExtracting || extractPointerId !== event.pointerId) return;
   event.preventDefault();
   event.stopPropagation();
 
@@ -2418,6 +2628,7 @@ function handleExtractPointerMove(event) {
 }
 
 function completeCardExtraction(pointerId) {
+  setFlowPhase(FLOW_PHASE.DETACHED);
   extractReady = false;
   isExtracting = false;
   cardWasExtracted = true;
@@ -2444,12 +2655,16 @@ function completeCardExtraction(pointerId) {
   parallelReached = false;
   hideLqPanel();
 
+  // 卡盒真正离开腰带后，彻底作废这一轮仍未结束的 bg4/bg5 回调。
+  // 先固定到 bg3 再做碎裂，避免旧 animationend/timeout 在下一轮流程里重新塞回背景。
+  cancelBgSequence({ forceBg3: true });
+
   // 卡盒向右抽出成功：bg3 + 腰带镜面碎裂消失，同时恢复开始时默认背景。
   startMirrorShatter();
 }
 
 function handleExtractPointerEnd(event) {
-  if (extractPointerId !== event.pointerId) return;
+  if (!isFlowPhase(FLOW_PHASE.EXTRACTING) || extractPointerId !== event.pointerId) return;
 
 
   if (cardBox.hasPointerCapture?.(event.pointerId)) {
@@ -2469,14 +2684,11 @@ function handleExtractPointerEnd(event) {
   }
 
   // 未拖够距离则回到腰带卡槽。
+  setFlowPhase(FLOW_PHASE.READY);
   setCardExtractPosition(0, 0);
 }
 
 function cancelStageTwoAudioSync() {
-  if (stageTwoSyncFrame) {
-    cancelAnimationFrame(stageTwoSyncFrame);
-    stageTwoSyncFrame = 0;
-  }
   clearTimeout(stageTwoFlipFallback);
   stageTwoFlipFallback = 0;
   clearTimeout(stageTwoFinishFallback);
@@ -2484,21 +2696,28 @@ function cancelStageTwoAudioSync() {
 }
 
 function showStageTwoFront() {
-  if (!flowStarted || !belt.classList.contains("is-stage-two")) return;
+  if (!flowStarted || !isFlowPhase(FLOW_PHASE.STAGE_TWO, FLOW_PHASE.REPLAY_STAGE_TWO) || !belt.classList.contains("is-stage-two")) return;
   belt.classList.add("is-stage-two-front");
 }
 
 function finishStageTwo() {
-  if (!flowStarted || !belt.classList.contains("is-stage-two") || belt.classList.contains("is-moving")) return;
+  if (
+    !flowStarted ||
+    !isFlowPhase(FLOW_PHASE.STAGE_TWO, FLOW_PHASE.REPLAY_STAGE_TWO) ||
+    !belt.classList.contains("is-stage-two") ||
+    belt.classList.contains("is-moving")
+  ) return;
 
   cancelStageTwoAudioSync();
   ydMusicInUse = false;
   belt.classList.add("is-moving");
 
   const replayWillUnlockReinsert = cardWasExtracted && extractedStageTwoReplayActive;
+  const finishingPhase = flowPhase;
   const { move } = ANIMATION_CONFIG;
   sceneTimers.push(
     setTimeout(() => {
+      if (!flowStarted || flowPhase !== finishingPhase) return;
       // 抽出卡盒后点击重播第二阶段：腰带上移完成后，才解锁再次插入。
       if (replayWillUnlockReinsert) {
         reinsertReady = true;
@@ -2509,52 +2728,23 @@ function finishStageTwo() {
   );
 }
 
-function startStageTwoAudioSync() {
-  cancelStageTwoAudioSync();
-  const flipAt = ANIMATION_CONFIG.stageTwo.backHold;
-
-  const syncToYdMusic = () => {
-    if (!flowStarted || !belt.classList.contains("is-stage-two") || ydMusicAudio.ended) {
-      stageTwoSyncFrame = 0;
-      return;
-    }
-
-    if (!ydMusicAudio.paused && ydMusicAudio.currentTime >= flipAt) {
-      stageTwoSyncFrame = 0;
-      showStageTwoFront();
-      return;
-    }
-
-    stageTwoSyncFrame = requestAnimationFrame(syncToYdMusic);
-  };
-
-  stageTwoSyncFrame = requestAnimationFrame(syncToYdMusic);
-}
-
 function playStageTwoAudio() {
-  if (!flowStarted || !belt.classList.contains("is-stage-two") || ydMusicInUse) return;
+  if (!flowStarted || !isFlowPhase(FLOW_PHASE.STAGE_TWO, FLOW_PHASE.REPLAY_STAGE_TWO) || !belt.classList.contains("is-stage-two") || ydMusicInUse) return;
 
-  clearTimeout(stageTwoAudioFallback);
-  stageTwoAudioFallback = 0;
   ydMusicInUse = true;
   ydMusicAudio.muted = false;
 
-  playAudio(ydMusicAudio)
-    .then(() => {
-      // 翻面时间不再读取 ydmusic.currentTime。
-      // 视觉第二阶段从出现那一刻独立计时，避免音频预解锁造成 currentTime 竞态而提前翻面。
-    })
-    .catch((error) => {
-      console.warn("ydmusic 音效播放失败：", error);
-      ydMusicInUse = false;
-
-      // 翻面计时已经由 startStageTwo() 启动；这里只保留流程结束兜底。
-      stageTwoFinishFallback = setTimeout(finishStageTwo, ANIMATION_CONFIG.sequenceDuration * 1000);
-    });
+  playAudio(ydMusicAudio).catch((error) => {
+    console.warn("ydmusic 音效播放失败：", error);
+    ydMusicInUse = false;
+    // 总流程兜底由 startStageTwo() 统一管理，这里不再创建第二套计时器。
+  });
 }
 
 function startStageTwo() {
   if (!flowStarted) return;
+
+  setFlowPhase(extractedStageTwoReplayActive ? FLOW_PHASE.REPLAY_STAGE_TWO : FLOW_PHASE.STAGE_TWO);
 
   // PWA 循环关键修复：每次进入第二阶段都先真正移除 is-stage-two，强制重启
   // belt-materialize / energy-aura / water-roll。否则第二圈 class 没变化，Safari 不会重播波浪 CSS 动画。
@@ -2571,22 +2761,27 @@ function startStageTwo() {
     ANIMATION_CONFIG.stageTwo.backHold * 1000,
   );
 
-  // 音效仍在第二阶段出现时启动，但只负责声音和结束点，不再决定翻面起点。
+  // 音效仍在第二阶段出现时启动，但只负责声音和正常 ended 结束点。
   playStageTwoAudio();
 
-  // Safari 极端情况下 play 调用没有正常推进时的启动保底。
-  stageTwoAudioFallback = setTimeout(playStageTwoAudio, 80);
+  // 无论 Safari 的 play Promise / ended 事件是否异常，第二阶段最长到 sequenceDuration 必须继续。
+  // 这是单一总兜底，不再使用旧版无效的 80ms 二次 play。
+  clearTimeout(stageTwoFinishFallback);
+  stageTwoFinishFallback = setTimeout(
+    finishStageTwo,
+    ANIMATION_CONFIG.sequenceDuration * 1000,
+  );
 }
 
 function finishFirstStage() {
-  if (!flowStarted || belt.classList.contains("is-stage-two")) return;
+  if (!flowStarted || !isFlowPhase(FLOW_PHASE.FIRST_STAGE) || belt.classList.contains("is-stage-two")) return;
 
   stopAudio(kh1Audio);
   startStageTwo();
 }
 
 function replayStageTwoFromExtractedCard(event) {
-  if (!flowStarted || !cardWasExtracted || extractedStageTwoReplayActive || reinsertReady) return;
+  if (!flowStarted || !isFlowPhase(FLOW_PHASE.DETACHED) || !cardWasExtracted || extractedStageTwoReplayActive || reinsertReady) return;
   if (suppressExtractedCardClick) return;
 
   event?.preventDefault();
@@ -2604,7 +2799,8 @@ function replayStageTwoFromExtractedCard(event) {
 
   clearMirrorShatter();
   hideLqPanel();
-  scene.classList.remove("show-bg4", "show-bg5", "show-bg3", "show-final-background", "is-shattering");
+  cancelBgSequence();
+  scene.classList.remove("show-bg3", "show-final-background", "is-shattering");
   belt.classList.remove("is-moving", "is-card-powered", "is-stage-two-front", "is-shatter-hidden");
   cardBox.classList.remove("is-card-powered", "is-kpc-ejected");
 
@@ -2622,17 +2818,20 @@ function startFromCard(event) {
     return;
   }
 
-  if (flowStarted || !cardTrigger.classList.contains("is-ready")) {
+  if (flowStarted || !isFlowPhase(FLOW_PHASE.IDLE) || !cardTrigger.classList.contains("is-ready")) {
     return;
   }
 
   flowStarted = true;
+  setFlowPhase(FLOW_PHASE.FIRST_STAGE);
   cardTrigger.classList.remove("is-ready");
   cardTrigger.classList.add("is-waiting");
 
   // 在 iPhone 的真实点击手势中预解锁后续自动音效。
   ydMusicInUse = false;
   insertionAudioInUse = false;
+  // 最早的真实用户点击就解锁并解码 mocha + charu。到第二阶段第一次拖动时只需直接播放。
+  prepareCriticalSfxFromGesture(["mocha", "charu"]).catch(() => undefined);
   primeAudio(ydMusicAudio, () => ydMusicInUse);
   prepareChakaSfxFromGesture().catch(() => undefined);
 
@@ -2687,7 +2886,6 @@ cardTrigger.addEventListener("pointercancel", handleCardPointerEnd);
 cardTrigger.addEventListener("contextmenu", (event) => event.preventDefault());
 kh1Audio.addEventListener("ended", finishFirstStage);
 ydMusicAudio.addEventListener("ended", finishStageTwo);
-charuAudio.addEventListener("ended", handleCharuEnded);
 belt.addEventListener("click", (event) => {
   if (event.target.closest("#cardBox")) return;
   resetToCard();
@@ -2699,8 +2897,6 @@ belt.addEventListener("keydown", (event) => {
 });
 window.addEventListener("resize", applyPhoneLayout);
 window.visualViewport?.addEventListener("resize", applyPhoneLayout);
-cardBox.addEventListener("transitionstart", handleCardTransitionStart);
-cardBox.addEventListener("webkitTransitionStart", handleCardTransitionStart);
 cardBox.addEventListener("pointerdown", handleExtractPointerDown);
 cardBox.addEventListener("pointermove", handleExtractPointerMove);
 cardBox.addEventListener("pointerup", handleExtractPointerEnd);
@@ -2724,10 +2920,11 @@ window.addEventListener("touchstart", handleAuxTouchStart, { capture: true, pass
 window.addEventListener("touchmove", handleAuxTouchMove, { capture: true, passive: false });
 window.addEventListener("touchend", handleAuxTouchEnd, { capture: true, passive: false });
 window.addEventListener("touchcancel", handleAuxTouchEnd, { capture: true, passive: false });
-window.addEventListener("blur", handleAuxTouchEnvironmentReset);
+window.addEventListener("blur", handleInteractionEnvironmentReset);
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) handleAuxTouchEnvironmentReset();
+  if (document.hidden) handleInteractionEnvironmentReset();
 });
+window.addEventListener("pagehide", handleInteractionEnvironmentReset);
 
 // Pointer Events 只保留给鼠标/触控笔，不参与 iPhone touch 拖卡。
 window.addEventListener("pointerdown", (event) => {
