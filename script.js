@@ -1,11 +1,11 @@
-/* Ryuki v109: guarded state machine + atomic PWA + critical Web Audio */
+/* Ryuki v111: stable detached card-box drag + guarded state machine + atomic PWA */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "109";
+const PWA_BUILD = "111";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -177,30 +177,30 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=109",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=109",
-  charu: "./assets/audio/charu.mp3?av=109",
-  mocha: "./assets/audio/mocha.mp3?av=109",
-  chouka: "./assets/audio/chouka.mp3?av=109",
-  chaka: "./assets/audio/chaka.mp3?av=109",
-  huagai1: "./assets/audio/huagai1.mp3?av=109",
-  huagai2: "./assets/audio/huagai2.mp3?av=109",
-  guo: "./assets/audio/guo.mp3?av=109",
-  boxing: "./assets/audio/boxing.mp3?av=109",
-  jianji: "./assets/audio/jianji.mp3?av=109",
+  kh1: "./assets/audio/kh1.mp3?av=111",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=111",
+  charu: "./assets/audio/charu.mp3?av=111",
+  mocha: "./assets/audio/mocha.mp3?av=111",
+  chouka: "./assets/audio/chouka.mp3?av=111",
+  chaka: "./assets/audio/chaka.mp3?av=111",
+  huagai1: "./assets/audio/huagai1.mp3?av=111",
+  huagai2: "./assets/audio/huagai2.mp3?av=111",
+  guo: "./assets/audio/guo.mp3?av=111",
+  boxing: "./assets/audio/boxing.mp3?av=111",
+  jianji: "./assets/audio/jianji.mp3?av=111",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=109",
-    2: "./assets/audio/q.mp3?av=109",
-    3: "./assets/audio/d.mp3?av=109",
-    4: "./assets/audio/l.mp3?av=109",
-    5: "./assets/audio/f.mp3?av=109",
-    6: "./assets/audio/hc.mp3?av=109",
+    1: "./assets/audio/j.mp3?av=111",
+    2: "./assets/audio/q.mp3?av=111",
+    3: "./assets/audio/d.mp3?av=111",
+    4: "./assets/audio/l.mp3?av=111",
+    5: "./assets/audio/f.mp3?av=111",
+    6: "./assets/audio/hc.mp3?av=111",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=109",
-    4: "./assets/audio/longjiao.mp3?av=109",
-    5: "./assets/audio/bsj.mp3?av=109",
+    1: "./assets/audio/jianjianglin.mp3?av=111",
+    4: "./assets/audio/longjiao.mp3?av=111",
+    5: "./assets/audio/bsj.mp3?av=111",
   },
 };
 
@@ -330,6 +330,7 @@ let cardWasExtracted = false;
 let extractedStageTwoReplayActive = false;
 let reinsertReady = false;
 let suppressExtractedCardClick = false;
+let suppressExtractedCardClickTimer = 0;
 let externalCardPointerTravel = 0;
 let extractPointerStart = { x: 0, y: 0 };
 let extractOrigin = { x: 0, y: 0 };
@@ -2170,6 +2171,8 @@ function resetToCard() {
   extractedStageTwoReplayActive = false;
   reinsertReady = false;
   suppressExtractedCardClick = false;
+  clearTimeout(suppressExtractedCardClickTimer);
+  suppressExtractedCardClickTimer = 0;
   setCardExtractPosition(0, 0);
   flowStarted = false;
   setFlowPhase(FLOW_PHASE.IDLE);
@@ -2511,6 +2514,12 @@ function enableCardDrag(options = {}) {
   );
 }
 
+function canDragExternalCardBox() {
+  // 初次插卡前是 CARD_DRAG；整卡盒从腰带抽出后保持 DETACHED，
+  // 但外部卡盒仍必须可以立即继续拖动。
+  return isFlowPhase(FLOW_PHASE.CARD_DRAG, FLOW_PHASE.DETACHED);
+}
+
 function handleCardPointerDown(event) {
   // 初始卡盒点击和真正可拖阶段都允许响一次 mocha。
   // CARD_DRAG 的真实触摸还会再次确认 mocha + charu 的 Context 已解锁，但绝不会提前播放 charu。
@@ -2521,7 +2530,7 @@ function handleCardPointerDown(event) {
     playMochaOnCardBoxPress();
   }
   if (
-    !isFlowPhase(FLOW_PHASE.CARD_DRAG) ||
+    !canDragExternalCardBox() ||
     !dragReady ||
     !cardTrigger.classList.contains("is-draggable")
   ) return;
@@ -2538,7 +2547,7 @@ function handleCardPointerDown(event) {
 }
 
 function handleCardPointerMove(event) {
-  if (!isFlowPhase(FLOW_PHASE.CARD_DRAG) || !dragReady || activePointerId !== event.pointerId) return;
+  if (!canDragExternalCardBox() || !dragReady || activePointerId !== event.pointerId) return;
 
   const deltaX = event.clientX - pointerStart.x;
   const deltaY = event.clientY - pointerStart.y;
@@ -2591,9 +2600,13 @@ function handleCardPointerEnd(event) {
   // 抽出后的卡盒既可拖又可点：明显拖动后抑制紧跟着产生的 click，避免误启动第二阶段。
   if (cardWasExtracted && externalCardPointerTravel > 8) {
     suppressExtractedCardClick = true;
-    setTimeout(() => {
+    clearTimeout(suppressExtractedCardClickTimer);
+    // iPhone Safari / PWA 的合成 click 可能明显晚于 pointerup。
+    // 只短暂屏蔽 click，不屏蔽下一次 pointerdown，因此松手后仍可立即再次拖动。
+    suppressExtractedCardClickTimer = setTimeout(() => {
       suppressExtractedCardClick = false;
-    }, 0);
+      suppressExtractedCardClickTimer = 0;
+    }, 420);
   }
 }
 
@@ -2886,15 +2899,6 @@ cardTrigger.addEventListener("pointercancel", handleCardPointerEnd);
 cardTrigger.addEventListener("contextmenu", (event) => event.preventDefault());
 kh1Audio.addEventListener("ended", finishFirstStage);
 ydMusicAudio.addEventListener("ended", finishStageTwo);
-belt.addEventListener("click", (event) => {
-  if (event.target.closest("#cardBox")) return;
-  resetToCard();
-});
-belt.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter" && event.key !== " ") return;
-  event.preventDefault();
-  resetToCard();
-});
 window.addEventListener("resize", applyPhoneLayout);
 window.visualViewport?.addEventListener("resize", applyPhoneLayout);
 cardBox.addEventListener("pointerdown", handleExtractPointerDown);
@@ -2981,46 +2985,15 @@ bg4Center.addEventListener("webkitAnimationEnd", finishBg4Merge);
 applyPhoneLayout();
 
 if ("serviceWorker" in navigator) {
-  const reloadKey = `ryuki-sw-controller-reload-v${PWA_BUILD}`;
-  const hadControllerAtBoot = Boolean(navigator.serviceWorker.controller);
-  let controllerReloading = false;
-
-  function requestWaitingWorkerActivation(registration) {
-    if (!registration?.waiting) return;
-    registration.waiting.postMessage({ type: "SKIP_WAITING", build: PWA_BUILD });
-  }
-
-  // 只有完整安装好的 waiting SW 收到 SKIP_WAITING 后才会接管。
-  // 接管时页面只刷新一次，不再由 SW 和页面两边同时 navigate。
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!hadControllerAtBoot || controllerReloading) return;
-    if (sessionStorage.getItem(reloadKey) === "1") return;
-
-    controllerReloading = true;
-    sessionStorage.setItem(reloadKey, "1");
-    const url = new URL(window.location.href);
-    url.searchParams.set("appv", PWA_BUILD);
-    window.location.replace(url.href);
-  });
-
+  // 稳定更新策略：当前页面运行期间绝不主动切换 Service Worker，也绝不刷新页面。
+  // 新 build 完整安装后保持 waiting；当旧页面真正关闭后由浏览器自然激活，
+  // 下一次打开 PWA 才整体进入新版本，避免使用过程中突然回到初始卡盒。
   window.addEventListener("load", async () => {
     try {
       const registration = await navigator.serviceWorker.register(`./sw.js?v=${PWA_BUILD}`, {
         updateViaCache: "none",
       });
-
-      registration.addEventListener("updatefound", () => {
-        const worker = registration.installing;
-        if (!worker) return;
-        worker.addEventListener("statechange", () => {
-          if (worker.state === "installed" && registration.waiting) {
-            requestWaitingWorkerActivation(registration);
-          }
-        });
-      });
-
       await registration.update();
-      requestWaitingWorkerActivation(registration);
     } catch (error) {
       console.warn("PWA 离线服务注册失败：", error);
     }

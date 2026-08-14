@@ -1,7 +1,7 @@
-// Ryuki v109: atomic core update. A build is either complete or it never activates.
-const BUILD = "109";
+// Ryuki v111: atomic core update. A build is either complete or it never activates.
+const BUILD = "111";
 const CACHE_PREFIX = "ryuki-pwa-";
-const CACHE_NAME = "ryuki-pwa-v109-stable";
+const CACHE_NAME = "ryuki-pwa-v111-stable";
 const INSTALL_CACHE_NAME = `${CACHE_NAME}-install`;
 const INDEX_FALLBACK = `./index.html?appv=${BUILD}`;
 
@@ -118,7 +118,10 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+  // 只允许同 build 页面请求激活。旧版本页面不能强行把新 SW 接管到当前运行中的 App。
+  if (event.data?.type === "SKIP_WAITING" && String(event.data?.build) === BUILD) {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("activate", (event) => {
@@ -130,7 +133,7 @@ self.addEventListener("activate", (event) => {
         .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
         .map((name) => caches.delete(name)),
     );
-    // 仍然 claim 当前页面，兼容从旧 v107/v108 SW 升级时旧页面的 controllerchange 自动换版逻辑。
+    // 激活只发生在旧页面已自然释放后；claim 用于让下一次打开的页面立即受当前完整 build 控制。
     await self.clients.claim();
   })());
 });
@@ -160,7 +163,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // 带 ?av=BUILD 的音频属于不可变 build 资源：Cache First。
-  // 这样同一次 v109 绝不会一会播放安装时的 charu、一会又被网络上的另一份覆盖。
+  // 这样同一次 v111 绝不会一会播放安装时的 charu、一会又被网络上的另一份覆盖。
   if (requestUrl.pathname.includes("/assets/audio/") && requestUrl.searchParams.get("av") === BUILD) {
     const cacheKey = canonicalRequest(request);
     event.respondWith((async () => {
