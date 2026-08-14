@@ -1,13 +1,23 @@
-/* Ryuki v106: bg4 center action buttons + boxing / jianji */
+/* Ryuki v107: atomic PWA update + stable mocha/charu media */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "106";
+const PWA_BUILD = "107";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
+// 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
+const AUDIO_SESSION_ID = `${PWA_BUILD}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+// URL 只作为版本标记，不再靠它强制二次加载。实际版本由当前激活 SW 的原子缓存决定。
+try {
+  const buildUrl = new URL(window.location.href);
+  if (buildUrl.searchParams.get("appv") !== PWA_BUILD) {
+    buildUrl.searchParams.set("appv", PWA_BUILD);
+    window.history.replaceState(null, "", buildUrl.href);
+  }
+} catch {}
 
 const ANIMATION_CONFIG = {
   // 第一阶段最长 3 秒；kh1 提前播完时立即进入第二阶段，不再空等。
@@ -167,30 +177,30 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=106",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=106",
-  charu: "./assets/audio/charu.mp3?av=106",
-  mocha: "./assets/audio/mocha.mp3?av=106",
-  chouka: "./assets/audio/chouka.mp3?av=106",
-  chaka: "./assets/audio/chaka.mp3?av=106",
-  huagai1: "./assets/audio/huagai1.mp3?av=106",
-  huagai2: "./assets/audio/huagai2.mp3?av=106",
-  guo: "./assets/audio/guo.mp3?av=106",
-  boxing: "./assets/audio/boxing.mp3?av=106",
-  jianji: "./assets/audio/jianji.mp3?av=106",
+  kh1: "./assets/audio/kh1.mp3?av=107",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=107",
+  charu: "./assets/audio/charu.mp3?av=107",
+  mocha: "./assets/audio/mocha.mp3?av=107",
+  chouka: "./assets/audio/chouka.mp3?av=107",
+  chaka: "./assets/audio/chaka.mp3?av=107",
+  huagai1: "./assets/audio/huagai1.mp3?av=107",
+  huagai2: "./assets/audio/huagai2.mp3?av=107",
+  guo: "./assets/audio/guo.mp3?av=107",
+  boxing: "./assets/audio/boxing.mp3?av=107",
+  jianji: "./assets/audio/jianji.mp3?av=107",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=106",
-    2: "./assets/audio/q.mp3?av=106",
-    3: "./assets/audio/d.mp3?av=106",
-    4: "./assets/audio/l.mp3?av=106",
-    5: "./assets/audio/f.mp3?av=106",
-    6: "./assets/audio/hc.mp3?av=106",
+    1: "./assets/audio/j.mp3?av=107",
+    2: "./assets/audio/q.mp3?av=107",
+    3: "./assets/audio/d.mp3?av=107",
+    4: "./assets/audio/l.mp3?av=107",
+    5: "./assets/audio/f.mp3?av=107",
+    6: "./assets/audio/hc.mp3?av=107",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=106",
-    4: "./assets/audio/longjiao.mp3?av=106",
-    5: "./assets/audio/bsj.mp3?av=106",
+    1: "./assets/audio/jianjianglin.mp3?av=107",
+    4: "./assets/audio/longjiao.mp3?av=107",
+    5: "./assets/audio/bsj.mp3?av=107",
   },
 };
 
@@ -329,6 +339,23 @@ let lzjReturnFallbackTimer = 0;
 let lzjReturnTransitionHandler = null;
 let lzjReturnToken = 0;
 let lyfgTimer = 0;
+
+// mocha 使用 v104 已在 iPhone PWA 验证过的 Web Audio 路径。
+// 字节在后台先取，真正 pointerdown 时只负责恢复 AudioContext 并启动一次 BufferSource。
+let mochaSfxContext = null;
+let mochaSfxBuffer = null;
+let mochaSfxDecodePromise = null;
+let mochaSfxSource = null;
+const mochaBytesPromise = fetch(AUDIO_CONFIG.mocha, { cache: "no-store" })
+  .then((response) => {
+    if (!response.ok) throw new Error(`mocha fetch ${response.status}`);
+    return response.arrayBuffer();
+  })
+  .catch((error) => {
+    console.warn("mocha 预加载失败，将使用 HTMLAudio 兜底：", error);
+    return null;
+  });
+
 let chakaSfxContext = null;
 let chakaSfxBuffer = null;
 let chakaSfxDecodePromise = null;
@@ -345,7 +372,7 @@ const chakaBytesPromise = fetch(AUDIO_CONFIG.chaka, { cache: "no-store" })
 
 const kh1Audio = new Audio(AUDIO_CONFIG.kh1);
 const ydMusicAudio = new Audio(AUDIO_CONFIG.ydmusic);
-const charuAudio = new Audio(AUDIO_CONFIG.charu);
+const charuAudio = new Audio();
 const mochaAudio = new Audio(AUDIO_CONFIG.mocha);
 const choukaAudio = new Audio(AUDIO_CONFIG.chouka);
 const chakaAudio = new Audio(AUDIO_CONFIG.chaka);
@@ -363,7 +390,7 @@ const cardVoiceFollowUpAudios = Object.fromEntries(
 
 kh1Audio.preload = "auto";
 ydMusicAudio.preload = "auto";
-charuAudio.preload = "auto";
+charuAudio.preload = "none";
 mochaAudio.preload = "auto";
 choukaAudio.preload = "auto";
 chakaAudio.preload = "auto";
@@ -375,7 +402,7 @@ jianjiAudio.preload = "auto";
 Object.values(cardVoiceAudios).forEach((audio) => { audio.preload = "auto"; });
 Object.values(cardVoiceFollowUpAudios).forEach((audio) => { audio.preload = "auto"; });
 [
-  kh1Audio, ydMusicAudio, charuAudio, mochaAudio, choukaAudio, chakaAudio,
+  kh1Audio, ydMusicAudio, mochaAudio, choukaAudio, chakaAudio,
   huagai1Audio, huagai2Audio, guoAudio, ...Object.values(cardVoiceAudios),
   ...Object.values(cardVoiceFollowUpAudios),
 ].forEach((audio) => audio.load());
@@ -584,13 +611,163 @@ function primeAudio(audio, isInUse) {
 }
 
 
-// 卡盒点击音效：真实 pointerdown 内同步播放一次。
-// iPhone Safari/PWA 不走异步 Web Audio 准备链，避免离开用户手势后播放被拦截。
+// 卡盒每次按下只触发一次 mocha。Web Audio Context 在真实 pointerdown 中恢复，
+// Buffer 解码可以异步完成；Context 一旦被手势解锁，稍后 source.start() 仍能可靠播放。
+function getMochaAudioContext() {
+  if (mochaSfxContext) return mochaSfxContext;
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+  try {
+    mochaSfxContext = new AudioContextCtor();
+  } catch (error) {
+    console.warn("无法创建 mocha Web AudioContext：", error);
+    mochaSfxContext = null;
+  }
+  return mochaSfxContext;
+}
+
+async function prepareMochaSfxFromGesture() {
+  const context = getMochaAudioContext();
+  if (!context) return false;
+
+  try {
+    if (context.state === "suspended") await context.resume();
+  } catch (error) {
+    console.warn("mocha AudioContext resume 失败：", error);
+    return false;
+  }
+
+  if (mochaSfxBuffer) return context.state === "running";
+  if (!mochaSfxDecodePromise) {
+    mochaSfxDecodePromise = mochaBytesPromise
+      .then((bytes) => {
+        if (!bytes) return null;
+        return new Promise((resolve, reject) => {
+          context.decodeAudioData(bytes.slice(0), resolve, reject);
+        });
+      })
+      .then((buffer) => {
+        mochaSfxBuffer = buffer;
+        return buffer;
+      })
+      .catch((error) => {
+        console.warn("mocha Web Audio 解码失败：", error);
+        mochaSfxDecodePromise = null;
+        return null;
+      });
+  }
+
+  await mochaSfxDecodePromise;
+  return Boolean(mochaSfxBuffer && context.state === "running");
+}
+
+function startMochaBufferOnce() {
+  const context = mochaSfxContext;
+  if (!context || context.state !== "running" || !mochaSfxBuffer) return false;
+
+  try {
+    // 每次新的卡盒按下重新从头播放一次；不循环。
+    if (mochaSfxSource) {
+      try { mochaSfxSource.stop(); } catch {}
+      mochaSfxSource.disconnect?.();
+    }
+    const source = context.createBufferSource();
+    source.buffer = mochaSfxBuffer;
+    source.connect(context.destination);
+    source.onended = () => {
+      if (mochaSfxSource === source) mochaSfxSource = null;
+      source.disconnect?.();
+    };
+    mochaSfxSource = source;
+    source.start(0);
+    return true;
+  } catch (error) {
+    console.warn("mocha Web Audio 播放失败：", error);
+    return false;
+  }
+}
+
 function playMochaOnCardBoxPress() {
-  mochaAudio.muted = false;
-  playAudio(mochaAudio).catch((error) => {
-    console.warn("mocha 音效播放失败：", error);
-  });
+  // 调用本函数的位置都在 pointerdown。先在当前用户手势里恢复 Context。
+  const preparation = prepareMochaSfxFromGesture();
+  if (startMochaBufferOnce()) return;
+
+  preparation
+    .then((ready) => {
+      if (ready && startMochaBufferOnce()) return;
+      // 极少数不支持 Web Audio 的浏览器才退回 HTMLAudio。
+      mochaAudio.muted = false;
+      return playAudio(mochaAudio);
+    })
+    .catch((error) => {
+      console.warn("mocha 音效播放失败：", error);
+    });
+}
+
+function stopMochaAudioCompletely() {
+  if (mochaSfxSource) {
+    try { mochaSfxSource.stop(); } catch {}
+    mochaSfxSource.disconnect?.();
+    mochaSfxSource = null;
+  }
+  stopAudio(mochaAudio);
+}
+
+// charu 不在 App 启动/第一阶段提前读取。腰带已经出现、用户第一次按住可拖卡盒时，
+// 使用本次 App 会话专属 URL 重新装载并在这个真实手势里静音解锁。
+let charuSessionSourceReady = false;
+let charuGesturePrimed = false;
+let charuPrimePromise = null;
+
+function getCharuSessionUrl() {
+  const url = new URL(AUDIO_CONFIG.charu, window.location.href);
+  url.searchParams.set("sid", AUDIO_SESSION_ID);
+  return url.href;
+}
+
+function ensureFreshCharuSource() {
+  if (charuSessionSourceReady) return;
+  stopAudio(charuAudio);
+  charuAudio.src = getCharuSessionUrl();
+  charuAudio.preload = "auto";
+  charuAudio.load();
+  charuSessionSourceReady = true;
+}
+
+function prepareCharuForInsertionFromGesture() {
+  ensureFreshCharuSource();
+  if (charuGesturePrimed || charuPrimePromise || insertionAudioInUse) return;
+
+  charuAudio.muted = true;
+  let promise;
+  try {
+    promise = charuAudio.play();
+  } catch (error) {
+    charuAudio.muted = false;
+    console.warn("charu 手势预解锁失败：", error);
+    return;
+  }
+
+  if (!(promise instanceof Promise)) {
+    if (!insertionAudioInUse) stopAudio(charuAudio);
+    charuAudio.muted = false;
+    charuGesturePrimed = true;
+    return;
+  }
+
+  charuPrimePromise = promise
+    .then(() => {
+      charuGesturePrimed = true;
+      if (!insertionAudioInUse) stopAudio(charuAudio);
+      charuAudio.muted = false;
+    })
+    .catch((error) => {
+      charuAudio.muted = false;
+      console.warn("charu 手势预解锁失败：", error);
+    })
+    .finally(() => {
+      charuPrimePromise = null;
+    });
 }
 
 function getChakaAudioContext() {
@@ -1883,7 +2060,7 @@ function resetToCard() {
   stopAudio(kh1Audio);
   stopAudio(ydMusicAudio);
   stopAudio(charuAudio);
-  stopAudio(mochaAudio);
+  stopMochaAudioCompletely();
   stopAudio(choukaAudio);
   stopAudio(chakaAudio);
   stopAudio(guoAudio);
@@ -2070,6 +2247,9 @@ function handleCharuEnded() {
 function playInsertionAudio() {
   if (!flowStarted || insertionAudioInUse) return;
 
+  // 正常路径已在卡盒 pointerdown 中完成；这里仅做极端情况下的同步兜底。
+  ensureFreshCharuSource();
+
   clearTimeout(insertionAudioFallback);
   insertionAudioFallback = 0;
   insertionAudioInUse = true;
@@ -2130,9 +2310,12 @@ function enableCardDrag(options = {}) {
 }
 
 function handleCardPointerDown(event) {
-  // 最开始点击卡盒，以及之后每次重新按下可拖卡盒，都立即播放一次 mocha。
+  // 每次按下整个卡盒都播放一次 mocha。
   playMochaOnCardBoxPress();
   if (!dragReady || !cardTrigger.classList.contains("is-draggable")) return;
+
+  // 腰带已经出现，此时才准备本次会话的最新 charu，避免启动阶段锁住旧媒体。
+  prepareCharuForInsertionFromGesture();
 
   event.preventDefault();
   event.stopPropagation();
@@ -2451,7 +2634,6 @@ function startFromCard(event) {
   ydMusicInUse = false;
   insertionAudioInUse = false;
   primeAudio(ydMusicAudio, () => ydMusicInUse);
-  primeAudio(charuAudio, () => insertionAudioInUse);
   prepareChakaSfxFromGesture().catch(() => undefined);
 
   playAudio(kh1Audio).catch((error) => {
@@ -2602,22 +2784,46 @@ bg4Center.addEventListener("webkitAnimationEnd", finishBg4Merge);
 applyPhoneLayout();
 
 if ("serviceWorker" in navigator) {
+  const reloadKey = `ryuki-sw-controller-reload-v${PWA_BUILD}`;
+  const hadControllerAtBoot = Boolean(navigator.serviceWorker.controller);
   let controllerReloading = false;
 
-  // 新 SW 一旦接管，当前页面必须同步切到同一 build，避免“旧 JS + 新 SW/新音频”混跑。
+  function requestWaitingWorkerActivation(registration) {
+    if (!registration?.waiting) return;
+    registration.waiting.postMessage({ type: "SKIP_WAITING", build: PWA_BUILD });
+  }
+
+  // 只有完整安装好的 waiting SW 收到 SKIP_WAITING 后才会接管。
+  // 接管时页面只刷新一次，不再由 SW 和页面两边同时 navigate。
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (controllerReloading) return;
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("appv") === PWA_BUILD) return;
+    if (!hadControllerAtBoot || controllerReloading) return;
+    if (sessionStorage.getItem(reloadKey) === "1") return;
+
     controllerReloading = true;
+    sessionStorage.setItem(reloadKey, "1");
+    const url = new URL(window.location.href);
     url.searchParams.set("appv", PWA_BUILD);
     window.location.replace(url.href);
   });
 
   window.addEventListener("load", async () => {
     try {
-      const registration = await navigator.serviceWorker.register(`./sw.js?v=${PWA_BUILD}`, { updateViaCache: "none" });
+      const registration = await navigator.serviceWorker.register(`./sw.js?v=${PWA_BUILD}`, {
+        updateViaCache: "none",
+      });
+
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        if (!worker) return;
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "installed" && registration.waiting) {
+            requestWaitingWorkerActivation(registration);
+          }
+        });
+      });
+
       await registration.update();
+      requestWaitingWorkerActivation(registration);
     } catch (error) {
       console.warn("PWA 离线服务注册失败：", error);
     }
