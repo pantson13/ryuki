@@ -1,11 +1,11 @@
-/* Ryuki v111: stable detached card-box drag + guarded state machine + atomic PWA */
+/* Ryuki v112: stable detached card-box drag + guarded state machine + atomic PWA */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "111";
+const PWA_BUILD = "112";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -177,30 +177,30 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=111",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=111",
-  charu: "./assets/audio/charu.mp3?av=111",
-  mocha: "./assets/audio/mocha.mp3?av=111",
-  chouka: "./assets/audio/chouka.mp3?av=111",
-  chaka: "./assets/audio/chaka.mp3?av=111",
-  huagai1: "./assets/audio/huagai1.mp3?av=111",
-  huagai2: "./assets/audio/huagai2.mp3?av=111",
-  guo: "./assets/audio/guo.mp3?av=111",
-  boxing: "./assets/audio/boxing.mp3?av=111",
-  jianji: "./assets/audio/jianji.mp3?av=111",
+  kh1: "./assets/audio/kh1.mp3?av=112",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=112",
+  charu: "./assets/audio/charu.mp3?av=112",
+  mocha: "./assets/audio/mocha.mp3?av=112",
+  chouka: "./assets/audio/chouka.mp3?av=112",
+  chaka: "./assets/audio/chaka.mp3?av=112",
+  huagai1: "./assets/audio/huagai1.mp3?av=112",
+  huagai2: "./assets/audio/huagai2.mp3?av=112",
+  guo: "./assets/audio/guo.mp3?av=112",
+  boxing: "./assets/audio/boxing.mp3?av=112",
+  jianji: "./assets/audio/jianji.mp3?av=112",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=111",
-    2: "./assets/audio/q.mp3?av=111",
-    3: "./assets/audio/d.mp3?av=111",
-    4: "./assets/audio/l.mp3?av=111",
-    5: "./assets/audio/f.mp3?av=111",
-    6: "./assets/audio/hc.mp3?av=111",
+    1: "./assets/audio/j.mp3?av=112",
+    2: "./assets/audio/q.mp3?av=112",
+    3: "./assets/audio/d.mp3?av=112",
+    4: "./assets/audio/l.mp3?av=112",
+    5: "./assets/audio/f.mp3?av=112",
+    6: "./assets/audio/hc.mp3?av=112",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=111",
-    4: "./assets/audio/longjiao.mp3?av=111",
-    5: "./assets/audio/bsj.mp3?av=111",
+    1: "./assets/audio/jianjianglin.mp3?av=112",
+    4: "./assets/audio/longjiao.mp3?av=112",
+    5: "./assets/audio/bsj.mp3?av=112",
   },
 };
 
@@ -2520,6 +2520,15 @@ function canDragExternalCardBox() {
   return isFlowPhase(FLOW_PHASE.CARD_DRAG, FLOW_PHASE.DETACHED);
 }
 
+function suppressExtractedCardSyntheticClick(duration = 420) {
+  suppressExtractedCardClick = true;
+  clearTimeout(suppressExtractedCardClickTimer);
+  suppressExtractedCardClickTimer = setTimeout(() => {
+    suppressExtractedCardClick = false;
+    suppressExtractedCardClickTimer = 0;
+  }, duration);
+}
+
 function handleCardPointerDown(event) {
   // 初始卡盒点击和真正可拖阶段都允许响一次 mocha。
   // CARD_DRAG 的真实触摸还会再次确认 mocha + charu 的 Context 已解锁，但绝不会提前播放 charu。
@@ -2543,7 +2552,8 @@ function handleCardPointerDown(event) {
   dragOrigin = { ...cardDragPosition };
   isDragging = true;
   cardTrigger.classList.add("is-dragging");
-  cardTrigger.setPointerCapture?.(event.pointerId);
+  // iPhone/PWA：外部整卡盒后续 move/up 由 window capture 统一接管。
+  // 不依赖刚从腰带层切出来的 cardTrigger 自己保持 Pointer Capture。
 }
 
 function handleCardPointerMove(event) {
@@ -2587,11 +2597,6 @@ function handleCardPointerMove(event) {
 function handleCardPointerEnd(event) {
   if (activePointerId !== event.pointerId) return;
 
-  if (cardTrigger.hasPointerCapture?.(event.pointerId)) {
-    cardTrigger.releasePointerCapture(event.pointerId);
-  }
-
-
   // 松手后保留卡盒当前位置；下次按住时从这里继续拖动。
   isDragging = false;
   activePointerId = null;
@@ -2599,14 +2604,9 @@ function handleCardPointerEnd(event) {
 
   // 抽出后的卡盒既可拖又可点：明显拖动后抑制紧跟着产生的 click，避免误启动第二阶段。
   if (cardWasExtracted && externalCardPointerTravel > 8) {
-    suppressExtractedCardClick = true;
-    clearTimeout(suppressExtractedCardClickTimer);
     // iPhone Safari / PWA 的合成 click 可能明显晚于 pointerup。
     // 只短暂屏蔽 click，不屏蔽下一次 pointerdown，因此松手后仍可立即再次拖动。
-    suppressExtractedCardClickTimer = setTimeout(() => {
-      suppressExtractedCardClick = false;
-      suppressExtractedCardClickTimer = 0;
-    }, 420);
+    suppressExtractedCardSyntheticClick();
   }
 }
 
@@ -2666,6 +2666,10 @@ function completeCardExtraction(pointerId) {
   dragReady = true;
   activePointerId = null;
   parallelReached = false;
+  // 抽出手势结束时 cardBox 会消失、外部 cardTrigger 会在同一位置出现。
+  // Safari 可能在 pointerup 后重新命中并补发 click；先屏蔽这一次合成 click，
+  // 但 pointerdown 不受影响，所以松手后可以立即再次拖动。
+  suppressExtractedCardSyntheticClick();
   hideLqPanel();
 
   // 卡盒真正离开腰带后，彻底作废这一轮仍未结束的 bg4/bg5 回调。
@@ -2893,9 +2897,11 @@ waitForSceneImages().then(() => {
 
 cardTrigger.addEventListener("click", startFromCard);
 cardTrigger.addEventListener("pointerdown", handleCardPointerDown);
-cardTrigger.addEventListener("pointermove", handleCardPointerMove);
-cardTrigger.addEventListener("pointerup", handleCardPointerEnd);
-cardTrigger.addEventListener("pointercancel", handleCardPointerEnd);
+// 外部整卡盒的 move/up/cancel 放到 window capture：
+// 卡盒从腰带层切换到外层后，即使 Safari 改变后续事件 target，拖动也不会中断。
+window.addEventListener("pointermove", handleCardPointerMove, { capture: true, passive: false });
+window.addEventListener("pointerup", handleCardPointerEnd, { capture: true, passive: false });
+window.addEventListener("pointercancel", handleCardPointerEnd, { capture: true, passive: false });
 cardTrigger.addEventListener("contextmenu", (event) => event.preventDefault());
 kh1Audio.addEventListener("ended", finishFirstStage);
 ydMusicAudio.addEventListener("ended", finishStageTwo);
