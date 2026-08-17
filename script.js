@@ -1,11 +1,11 @@
-/* Ryuki v114: detached card-box visual hit sync + native touch drag + guarded state machine + atomic PWA */
+/* Ryuki v115: unified external card-box drag + guarded state machine + atomic PWA */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "114";
+const PWA_BUILD = "115";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -158,7 +158,6 @@ const ANIMATION_CONFIG = {
     extract: { threshold: 210 },
     // 整卡盒从腰带抽出后的 iPhone/PWA 触碰区域。
     // 不依赖 DOM hit-test；paddingX / paddingY 会在视觉卡盒四周扩展数学命中区。
-    detachedHitArea: { offsetX: 0, offsetY: 0, paddingX: 40, paddingY: 40 },
     drag: {
       // 先经过腰带右侧的平行位置，再允许插入凹槽。
       parallel: { x: 360, y: -950, toleranceX: 100, toleranceY: 220 },
@@ -180,30 +179,30 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=114",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=114",
-  charu: "./assets/audio/charu.mp3?av=114",
-  mocha: "./assets/audio/mocha.mp3?av=114",
-  chouka: "./assets/audio/chouka.mp3?av=114",
-  chaka: "./assets/audio/chaka.mp3?av=114",
-  huagai1: "./assets/audio/huagai1.mp3?av=114",
-  huagai2: "./assets/audio/huagai2.mp3?av=114",
-  guo: "./assets/audio/guo.mp3?av=114",
-  boxing: "./assets/audio/boxing.mp3?av=114",
-  jianji: "./assets/audio/jianji.mp3?av=114",
+  kh1: "./assets/audio/kh1.mp3?av=115",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=115",
+  charu: "./assets/audio/charu.mp3?av=115",
+  mocha: "./assets/audio/mocha.mp3?av=115",
+  chouka: "./assets/audio/chouka.mp3?av=115",
+  chaka: "./assets/audio/chaka.mp3?av=115",
+  huagai1: "./assets/audio/huagai1.mp3?av=115",
+  huagai2: "./assets/audio/huagai2.mp3?av=115",
+  guo: "./assets/audio/guo.mp3?av=115",
+  boxing: "./assets/audio/boxing.mp3?av=115",
+  jianji: "./assets/audio/jianji.mp3?av=115",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=114",
-    2: "./assets/audio/q.mp3?av=114",
-    3: "./assets/audio/d.mp3?av=114",
-    4: "./assets/audio/l.mp3?av=114",
-    5: "./assets/audio/f.mp3?av=114",
-    6: "./assets/audio/hc.mp3?av=114",
+    1: "./assets/audio/j.mp3?av=115",
+    2: "./assets/audio/q.mp3?av=115",
+    3: "./assets/audio/d.mp3?av=115",
+    4: "./assets/audio/l.mp3?av=115",
+    5: "./assets/audio/f.mp3?av=115",
+    6: "./assets/audio/hc.mp3?av=115",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=114",
-    4: "./assets/audio/longjiao.mp3?av=114",
-    5: "./assets/audio/bsj.mp3?av=114",
+    1: "./assets/audio/jianjianglin.mp3?av=115",
+    4: "./assets/audio/longjiao.mp3?av=115",
+    5: "./assets/audio/bsj.mp3?av=115",
   },
 };
 
@@ -336,9 +335,6 @@ let suppressExtractedCardClick = false;
 let suppressExtractedCardClickTimer = 0;
 let externalCardPointerTravel = 0;
 // iPhone/PWA：整卡盒从腰带抽出后使用独立 Touch Session，不依赖 Pointer Events。
-let detachedCardTouchActive = false;
-let detachedCardTouchIdentifier = null;
-let detachedCardTouchLastPoint = null;
 let extractPointerStart = { x: 0, y: 0 };
 let extractOrigin = { x: 0, y: 0 };
 let cardExtractPosition = { x: 0, y: 0 };
@@ -2109,8 +2105,6 @@ function resetPrimaryPointerEnvironment() {
 }
 
 function handleInteractionEnvironmentReset() {
-  // Touch Session 先清，避免字符串形式的 touch id 落进 Pointer Capture 清理路径。
-  clearDetachedCardTouchSession();
   resetPrimaryPointerEnvironment();
   handleAuxTouchEnvironmentReset();
 }
@@ -2541,50 +2535,6 @@ function suppressExtractedCardSyntheticClick(duration = 420) {
 }
 
 
-function getDetachedCardTouchHitRect() {
-  const hit = ANIMATION_CONFIG.card.detachedHitArea || {};
-  const paddingX = Math.max(0, hit.paddingX || 0) * sceneScale;
-  const paddingY = Math.max(0, hit.paddingY || 0) * sceneScale;
-  const offsetX = (hit.offsetX || 0) * sceneScale;
-  const offsetY = (hit.offsetY || 0) * sceneScale;
-
-  // DETACHED 只在 touchstart 做一次命中，因此这里直接以用户此刻真正看到的
-  // cardTrigger DOM 矩形为准。这样即使 WebKit 在层切换/动态视口时产生一帧
-  // 合成偏移，触碰区仍跟着视觉卡盒，而不是跟着一套提前算好的目标坐标。
-  const visualRect = cardTrigger.getBoundingClientRect();
-  if (visualRect.width > 1 && visualRect.height > 1) {
-    const centerX = visualRect.left + visualRect.width / 2 + offsetX;
-    const centerY = visualRect.top + visualRect.height / 2 + offsetY;
-    const width = visualRect.width + paddingX * 2;
-    const height = visualRect.height + paddingY * 2;
-    return {
-      left: centerX - width / 2,
-      right: centerX + width / 2,
-      top: centerY - height / 2,
-      bottom: centerY + height / 2,
-      width,
-      height,
-    };
-  }
-
-  // 极端情况下 DOM 还没产生尺寸，才回退到设计坐标计算。
-  const sceneRect = scene.getBoundingClientRect();
-  const visualWidth = ANIMATION_CONFIG.card.width * sceneScale;
-  const visualHeight = ANIMATION_CONFIG.card.width * (353 / 485) * sceneScale;
-  const centerX = sceneRect.left + sceneRect.width / 2 + cardDragPosition.x * sceneScale + offsetX;
-  const centerY = sceneRect.top + sceneRect.height / 2 + cardDragPosition.y * sceneScale + offsetY;
-  const width = visualWidth + paddingX * 2;
-  const height = visualHeight + paddingY * 2;
-  return {
-    left: centerX - width / 2,
-    right: centerX + width / 2,
-    top: centerY - height / 2,
-    bottom: centerY + height / 2,
-    width,
-    height,
-  };
-}
-
 function beginExternalCardDrag(pointerId, clientX, clientY) {
   activePointerId = pointerId;
   pointerStart = { x: clientX, y: clientY };
@@ -2645,79 +2595,11 @@ function finishExternalCardDrag(pointerId) {
   return true;
 }
 
-function clearDetachedCardTouchSession() {
-  if (detachedCardTouchActive && typeof activePointerId === "string" && activePointerId.startsWith("cardtouch:")) {
-    finishExternalCardDrag(activePointerId);
-  }
-  detachedCardTouchActive = false;
-  detachedCardTouchIdentifier = null;
-  detachedCardTouchLastPoint = null;
-  if (typeof activePointerId === "string" && activePointerId.startsWith("cardtouch:")) activePointerId = null;
-  isDragging = false;
-  cardTrigger.classList.remove("is-dragging");
-}
-
-function handleDetachedCardTouchStart(event) {
-  if (!isFlowPhase(FLOW_PHASE.DETACHED) || !cardWasExtracted || !dragReady || !cardTrigger.classList.contains("is-draggable")) return;
-  const touch = event.changedTouches?.[0];
-  if (!touch) return;
-
-  if (detachedCardTouchActive || (typeof activePointerId === "string" && activePointerId.startsWith("cardtouch:"))) {
-    clearDetachedCardTouchSession();
-  }
-
-  if (!pointInsideRect(touch.clientX, touch.clientY, getDetachedCardTouchHitRect())) return;
-
-  event.preventDefault();
-  event.stopPropagation();
-  playMochaOnCardBoxPress();
-  detachedCardTouchIdentifier = touch.identifier;
-  detachedCardTouchLastPoint = { identifier: touch.identifier, clientX: touch.clientX, clientY: touch.clientY };
-  detachedCardTouchActive = true;
-  beginExternalCardDrag(`cardtouch:${touch.identifier}`, touch.clientX, touch.clientY);
-}
-
-function handleDetachedCardTouchMove(event) {
-  if (!detachedCardTouchActive || detachedCardTouchIdentifier === null) return;
-  let touch = findTouchByIdentifier(event.touches, detachedCardTouchIdentifier);
-  if (!touch) {
-    if (event.touches?.length !== 1) return;
-    touch = event.touches[0];
-    detachedCardTouchIdentifier = touch.identifier;
-    activePointerId = `cardtouch:${touch.identifier}`;
-  }
-
-  detachedCardTouchLastPoint = { identifier: touch.identifier, clientX: touch.clientX, clientY: touch.clientY };
-  event.stopPropagation();
-  moveExternalCardDrag(`cardtouch:${touch.identifier}`, touch.clientX, touch.clientY, event);
-}
-
-function handleDetachedCardTouchEnd(event) {
-  if (!detachedCardTouchActive) return;
-  const changed = findTouchByIdentifier(event.changedTouches, detachedCardTouchIdentifier)
-    || event.changedTouches?.[0]
-    || detachedCardTouchLastPoint;
-  // 结束时以当前会话真正持有的 id 为准。Safari 偶发 identifier 重映射后，
-  // changedTouches 可能仍给回旧 id，不能让旧值留下 activePointerId 残留。
-  const pointerId = activePointerId ?? (changed ? `cardtouch:${changed.identifier}` : null);
-  const wasTap = externalCardPointerTravel <= 8;
-  if (pointerId !== null) finishExternalCardDrag(pointerId);
-  detachedCardTouchActive = false;
-  detachedCardTouchIdentifier = null;
-  detachedCardTouchLastPoint = null;
-
-  // Touch Events 主通道 preventDefault 后不会依赖 Safari 合成 click。
-  // 轻点仍保留“抽出后点击卡盒重新播放第二阶段”的原规则。
-  if (wasTap && isFlowPhase(FLOW_PHASE.DETACHED) && cardWasExtracted && !suppressExtractedCardClick) {
-    replayStageTwoFromExtractedCard(event);
-  }
-}
 
 function handleCardPointerDown(event) {
-  // DETACHED 的 iPhone touch 由独立 Touch Events 主通道处理，避免 Pointer Events 在层切换后丢 move。
-  if (event.pointerType === "touch" && isFlowPhase(FLOW_PHASE.DETACHED)) return;
-
-  if (isFlowPhase(FLOW_PHASE.CARD_DRAG)) {
+  // CARD_DRAG 与 DETACHED 统一复用同一套外部卡盒拖动链。
+  // 业务阶段只决定“能不能拖/能不能插”，不再切换 Touch/Pointer 两套实现。
+  if (isFlowPhase(FLOW_PHASE.CARD_DRAG, FLOW_PHASE.DETACHED)) {
     prepareCriticalSfxFromGesture(["mocha", "charu"]).catch(() => undefined);
   }
   if (isFlowPhase(FLOW_PHASE.IDLE, FLOW_PHASE.CARD_DRAG, FLOW_PHASE.DETACHED)) {
@@ -2735,13 +2617,10 @@ function handleCardPointerDown(event) {
 }
 
 function handleCardPointerMove(event) {
-  // iPhone DETACHED touch 不走 Pointer Events，防止和 Touch Session 双写坐标。
-  if (event.pointerType === "touch" && isFlowPhase(FLOW_PHASE.DETACHED)) return;
   moveExternalCardDrag(event.pointerId, event.clientX, event.clientY, event);
 }
 
 function handleCardPointerEnd(event) {
-  if (event.pointerType === "touch" && isFlowPhase(FLOW_PHASE.DETACHED)) return;
   finishExternalCardDrag(event.pointerId);
 }
 
@@ -3061,12 +2940,6 @@ kpcLayer.addEventListener("pointerdown", (event) => {
   }
   if (cardBox.classList.contains("is-kpc-ejected")) event.stopPropagation();
 });
-
-// iPhone / PWA：整卡盒从腰带抽出后的独立 Touch Session + 数学命中。
-window.addEventListener("touchstart", handleDetachedCardTouchStart, { capture: true, passive: false });
-window.addEventListener("touchmove", handleDetachedCardTouchMove, { capture: true, passive: false });
-window.addEventListener("touchend", handleDetachedCardTouchEnd, { capture: true, passive: false });
-window.addEventListener("touchcancel", handleDetachedCardTouchEnd, { capture: true, passive: false });
 
 // iPhone / PWA 主通道：单一 Touch Session + JS 数学命中。
 // 不使用 pointer capture，也不读取自由卡 transform DOM 的 hit-test 几何。
