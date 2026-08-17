@@ -1,4 +1,4 @@
-/* Ryuki v115: unified external card-box drag + stable PWA */
+/* Ryuki v116: main(47) cardTrigger self-capture drag + stable PWA */
 
 :root {
   color-scheme: dark;
@@ -461,12 +461,6 @@ body {
 
 .card-trigger.is-dragging {
   cursor: grabbing;
-  transition: none;
-}
-
-/* 腰带内卡盒抽出后切换到外部 cardTrigger 时必须瞬时交接。
- * 禁止沿用 card-unit 的插入 transition，否则视觉位置会落后于 JS 的 cardDragPosition。 */
-.card-trigger.is-detached-draggable {
   transition: none;
 }
 

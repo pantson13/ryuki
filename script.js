@@ -1,11 +1,11 @@
-/* Ryuki v115: unified external card-box drag + guarded state machine + atomic PWA */
+/* Ryuki v116: main(47) cardTrigger self-capture drag + guarded state machine + atomic PWA */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "115";
+const PWA_BUILD = "116";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -179,30 +179,30 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=115",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=115",
-  charu: "./assets/audio/charu.mp3?av=115",
-  mocha: "./assets/audio/mocha.mp3?av=115",
-  chouka: "./assets/audio/chouka.mp3?av=115",
-  chaka: "./assets/audio/chaka.mp3?av=115",
-  huagai1: "./assets/audio/huagai1.mp3?av=115",
-  huagai2: "./assets/audio/huagai2.mp3?av=115",
-  guo: "./assets/audio/guo.mp3?av=115",
-  boxing: "./assets/audio/boxing.mp3?av=115",
-  jianji: "./assets/audio/jianji.mp3?av=115",
+  kh1: "./assets/audio/kh1.mp3?av=116",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=116",
+  charu: "./assets/audio/charu.mp3?av=116",
+  mocha: "./assets/audio/mocha.mp3?av=116",
+  chouka: "./assets/audio/chouka.mp3?av=116",
+  chaka: "./assets/audio/chaka.mp3?av=116",
+  huagai1: "./assets/audio/huagai1.mp3?av=116",
+  huagai2: "./assets/audio/huagai2.mp3?av=116",
+  guo: "./assets/audio/guo.mp3?av=116",
+  boxing: "./assets/audio/boxing.mp3?av=116",
+  jianji: "./assets/audio/jianji.mp3?av=116",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=115",
-    2: "./assets/audio/q.mp3?av=115",
-    3: "./assets/audio/d.mp3?av=115",
-    4: "./assets/audio/l.mp3?av=115",
-    5: "./assets/audio/f.mp3?av=115",
-    6: "./assets/audio/hc.mp3?av=115",
+    1: "./assets/audio/j.mp3?av=116",
+    2: "./assets/audio/q.mp3?av=116",
+    3: "./assets/audio/d.mp3?av=116",
+    4: "./assets/audio/l.mp3?av=116",
+    5: "./assets/audio/f.mp3?av=116",
+    6: "./assets/audio/hc.mp3?av=116",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=115",
-    4: "./assets/audio/longjiao.mp3?av=115",
-    5: "./assets/audio/bsj.mp3?av=115",
+    1: "./assets/audio/jianjianglin.mp3?av=116",
+    4: "./assets/audio/longjiao.mp3?av=116",
+    5: "./assets/audio/bsj.mp3?av=116",
   },
 };
 
@@ -2116,7 +2116,7 @@ function resetCardGesture() {
   isDragging = false;
   parallelReached = false;
   activePointerId = null;
-  cardTrigger.classList.remove("is-draggable", "is-dragging", "is-replay-waiting", "is-detached-draggable");
+  cardTrigger.classList.remove("is-draggable", "is-dragging", "is-replay-waiting");
   cardTrigger.setAttribute("aria-label", "启动卡盒与腰带动画");
   setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
 }
@@ -2507,7 +2507,7 @@ function enableCardDrag(options = {}) {
   if (!preservePosition) {
     setCardDragPosition(ANIMATION_CONFIG.card.start.x, ANIMATION_CONFIG.card.start.y);
   }
-  cardTrigger.classList.remove("is-waiting", "is-replay-waiting", "is-detached-draggable");
+  cardTrigger.classList.remove("is-waiting", "is-replay-waiting");
   cardTrigger.classList.add("is-draggable");
   cardTrigger.setAttribute(
     "aria-label",
@@ -2535,23 +2535,45 @@ function suppressExtractedCardSyntheticClick(duration = 420) {
 }
 
 
-function beginExternalCardDrag(pointerId, clientX, clientY) {
-  activePointerId = pointerId;
-  pointerStart = { x: clientX, y: clientY };
+function handleCardPointerDown(event) {
+  // 复用 main(47) 已在 iPhone PWA 真机验证稳定的拖动方式：
+  // cardTrigger 自己持有整个 Pointer 会话，不再把 move/up 转交给 window。
+  if (isFlowPhase(FLOW_PHASE.CARD_DRAG, FLOW_PHASE.DETACHED)) {
+    prepareCriticalSfxFromGesture(["mocha", "charu"]).catch(() => undefined);
+  }
+  if (isFlowPhase(FLOW_PHASE.IDLE, FLOW_PHASE.CARD_DRAG, FLOW_PHASE.DETACHED)) {
+    playMochaOnCardBoxPress();
+  }
+  if (
+    !canDragExternalCardBox() ||
+    !dragReady ||
+    !cardTrigger.classList.contains("is-draggable")
+  ) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+  activePointerId = event.pointerId;
+  pointerStart = { x: event.clientX, y: event.clientY };
   externalCardPointerTravel = 0;
   dragOrigin = { ...cardDragPosition };
   isDragging = true;
   cardTrigger.classList.add("is-dragging");
+
+  try {
+    cardTrigger.setPointerCapture?.(event.pointerId);
+  } catch {
+    // Safari 某些边界状态可能拒绝 capture；后续事件仍由元素监听器兜底。
+  }
 }
 
-function moveExternalCardDrag(pointerId, clientX, clientY, originalEvent = null) {
-  if (!canDragExternalCardBox() || !dragReady || activePointerId !== pointerId) return false;
+function handleCardPointerMove(event) {
+  if (!canDragExternalCardBox() || !dragReady || activePointerId !== event.pointerId) return;
 
-  const deltaX = clientX - pointerStart.x;
-  const deltaY = clientY - pointerStart.y;
+  const deltaX = event.clientX - pointerStart.x;
+  const deltaY = event.clientY - pointerStart.y;
   externalCardPointerTravel = Math.max(externalCardPointerTravel, Math.hypot(deltaX, deltaY));
-  originalEvent?.preventDefault?.();
 
+  event.preventDefault();
   const nextX = Math.max(
     -SOURCE_SCENE.width / 2,
     Math.min(SOURCE_SCENE.width / 2, dragOrigin.x + deltaX / sceneScale),
@@ -2578,50 +2600,35 @@ function moveExternalCardDrag(pointerId, clientX, clientY, originalEvent = null)
     Math.abs(nextX - slotX) <= slotTolerance.x &&
     Math.abs(nextY - slotY) <= slotTolerance.y
   ) {
-    completeCardInsertion(pointerId);
+    completeCardInsertion(event.pointerId);
   }
-  return true;
 }
 
-function finishExternalCardDrag(pointerId) {
-  if (activePointerId !== pointerId) return false;
+function handleCardPointerEnd(event) {
+  if (activePointerId !== event.pointerId) return;
+
+  try {
+    if (cardTrigger.hasPointerCapture?.(event.pointerId)) {
+      cardTrigger.releasePointerCapture(event.pointerId);
+    }
+  } catch {
+    // pointercancel 后 Safari 可能已经自动释放。
+  }
+
   isDragging = false;
   activePointerId = null;
   cardTrigger.classList.remove("is-dragging");
 
+  // 沿用 main(47) 的做法：只抑制紧跟当前拖动产生的 click，
+  // 下一次 pointerdown 不受影响，因此任何时候都能重新拖动。
   if (cardWasExtracted && externalCardPointerTravel > 8) {
-    suppressExtractedCardSyntheticClick();
+    suppressExtractedCardClick = true;
+    clearTimeout(suppressExtractedCardClickTimer);
+    suppressExtractedCardClickTimer = setTimeout(() => {
+      suppressExtractedCardClick = false;
+      suppressExtractedCardClickTimer = 0;
+    }, 0);
   }
-  return true;
-}
-
-
-function handleCardPointerDown(event) {
-  // CARD_DRAG 与 DETACHED 统一复用同一套外部卡盒拖动链。
-  // 业务阶段只决定“能不能拖/能不能插”，不再切换 Touch/Pointer 两套实现。
-  if (isFlowPhase(FLOW_PHASE.CARD_DRAG, FLOW_PHASE.DETACHED)) {
-    prepareCriticalSfxFromGesture(["mocha", "charu"]).catch(() => undefined);
-  }
-  if (isFlowPhase(FLOW_PHASE.IDLE, FLOW_PHASE.CARD_DRAG, FLOW_PHASE.DETACHED)) {
-    playMochaOnCardBoxPress();
-  }
-  if (
-    !canDragExternalCardBox() ||
-    !dragReady ||
-    !cardTrigger.classList.contains("is-draggable")
-  ) return;
-
-  event.preventDefault();
-  event.stopPropagation();
-  beginExternalCardDrag(event.pointerId, event.clientX, event.clientY);
-}
-
-function handleCardPointerMove(event) {
-  moveExternalCardDrag(event.pointerId, event.clientX, event.clientY, event);
-}
-
-function handleCardPointerEnd(event) {
-  finishExternalCardDrag(event.pointerId);
 }
 
 function handleExtractPointerDown(event) {
@@ -2678,15 +2685,11 @@ function completeCardExtraction(pointerId) {
   // 腰带内 cardBox → 外部 cardTrigger 的交接必须瞬时完成。
   // 若继续继承 card-unit 的 1.25s transform transition，视觉卡盒会在旧位置与
   // cardDragPosition 最终位置之间滑动，导致触碰区与看到的位置短暂分离。
-  cardTrigger.classList.add("is-draggable", "is-detached-draggable");
+  cardTrigger.classList.add("is-draggable");
   cardTrigger.setAttribute("aria-label", "点击卡盒重新启动第二阶段；也可继续拖动");
   dragReady = true;
   activePointerId = null;
   parallelReached = false;
-  // 抽出手势结束时 cardBox 会消失、外部 cardTrigger 会在同一位置出现。
-  // Safari 可能在 pointerup 后重新命中并补发 click；先屏蔽这一次合成 click，
-  // 但 pointerdown 不受影响，所以松手后可以立即再次拖动。
-  suppressExtractedCardSyntheticClick();
   hideLqPanel();
 
   // 卡盒真正离开腰带后，彻底作废这一轮仍未结束的 bg4/bg5 回调。
@@ -2827,7 +2830,7 @@ function replayStageTwoFromExtractedCard(event) {
   dragReady = false;
   isDragging = false;
   activePointerId = null;
-  cardTrigger.classList.remove("is-draggable", "is-dragging", "is-detached-draggable");
+  cardTrigger.classList.remove("is-draggable", "is-dragging");
   cardTrigger.classList.add("is-replay-waiting");
   cardTrigger.setAttribute("aria-label", "第二阶段播放中，完成后可重新插入卡盒");
 
@@ -2914,11 +2917,9 @@ waitForSceneImages().then(() => {
 
 cardTrigger.addEventListener("click", startFromCard);
 cardTrigger.addEventListener("pointerdown", handleCardPointerDown);
-// 外部整卡盒的 move/up/cancel 放到 window capture：
-// 卡盒从腰带层切换到外层后，即使 Safari 改变后续事件 target，拖动也不会中断。
-window.addEventListener("pointermove", handleCardPointerMove, { capture: true, passive: false });
-window.addEventListener("pointerup", handleCardPointerEnd, { capture: true, passive: false });
-window.addEventListener("pointercancel", handleCardPointerEnd, { capture: true, passive: false });
+cardTrigger.addEventListener("pointermove", handleCardPointerMove);
+cardTrigger.addEventListener("pointerup", handleCardPointerEnd);
+cardTrigger.addEventListener("pointercancel", handleCardPointerEnd);
 cardTrigger.addEventListener("contextmenu", (event) => event.preventDefault());
 kh1Audio.addEventListener("ended", finishFirstStage);
 ydMusicAudio.addEventListener("ended", finishStageTwo);
