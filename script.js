@@ -1,11 +1,11 @@
-/* Ryuki v117: main(47) stable drag + jiechu extraction SFX + q→longquanjianglin */
+/* Ryuki v118: stable main(47) drag + Web Audio automatic SFX */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "117";
+const PWA_BUILD = "118";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -179,33 +179,52 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=117",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=117",
-  charu: "./assets/audio/charu.mp3?av=117",
-  mocha: "./assets/audio/mocha.mp3?av=117",
-  chouka: "./assets/audio/chouka.mp3?av=117",
-  chaka: "./assets/audio/chaka.mp3?av=117",
-  huagai1: "./assets/audio/huagai1.mp3?av=117",
-  huagai2: "./assets/audio/huagai2.mp3?av=117",
-  guo: "./assets/audio/guo.mp3?av=117",
-  boxing: "./assets/audio/boxing.mp3?av=117",
-  jianji: "./assets/audio/jianji.mp3?av=117",
-  jiechu: "./assets/audio/jiechu.mp3?av=117",
+  kh1: "./assets/audio/kh1.mp3?av=118",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=118",
+  charu: "./assets/audio/charu.mp3?av=118",
+  mocha: "./assets/audio/mocha.mp3?av=118",
+  chouka: "./assets/audio/chouka.mp3?av=118",
+  chaka: "./assets/audio/chaka.mp3?av=118",
+  huagai1: "./assets/audio/huagai1.mp3?av=118",
+  huagai2: "./assets/audio/huagai2.mp3?av=118",
+  guo: "./assets/audio/guo.mp3?av=118",
+  boxing: "./assets/audio/boxing.mp3?av=118",
+  jianji: "./assets/audio/jianji.mp3?av=118",
+  jiechu: "./assets/audio/jiechu.mp3?av=118",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=117",
-    2: "./assets/audio/q.mp3?av=117",
-    3: "./assets/audio/d.mp3?av=117",
-    4: "./assets/audio/l.mp3?av=117",
-    5: "./assets/audio/f.mp3?av=117",
-    6: "./assets/audio/hc.mp3?av=117",
+    1: "./assets/audio/j.mp3?av=118",
+    2: "./assets/audio/q.mp3?av=118",
+    3: "./assets/audio/d.mp3?av=118",
+    4: "./assets/audio/l.mp3?av=118",
+    5: "./assets/audio/f.mp3?av=118",
+    6: "./assets/audio/hc.mp3?av=118",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=117",
-    2: "./assets/audio/longquanjianglin.mp3?av=117",
-    4: "./assets/audio/longjiao.mp3?av=117",
-    5: "./assets/audio/bsj.mp3?av=117",
+    1: "./assets/audio/jianjianglin.mp3?av=118",
+    2: "./assets/audio/longquanjianglin.mp3?av=118",
+    4: "./assets/audio/longjiao.mp3?av=118",
+    5: "./assets/audio/bsj.mp3?av=118",
   },
+};
+
+// 自动触发音效不能依赖 ended / pointermove 回调里临时创建新的 HTMLAudio 播放权限。
+// 统一复用已经在真实用户手势中解锁的 Web AudioContext。
+const AUTO_SFX_URLS = {
+  mocha: AUDIO_CONFIG.mocha,
+  charu: AUDIO_CONFIG.charu,
+  jiechu: AUDIO_CONFIG.jiechu,
+  jianjianglin: AUDIO_CONFIG.cardVoiceFollowUps[1],
+  longquanjianglin: AUDIO_CONFIG.cardVoiceFollowUps[2],
+  longjiao: AUDIO_CONFIG.cardVoiceFollowUps[4],
+  bsj: AUDIO_CONFIG.cardVoiceFollowUps[5],
+};
+
+const CARD_FOLLOW_UP_SFX_KEYS = {
+  1: "jianjianglin",
+  2: "longquanjianglin",
+  4: "longjiao",
+  5: "bsj",
 };
 
 const PHONE_VIEWPORT = { width: 440, height: 956 };
@@ -380,10 +399,13 @@ let lyfgTimer = 0;
 // mocha + charu 共用一个在第一阶段真实点击中解锁的 Web AudioContext。
 // 两个关键音效的字节都带 build + session 参数并以 no-store 获取；同一 App 会话只使用这份确定的字节。
 let criticalSfxContext = null;
-const criticalSfxBuffers = { mocha: null, charu: null };
-const criticalSfxDecodePromises = { mocha: null, charu: null };
-const criticalSfxBytePromises = { mocha: null, charu: null };
-const criticalSfxSources = { mocha: null, charu: null };
+const createCriticalSfxState = () => Object.fromEntries(
+  Object.keys(AUTO_SFX_URLS).map((name) => [name, null]),
+);
+const criticalSfxBuffers = createCriticalSfxState();
+const criticalSfxDecodePromises = createCriticalSfxState();
+const criticalSfxBytePromises = createCriticalSfxState();
+const criticalSfxSources = createCriticalSfxState();
 let charuPlaybackMode = null;
 let charuPlaybackStartedAt = 0;
 let charuPlaybackRunId = 0;
@@ -397,7 +419,9 @@ function getSessionAudioUrl(src, label) {
 // 关键音效允许重试。旧版在页面启动时只 fetch 一次，首次网络/SW 抖动后会整轮 App 永久拿不到 buffer。
 function getCriticalAudioBytes(name) {
   if (criticalSfxBytePromises[name]) return criticalSfxBytePromises[name];
-  criticalSfxBytePromises[name] = fetch(getSessionAudioUrl(AUDIO_CONFIG[name], name), { cache: "no-store" })
+  const sourceUrl = AUTO_SFX_URLS[name];
+  if (!sourceUrl) return Promise.resolve(null);
+  criticalSfxBytePromises[name] = fetch(getSessionAudioUrl(sourceUrl, name), { cache: "no-store" })
     .then((response) => {
       if (!response.ok) throw new Error(`${name} fetch ${response.status}`);
       return response.arrayBuffer();
@@ -495,6 +519,22 @@ function startCriticalSfx(name, onended = null) {
     console.warn(`${name} Web Audio 播放失败：`, error);
     return false;
   }
+}
+
+function startAutomaticSfx(name, isStillValid = null) {
+  const canStart = () => !isStillValid || isStillValid();
+  if (!canStart()) return Promise.resolve(false);
+  if (startCriticalSfx(name)) return Promise.resolve(true);
+
+  // 正常情况下 buffer 已在更早的真实手势中准备好。这里仅做网络/解码抖动后的补救；
+  // 不再回退到新的 HTMLAudio.play()，避免 iPhone PWA 在非直接手势回调中拒播。
+  // 补充解码完成后还要再次检查 run token / phase，防止旧回调在下一轮流程里迟到播放。
+  return decodeCriticalSfx(name)
+    .then(() => (canStart() ? startCriticalSfx(name) : false))
+    .catch((error) => {
+      console.warn(`${name} 自动音效补充准备失败：`, error);
+      return false;
+    });
 }
 
 let chakaSfxContext = null;
@@ -1270,6 +1310,11 @@ function selectLqCard(event) {
   selectedLqAspectRatio = null;
   updateSelectedLqAspectRatio(button);
   lqButtons.forEach((item) => item.classList.toggle("is-selected", item === button));
+  const selectedFollowUpKey = CARD_FOLLOW_UP_SFX_KEYS[String(selectedLq)] || null;
+  if (selectedFollowUpKey) {
+    // 选卡本身就是 iPhone 的真实点击手势，在这里再次确保对应追加音效已经解锁/解码。
+    prepareCriticalSfxFromGesture([selectedFollowUpKey]).catch(() => undefined);
+  }
   // 选卡只记录卡种与正面真实宽高比，不再自动把腰带里的 KPC 向左推出。
   cardBox.classList.remove("is-kpc-ejected");
 }
@@ -1278,11 +1323,13 @@ async function playSelectedCardVoiceWithLyfg() {
   const cardId = selectedLq ? String(selectedLq) : "";
   const audio = cardId ? cardVoiceAudios[cardId] || null : null;
   const followUpAudio = cardId ? cardVoiceFollowUpAudios[cardId] || null : null;
+  const followUpSfxKey = cardId ? CARD_FOLLOW_UP_SFX_KEYS[cardId] || null : null;
   const runToken = ++cardVoiceRunToken;
 
   // 每次新读卡先停止所有上一轮基础/追加音效。旧 ended listener 即使晚到也会被 token 拦住。
   Object.values(cardVoiceAudios).forEach(stopAudio);
   Object.values(cardVoiceFollowUpAudios).forEach(stopAudio);
+  Object.values(CARD_FOLLOW_UP_SFX_KEYS).forEach(stopCriticalSfx);
 
   clearTimeout(lyfgTimer);
   lyfgTimer = 0;
@@ -1307,7 +1354,17 @@ async function playSelectedCardVoiceWithLyfg() {
     }
     cleanupCurrentRun();
     // j→jianjianglin、q→longquanjianglin、l→longjiao、f→bsj。
-    if (followUpAudio) {
+    if (followUpSfxKey) {
+      startAutomaticSfx(
+        followUpSfxKey,
+        () => runToken === cardVoiceRunToken,
+      ).then((started) => {
+        if (!started && runToken === cardVoiceRunToken) {
+          console.warn(`LQ${cardId} 追加音效 ${followUpSfxKey} 未能启动`);
+        }
+      });
+    } else if (followUpAudio) {
+      // 仅保留给未来没有配置 Web Audio key 的兼容项；当前 4 个追加音效都走 Web Audio。
       playAudio(followUpAudio).catch((error) => {
         console.warn(`LQ${cardId} 追加音效播放失败：`, error);
       });
@@ -1544,6 +1601,13 @@ function handleLzjClick(event) {
   }
 
   const hadInsertedCard = auxCardInserted;
+  if (hadInsertedCard && selectedLq) {
+    const followUpKey = CARD_FOLLOW_UP_SFX_KEYS[String(selectedLq)] || null;
+    if (followUpKey) {
+      // 第二次点击 lzj 是距离“基础卡音效 → 自动追加音效”最近的真实手势，再次 resume + prepare。
+      prepareCriticalSfxFromGesture([followUpKey]).catch(() => undefined);
+    }
+  }
   auxArmed = false;
   auxCardInserted = false;
   scene.classList.remove("is-aux-armed", "is-aux-card-inserted");
@@ -2158,6 +2222,8 @@ function resetToCard() {
   stopAudio(boxingAudio);
   stopAudio(jianjiAudio);
   stopAudio(jiechuAudio);
+  stopCriticalSfx("jiechu");
+  Object.values(CARD_FOLLOW_UP_SFX_KEYS).forEach(stopCriticalSfx);
   stopAudio(huagai1Audio);
   stopAudio(huagai2Audio);
   Object.values(cardVoiceAudios).forEach(stopAudio);
@@ -2651,6 +2717,8 @@ function handleExtractPointerDown(event) {
   cardBox.classList.add("is-extracting");
   syncCenterActionButtons();
   playMochaOnCardBoxPress();
+  // 抽卡盒的 pointerdown 是真实用户手势；提前确保抽出完成时 jiechu 能直接 BufferSource.start()。
+  prepareCriticalSfxFromGesture(["jiechu"]).catch(() => undefined);
   cardBox.setPointerCapture?.(event.pointerId);
 }
 
@@ -2669,8 +2737,14 @@ function handleExtractPointerMove(event) {
 function completeCardExtraction(pointerId) {
   setFlowPhase(FLOW_PHASE.DETACHED);
   // 整个卡盒真正达到抽出阈值时只触发一次 jiechu；未抽够距离不会触发。
-  playAudio(jiechuAudio).catch((error) => {
-    console.warn("jiechu 音效播放失败：", error);
+  // 它发生在拖动流程中，因此使用已解锁的 Web Audio，不再临时请求 HTMLAudio 播放权限。
+  startAutomaticSfx(
+    "jiechu",
+    () => isFlowPhase(FLOW_PHASE.DETACHED),
+  ).then((started) => {
+    if (!started && isFlowPhase(FLOW_PHASE.DETACHED)) {
+      console.warn("jiechu 自动音效未能启动");
+    }
   });
   extractReady = false;
   isExtracting = false;
@@ -2876,8 +2950,12 @@ function startFromCard(event) {
   // 在 iPhone 的真实点击手势中预解锁后续自动音效。
   ydMusicInUse = false;
   insertionAudioInUse = false;
-  // 最早的真实用户点击就解锁并解码 mocha + charu。到第二阶段第一次拖动时只需直接播放。
-  prepareCriticalSfxFromGesture(["mocha", "charu"]).catch(() => undefined);
+  // 最早的真实用户点击就解锁并开始解码所有后续“自动触发”音效。
+  // 这样 jiechu 以及 q/j/l/f 的追加音效即使发生在 pointermove / ended 回调里也有播放权限。
+  prepareCriticalSfxFromGesture([
+    "mocha", "charu", "jiechu",
+    "jianjianglin", "longquanjianglin", "longjiao", "bsj",
+  ]).catch(() => undefined);
   primeAudio(ydMusicAudio, () => ydMusicInUse);
   prepareChakaSfxFromGesture().catch(() => undefined);
 
