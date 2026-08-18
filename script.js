@@ -1,11 +1,11 @@
-/* Ryuki v116: main(47) cardTrigger self-capture drag + guarded state machine + atomic PWA */
+/* Ryuki v117: main(47) stable drag + jiechu extraction SFX + q→longquanjianglin */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "116";
+const PWA_BUILD = "117";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -179,30 +179,32 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=116",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=116",
-  charu: "./assets/audio/charu.mp3?av=116",
-  mocha: "./assets/audio/mocha.mp3?av=116",
-  chouka: "./assets/audio/chouka.mp3?av=116",
-  chaka: "./assets/audio/chaka.mp3?av=116",
-  huagai1: "./assets/audio/huagai1.mp3?av=116",
-  huagai2: "./assets/audio/huagai2.mp3?av=116",
-  guo: "./assets/audio/guo.mp3?av=116",
-  boxing: "./assets/audio/boxing.mp3?av=116",
-  jianji: "./assets/audio/jianji.mp3?av=116",
+  kh1: "./assets/audio/kh1.mp3?av=117",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=117",
+  charu: "./assets/audio/charu.mp3?av=117",
+  mocha: "./assets/audio/mocha.mp3?av=117",
+  chouka: "./assets/audio/chouka.mp3?av=117",
+  chaka: "./assets/audio/chaka.mp3?av=117",
+  huagai1: "./assets/audio/huagai1.mp3?av=117",
+  huagai2: "./assets/audio/huagai2.mp3?av=117",
+  guo: "./assets/audio/guo.mp3?av=117",
+  boxing: "./assets/audio/boxing.mp3?av=117",
+  jianji: "./assets/audio/jianji.mp3?av=117",
+  jiechu: "./assets/audio/jiechu.mp3?av=117",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=116",
-    2: "./assets/audio/q.mp3?av=116",
-    3: "./assets/audio/d.mp3?av=116",
-    4: "./assets/audio/l.mp3?av=116",
-    5: "./assets/audio/f.mp3?av=116",
-    6: "./assets/audio/hc.mp3?av=116",
+    1: "./assets/audio/j.mp3?av=117",
+    2: "./assets/audio/q.mp3?av=117",
+    3: "./assets/audio/d.mp3?av=117",
+    4: "./assets/audio/l.mp3?av=117",
+    5: "./assets/audio/f.mp3?av=117",
+    6: "./assets/audio/hc.mp3?av=117",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=116",
-    4: "./assets/audio/longjiao.mp3?av=116",
-    5: "./assets/audio/bsj.mp3?av=116",
+    1: "./assets/audio/jianjianglin.mp3?av=117",
+    2: "./assets/audio/longquanjianglin.mp3?av=117",
+    4: "./assets/audio/longjiao.mp3?av=117",
+    5: "./assets/audio/bsj.mp3?av=117",
   },
 };
 
@@ -526,6 +528,7 @@ const huagai2Audio = new Audio(AUDIO_CONFIG.huagai2);
 const guoAudio = new Audio(AUDIO_CONFIG.guo);
 const boxingAudio = new Audio(AUDIO_CONFIG.boxing);
 const jianjiAudio = new Audio(AUDIO_CONFIG.jianji);
+const jiechuAudio = new Audio(AUDIO_CONFIG.jiechu);
 const cardVoiceAudios = Object.fromEntries(
   Object.entries(AUDIO_CONFIG.cardVoices).map(([key, src]) => [key, new Audio(src)]),
 );
@@ -543,11 +546,12 @@ huagai2Audio.preload = "auto";
 guoAudio.preload = "auto";
 boxingAudio.preload = "auto";
 jianjiAudio.preload = "auto";
+jiechuAudio.preload = "auto";
 Object.values(cardVoiceAudios).forEach((audio) => { audio.preload = "auto"; });
 Object.values(cardVoiceFollowUpAudios).forEach((audio) => { audio.preload = "auto"; });
 [
   kh1Audio, ydMusicAudio, mochaAudio, choukaAudio, chakaAudio,
-  huagai1Audio, huagai2Audio, guoAudio, ...Object.values(cardVoiceAudios),
+  huagai1Audio, huagai2Audio, guoAudio, jiechuAudio, ...Object.values(cardVoiceAudios),
   ...Object.values(cardVoiceFollowUpAudios),
 ].forEach((audio) => audio.load());
 
@@ -1302,7 +1306,7 @@ async function playSelectedCardVoiceWithLyfg() {
       return;
     }
     cleanupCurrentRun();
-    // j→jianjianglin、l→longjiao、f→bsj；其余卡片没有追加音效。
+    // j→jianjianglin、q→longquanjianglin、l→longjiao、f→bsj。
     if (followUpAudio) {
       playAudio(followUpAudio).catch((error) => {
         console.warn(`LQ${cardId} 追加音效播放失败：`, error);
@@ -2153,6 +2157,7 @@ function resetToCard() {
   stopAudio(guoAudio);
   stopAudio(boxingAudio);
   stopAudio(jianjiAudio);
+  stopAudio(jiechuAudio);
   stopAudio(huagai1Audio);
   stopAudio(huagai2Audio);
   Object.values(cardVoiceAudios).forEach(stopAudio);
@@ -2663,6 +2668,10 @@ function handleExtractPointerMove(event) {
 
 function completeCardExtraction(pointerId) {
   setFlowPhase(FLOW_PHASE.DETACHED);
+  // 整个卡盒真正达到抽出阈值时只触发一次 jiechu；未抽够距离不会触发。
+  playAudio(jiechuAudio).catch((error) => {
+    console.warn("jiechu 音效播放失败：", error);
+  });
   extractReady = false;
   isExtracting = false;
   cardWasExtracted = true;

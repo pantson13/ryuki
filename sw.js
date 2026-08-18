@@ -1,7 +1,7 @@
-// Ryuki v116: atomic core update. A build is either complete or it never activates.
-const BUILD = "116";
+// Ryuki v117: atomic core update. A build is either complete or it never activates.
+const BUILD = "117";
 const CACHE_PREFIX = "ryuki-pwa-";
-const CACHE_NAME = "ryuki-pwa-v116-stable";
+const CACHE_NAME = "ryuki-pwa-v117-stable";
 const INSTALL_CACHE_NAME = `${CACHE_NAME}-install`;
 const INDEX_FALLBACK = `./index.html?appv=${BUILD}`;
 
@@ -62,6 +62,8 @@ const OPTIONAL_ASSETS = [
   `./assets/audio/guo.mp3?av=${BUILD}`,
   `./assets/audio/boxing.mp3?av=${BUILD}`,
   `./assets/audio/jianji.mp3?av=${BUILD}`,
+  `./assets/audio/jiechu.mp3?av=${BUILD}`,
+  `./assets/audio/longquanjianglin.mp3?av=${BUILD}`,
   "./assets/icons/icon-192.png?v=50",
   "./assets/icons/icon-512.png?v=50",
   "./assets/icons/icon-maskable-512.png?v=50",
@@ -163,7 +165,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // 带 ?av=BUILD 的音频属于不可变 build 资源：Cache First。
-  // 这样同一次 v116 绝不会一会播放安装时的 charu、一会又被网络上的另一份覆盖。
+  // 这样同一次 v117 绝不会一会播放安装时的 charu、一会又被网络上的另一份覆盖。
   if (requestUrl.pathname.includes("/assets/audio/") && requestUrl.searchParams.get("av") === BUILD) {
     const cacheKey = canonicalRequest(request);
     event.respondWith((async () => {
