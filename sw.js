@@ -1,12 +1,41 @@
-// Ryuki v122: atomic core update + shatter-synced jiechu.
-const BUILD = "122";
+// Ryuki v123: atomic core update + full current-audio resync.
+const BUILD = "123";
 const CACHE_PREFIX = "ryuki-pwa-";
-const CACHE_NAME = "ryuki-pwa-v122-stable";
+const CACHE_NAME = "ryuki-pwa-v123-stable";
 const INSTALL_CACHE_NAME = `${CACHE_NAME}-install`;
 const INDEX_FALLBACK = `./index.html?appv=${BUILD}`;
 
 // 主流程所需文件必须作为同一个完整版本安装成功。
 // 任意一项失败，install 直接失败，旧 Service Worker 与旧缓存继续完整运行。
+const CURRENT_AUDIO_ASSETS = [
+  `./assets/audio/kh1.mp3?av=${BUILD}`,
+  `./assets/audio/ydmusic.mp3?av=${BUILD}`,
+  `./assets/audio/charu.mp3?av=${BUILD}`,
+  `./assets/audio/mocha.mp3?av=${BUILD}`,
+  `./assets/audio/chouka.mp3?av=${BUILD}`,
+  `./assets/audio/chaka.mp3?av=${BUILD}`,
+  `./assets/audio/huagai1.mp3?av=${BUILD}`,
+  `./assets/audio/huagai2.mp3?av=${BUILD}`,
+  `./assets/audio/j.mp3?av=${BUILD}`,
+  `./assets/audio/q.mp3?av=${BUILD}`,
+  `./assets/audio/d.mp3?av=${BUILD}`,
+  `./assets/audio/l.mp3?av=${BUILD}`,
+  `./assets/audio/f.mp3?av=${BUILD}`,
+  `./assets/audio/hc.mp3?av=${BUILD}`,
+  `./assets/audio/jianjianglin.mp3?av=${BUILD}`,
+  `./assets/audio/longquanjianglin.mp3?av=${BUILD}`,
+  `./assets/audio/longjiao.mp3?av=${BUILD}`,
+  `./assets/audio/bsj.mp3?av=${BUILD}`,
+  `./assets/audio/guo.mp3?av=${BUILD}`,
+  `./assets/audio/huhuan.mp3?av=${BUILD}`,
+  `./assets/audio/jingshijie.mp3?av=${BUILD}`,
+  `./assets/audio/timeout.mp3?av=${BUILD}`,
+  `./assets/audio/jianji.mp3?av=${BUILD}`,
+  `./assets/audio/jiechu.mp3?av=${BUILD}`,
+];
+
+// v123 做一次全音频原子同步：当前仓库已有的 MP3 必须全部拉到同一 build。
+// 任意一个失败，v123 不接管，避免 PWA 出现新代码 + 旧音频混用。
 const REQUIRED_ASSETS = [
   INDEX_FALLBACK,
   `./manifest.webmanifest?v=${BUILD}`,
@@ -27,19 +56,10 @@ const REQUIRED_ASSETS = [
   "./assets/images/khfg.png",
   "./assets/images/ydfg.png",
 
-  `./assets/audio/kh1.mp3?av=${BUILD}`,
-  `./assets/audio/ydmusic.mp3?av=${BUILD}`,
-  `./assets/audio/charu.mp3?av=${BUILD}`,
-  `./assets/audio/mocha.mp3?av=${BUILD}`,
-  // v122 自动触发音效必须与代码同 build 原子安装，避免“脚本新了但音效仍缺”的半版本。
-  `./assets/audio/jiechu.mp3?av=${BUILD}`,
-  `./assets/audio/jianjianglin.mp3?av=${BUILD}`,
-  `./assets/audio/longquanjianglin.mp3?av=${BUILD}`,
-  `./assets/audio/longjiao.mp3?av=${BUILD}`,
-  `./assets/audio/bsj.mp3?av=${BUILD}`,
+  ...CURRENT_AUDIO_ASSETS,
 ];
 
-// 不影响第二阶段/整卡盒主流程的资源允许后续按需缓存。
+// 非核心图片继续允许按需缓存。boxing.mp3 当前仓库仍不存在，按之前约定继续忽略。
 const OPTIONAL_ASSETS = [
   "./assets/images/lq1.png",
   "./assets/images/lq2.png",
@@ -52,22 +72,7 @@ const OPTIONAL_ASSETS = [
   "./assets/images/lzj2.png",
   "./assets/images/lzj3.png",
   "./assets/images/lyfg.png",
-  `./assets/audio/chouka.mp3?av=${BUILD}`,
-  `./assets/audio/chaka.mp3?av=${BUILD}`,
-  `./assets/audio/huagai1.mp3?av=${BUILD}`,
-  `./assets/audio/huagai2.mp3?av=${BUILD}`,
-  `./assets/audio/j.mp3?av=${BUILD}`,
-  `./assets/audio/q.mp3?av=${BUILD}`,
-  `./assets/audio/d.mp3?av=${BUILD}`,
-  `./assets/audio/l.mp3?av=${BUILD}`,
-  `./assets/audio/f.mp3?av=${BUILD}`,
-  `./assets/audio/hc.mp3?av=${BUILD}`,
-  `./assets/audio/guo.mp3?av=${BUILD}`,
-  `./assets/audio/huhuan.mp3?av=${BUILD}`,
-  `./assets/audio/jingshijie.mp3?av=${BUILD}`,
-  `./assets/audio/timeout.mp3?av=${BUILD}`,
   `./assets/audio/boxing.mp3?av=${BUILD}`,
-  `./assets/audio/jianji.mp3?av=${BUILD}`,
   "./assets/icons/icon-192.png?v=50",
   "./assets/icons/icon-512.png?v=50",
   "./assets/icons/icon-maskable-512.png?v=50",
@@ -169,7 +174,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // 带 ?av=BUILD 的音频属于不可变 build 资源：Cache First。
-  // 这样同一次 v122 绝不会一会播放安装时的 charu、一会又被网络上的另一份覆盖。
+  // 这样同一次 v123 绝不会一会播放安装时的 charu、一会又被网络上的另一份覆盖。
   if (requestUrl.pathname.includes("/assets/audio/") && requestUrl.searchParams.get("av") === BUILD) {
     const cacheKey = canonicalRequest(request);
     event.respondWith((async () => {
