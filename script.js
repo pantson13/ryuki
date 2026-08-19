@@ -1,11 +1,11 @@
-/* Ryuki v119: stable main(47) drag + jiechu synced to shatter start */
+/* Ryuki v120: stable main(47) drag + jiechu synced to shatter start */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "119";
+const PWA_BUILD = "120";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -179,32 +179,32 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=119",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=119",
-  charu: "./assets/audio/charu.mp3?av=119",
-  mocha: "./assets/audio/mocha.mp3?av=119",
-  chouka: "./assets/audio/chouka.mp3?av=119",
-  chaka: "./assets/audio/chaka.mp3?av=119",
-  huagai1: "./assets/audio/huagai1.mp3?av=119",
-  huagai2: "./assets/audio/huagai2.mp3?av=119",
-  guo: "./assets/audio/guo.mp3?av=119",
-  boxing: "./assets/audio/boxing.mp3?av=119",
-  jianji: "./assets/audio/jianji.mp3?av=119",
-  jiechu: "./assets/audio/jiechu.mp3?av=119",
+  kh1: "./assets/audio/kh1.mp3?av=120",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=120",
+  charu: "./assets/audio/charu.mp3?av=120",
+  mocha: "./assets/audio/mocha.mp3?av=120",
+  chouka: "./assets/audio/chouka.mp3?av=120",
+  chaka: "./assets/audio/chaka.mp3?av=120",
+  huagai1: "./assets/audio/huagai1.mp3?av=120",
+  huagai2: "./assets/audio/huagai2.mp3?av=120",
+  guo: "./assets/audio/guo.mp3?av=120",
+  boxing: "./assets/audio/boxing.mp3?av=120",
+  jianji: "./assets/audio/jianji.mp3?av=120",
+  jiechu: "./assets/audio/jiechu.mp3?av=120",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=119",
-    2: "./assets/audio/q.mp3?av=119",
-    3: "./assets/audio/d.mp3?av=119",
-    4: "./assets/audio/l.mp3?av=119",
-    5: "./assets/audio/f.mp3?av=119",
-    6: "./assets/audio/hc.mp3?av=119",
+    1: "./assets/audio/j.mp3?av=120",
+    2: "./assets/audio/q.mp3?av=120",
+    3: "./assets/audio/d.mp3?av=120",
+    4: "./assets/audio/l.mp3?av=120",
+    5: "./assets/audio/f.mp3?av=120",
+    6: "./assets/audio/hc.mp3?av=120",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=119",
-    2: "./assets/audio/longquanjianglin.mp3?av=119",
-    4: "./assets/audio/longjiao.mp3?av=119",
-    5: "./assets/audio/bsj.mp3?av=119",
+    1: "./assets/audio/jianjianglin.mp3?av=120",
+    2: "./assets/audio/longquanjianglin.mp3?av=120",
+    4: "./assets/audio/longjiao.mp3?av=120",
+    5: "./assets/audio/bsj.mp3?av=120",
   },
 };
 
@@ -1544,12 +1544,14 @@ function runLzjReturnedActions(hadInsertedCard, token) {
 
   cancelLzjReturnWait();
 
-  // 新规则：第2层真正复位到原始位置后，才触发 huagai2。
-  playAudio(huagai2Audio).catch((error) => {
-    console.warn("huagai2 音效播放失败：", error);
+  // lzj 音效只由“龙召机内是否有卡”决定：空载始终 huagai1；有卡才 huagai2。
+  const returnAudio = hadInsertedCard ? huagai2Audio : huagai1Audio;
+  const returnAudioName = hadInsertedCard ? "huagai2" : "huagai1";
+  playAudio(returnAudio).catch((error) => {
+    console.warn(`${returnAudioName} 音效播放失败：`, error);
   });
 
-  // 有卡时仍保持 huagai2 -> 读卡音效 的原顺序，只是整体延后到复位完成后。
+  // 只有有卡时才保持 huagai2 -> 读卡音效 的原顺序，且都等 lzj 真正复位完成后执行。
   if (hadInsertedCard && selectedLq) {
     auxResultPlayed = true;
     scene.classList.add("is-aux-playing");
@@ -1597,7 +1599,7 @@ function handleLzjClick(event) {
   if (!flowStarted || !auxOpen || auxReturning) return;
   prepareChakaSfxFromGesture().catch(() => undefined);
 
-  // 龙召机允许空载开合：第一次下滑 huagai1；第二次先复位，复位完成才 huagai2。
+  // 龙召机允许空载开合：没插卡时每次点击都只触发 huagai1；插卡后复位完成才触发 huagai2。
   if (!auxArmed) {
     auxArmed = true;
     auxResultPlayed = false;
@@ -1625,7 +1627,7 @@ function handleLzjClick(event) {
   auxDock?.classList.remove("is-armed", "is-card-inserted");
   lzjButton?.classList.remove("is-result-ready");
 
-  // 清掉 class 的这一刻开始回位。huagai2 不在这里播放，而是等 transform 真正复位完成。
+  // 清掉 class 的这一刻开始回位。最终音效等 transform 真正复位完成后，再按“有卡=huagai2 / 无卡=huagai1”决定。
   waitForLzjReturn(hadInsertedCard);
 }
 
