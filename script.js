@@ -1,11 +1,11 @@
-/* Ryuki v123: stable main(47) drag + full audio resync */
+/* Ryuki v124: stable main(47) drag + full audio resync */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "123";
+const PWA_BUILD = "124";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -179,35 +179,35 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=123",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=123",
-  charu: "./assets/audio/charu.mp3?av=123",
-  mocha: "./assets/audio/mocha.mp3?av=123",
-  chouka: "./assets/audio/chouka.mp3?av=123",
-  chaka: "./assets/audio/chaka.mp3?av=123",
-  huagai1: "./assets/audio/huagai1.mp3?av=123",
-  huagai2: "./assets/audio/huagai2.mp3?av=123",
-  guo: "./assets/audio/guo.mp3?av=123",
-  huhuan: "./assets/audio/huhuan.mp3?av=123",
-  jingshijie: "./assets/audio/jingshijie.mp3?av=123",
-  timeout: "./assets/audio/timeout.mp3?av=123",
-  boxing: "./assets/audio/boxing.mp3?av=123",
-  jianji: "./assets/audio/jianji.mp3?av=123",
-  jiechu: "./assets/audio/jiechu.mp3?av=123",
+  kh1: "./assets/audio/kh1.mp3?av=124",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=124",
+  charu: "./assets/audio/charu.mp3?av=124",
+  mocha: "./assets/audio/mocha.mp3?av=124",
+  chouka: "./assets/audio/chouka.mp3?av=124",
+  chaka: "./assets/audio/chaka.mp3?av=124",
+  huagai1: "./assets/audio/huagai1.mp3?av=124",
+  huagai2: "./assets/audio/huagai2.mp3?av=124",
+  guo: "./assets/audio/guo.mp3?av=124",
+  huhuan: "./assets/audio/huhuan.mp3?av=124",
+  jingshijie: "./assets/audio/jingshijie.mp3?av=124",
+  timeout: "./assets/audio/timeout.mp3?av=124",
+  boxing: "./assets/audio/boxing.mp3?av=124",
+  jianji: "./assets/audio/jianji.mp3?av=124",
+  jiechu: "./assets/audio/jiechu.mp3?av=124",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=123",
-    2: "./assets/audio/q.mp3?av=123",
-    3: "./assets/audio/d.mp3?av=123",
-    4: "./assets/audio/l.mp3?av=123",
-    5: "./assets/audio/f.mp3?av=123",
-    6: "./assets/audio/hc.mp3?av=123",
+    1: "./assets/audio/j.mp3?av=124",
+    2: "./assets/audio/q.mp3?av=124",
+    3: "./assets/audio/d.mp3?av=124",
+    4: "./assets/audio/l.mp3?av=124",
+    5: "./assets/audio/f.mp3?av=124",
+    6: "./assets/audio/hc.mp3?av=124",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=123",
-    2: "./assets/audio/longquanjianglin.mp3?av=123",
-    4: "./assets/audio/longjiao.mp3?av=123",
-    5: "./assets/audio/bsj.mp3?av=123",
+    1: "./assets/audio/jianjianglin.mp3?av=124",
+    2: "./assets/audio/longquanjianglin.mp3?av=124",
+    4: "./assets/audio/longjiao.mp3?av=124",
+    5: "./assets/audio/bsj.mp3?av=124",
   },
 };
 
@@ -1490,7 +1490,7 @@ function resetAuxDevice(options = {}) {
   hideInsertedCardInSlot();
   lzjButton?.classList.remove("is-result-ready");
   auxCardCoverMask?.classList.remove("is-visible");
-  if (auxTransferCardImage) auxTransferCardImage.src = "./assets/images/kpc.png";
+  if (auxTransferCardImage) auxTransferCardImage.src = "./assets/images/kpc.png?iv=124";
   lyfgImage?.classList.remove("is-active");
   if (auxTransferCard) {
     auxTransferCard.style.removeProperty("--aux-card-x");
@@ -1676,7 +1676,7 @@ function handoffAuxKpcToFloatingCard(event) {
   const top = cardRect.top - auxDragLayerViewportOrigin.top;
 
   const selectedSrc = getSelectedLqImageSrc();
-  if (auxTransferCardImage) auxTransferCardImage.src = selectedSrc || "./assets/images/kpc.png";
+  if (auxTransferCardImage) auxTransferCardImage.src = selectedSrc || "./assets/images/kpc.png?iv=124";
   auxTransferCard.classList.remove("is-consumed", "is-inserted");
   lzjButton?.classList.remove("is-result-ready");
 
@@ -1968,7 +1968,7 @@ function hideInsertedCardInSlot() {
   lzjCardSlotMask?.classList.remove("is-active");
   if (lzjInsertedCard) {
     lzjInsertedCard.classList.remove("is-auto-intake");
-    lzjInsertedCard.src = "./assets/images/kpc.png";
+    lzjInsertedCard.src = "./assets/images/kpc.png?iv=124";
     lzjInsertedCard.style.removeProperty("width");
     lzjInsertedCard.style.removeProperty("transform");
   }
