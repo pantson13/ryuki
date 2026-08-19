@@ -1,11 +1,11 @@
-/* Ryuki v121: stable main(47) drag + jiechu synced to shatter start */
+/* Ryuki v122: stable main(47) drag + jiechu synced to shatter start */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "121";
+const PWA_BUILD = "122";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -179,32 +179,35 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=121",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=121",
-  charu: "./assets/audio/charu.mp3?av=121",
-  mocha: "./assets/audio/mocha.mp3?av=121",
-  chouka: "./assets/audio/chouka.mp3?av=121",
-  chaka: "./assets/audio/chaka.mp3?av=121",
-  huagai1: "./assets/audio/huagai1.mp3?av=121",
-  huagai2: "./assets/audio/huagai2.mp3?av=121",
-  guo: "./assets/audio/guo.mp3?av=121",
-  boxing: "./assets/audio/boxing.mp3?av=121",
-  jianji: "./assets/audio/jianji.mp3?av=121",
-  jiechu: "./assets/audio/jiechu.mp3?av=121",
+  kh1: "./assets/audio/kh1.mp3?av=122",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=122",
+  charu: "./assets/audio/charu.mp3?av=122",
+  mocha: "./assets/audio/mocha.mp3?av=122",
+  chouka: "./assets/audio/chouka.mp3?av=122",
+  chaka: "./assets/audio/chaka.mp3?av=122",
+  huagai1: "./assets/audio/huagai1.mp3?av=122",
+  huagai2: "./assets/audio/huagai2.mp3?av=122",
+  guo: "./assets/audio/guo.mp3?av=122",
+  huhuan: "./assets/audio/huhuan.mp3?av=122",
+  jingshijie: "./assets/audio/jingshijie.mp3?av=122",
+  timeout: "./assets/audio/timeout.mp3?av=122",
+  boxing: "./assets/audio/boxing.mp3?av=122",
+  jianji: "./assets/audio/jianji.mp3?av=122",
+  jiechu: "./assets/audio/jiechu.mp3?av=122",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=121",
-    2: "./assets/audio/q.mp3?av=121",
-    3: "./assets/audio/d.mp3?av=121",
-    4: "./assets/audio/l.mp3?av=121",
-    5: "./assets/audio/f.mp3?av=121",
-    6: "./assets/audio/hc.mp3?av=121",
+    1: "./assets/audio/j.mp3?av=122",
+    2: "./assets/audio/q.mp3?av=122",
+    3: "./assets/audio/d.mp3?av=122",
+    4: "./assets/audio/l.mp3?av=122",
+    5: "./assets/audio/f.mp3?av=122",
+    6: "./assets/audio/hc.mp3?av=122",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=121",
-    2: "./assets/audio/longquanjianglin.mp3?av=121",
-    4: "./assets/audio/longjiao.mp3?av=121",
-    5: "./assets/audio/bsj.mp3?av=121",
+    1: "./assets/audio/jianjianglin.mp3?av=122",
+    2: "./assets/audio/longquanjianglin.mp3?av=122",
+    4: "./assets/audio/longjiao.mp3?av=122",
+    5: "./assets/audio/bsj.mp3?av=122",
   },
 };
 
@@ -566,6 +569,9 @@ const chakaAudio = new Audio(AUDIO_CONFIG.chaka);
 const huagai1Audio = new Audio(AUDIO_CONFIG.huagai1);
 const huagai2Audio = new Audio(AUDIO_CONFIG.huagai2);
 const guoAudio = new Audio(AUDIO_CONFIG.guo);
+const huhuanAudio = new Audio(AUDIO_CONFIG.huhuan);
+const jingshijieAudio = new Audio(AUDIO_CONFIG.jingshijie);
+const timeoutAudio = new Audio(AUDIO_CONFIG.timeout);
 const boxingAudio = new Audio(AUDIO_CONFIG.boxing);
 const jianjiAudio = new Audio(AUDIO_CONFIG.jianji);
 const jiechuAudio = new Audio(AUDIO_CONFIG.jiechu);
@@ -584,6 +590,9 @@ chakaAudio.preload = "auto";
 huagai1Audio.preload = "auto";
 huagai2Audio.preload = "auto";
 guoAudio.preload = "auto";
+huhuanAudio.preload = "auto";
+jingshijieAudio.preload = "auto";
+timeoutAudio.preload = "auto";
 boxingAudio.preload = "auto";
 jianjiAudio.preload = "auto";
 jiechuAudio.preload = "auto";
@@ -591,7 +600,7 @@ Object.values(cardVoiceAudios).forEach((audio) => { audio.preload = "auto"; });
 Object.values(cardVoiceFollowUpAudios).forEach((audio) => { audio.preload = "auto"; });
 [
   kh1Audio, ydMusicAudio, mochaAudio, choukaAudio, chakaAudio,
-  huagai1Audio, huagai2Audio, guoAudio, jiechuAudio, ...Object.values(cardVoiceAudios),
+  huagai1Audio, huagai2Audio, guoAudio, huhuanAudio, jingshijieAudio, timeoutAudio, jiechuAudio, ...Object.values(cardVoiceAudios),
   ...Object.values(cardVoiceFollowUpAudios),
 ].forEach((audio) => audio.load());
 
@@ -1593,7 +1602,7 @@ function handleLzjClick(event) {
   if (!flowStarted || !auxOpen || auxReturning) return;
   prepareChakaSfxFromGesture().catch(() => undefined);
 
-  // v121：音效完全由“点击这一刻龙召机里有没有卡”决定，并在真实点击手势内立即播放。
+  // 音效完全由“点击这一刻龙召机里有没有卡”决定，并在真实点击手势内立即播放。
   // 空载无论第几次点击都是 huagai1；只有卡片已经真正插入龙召机时才是 huagai2。
   const hadInsertedCard = Boolean(auxCardInserted);
   const clickAudio = hadInsertedCard ? huagai2Audio : huagai1Audio;
@@ -2230,6 +2239,9 @@ function resetToCard() {
   stopAudio(choukaAudio);
   stopAudio(chakaAudio);
   stopAudio(guoAudio);
+  stopAudio(huhuanAudio);
+  stopAudio(jingshijieAudio);
+  stopAudio(timeoutAudio);
   stopAudio(boxingAudio);
   stopAudio(jianjiAudio);
   stopAudio(jiechuAudio);
@@ -3074,6 +3086,27 @@ sideButtons[0]?.addEventListener("click", (event) => {
   event.stopPropagation();
   playAudio(guoAudio).catch((error) => {
     console.warn("guo 音效播放失败：", error);
+  });
+});
+sideButtons[1]?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  playAudio(huhuanAudio).catch((error) => {
+    console.warn("huhuan 音效播放失败：", error);
+  });
+});
+sideButtons[2]?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  playAudio(jingshijieAudio).catch((error) => {
+    console.warn("jingshijie 音效播放失败：", error);
+  });
+});
+sideButtons[3]?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  playAudio(timeoutAudio).catch((error) => {
+    console.warn("timeout 音效播放失败：", error);
   });
 });
 centerActionButtons[0]?.addEventListener("click", (event) => {
