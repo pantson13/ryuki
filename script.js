@@ -1,11 +1,11 @@
-/* Ryuki v118: stable main(47) drag + Web Audio automatic SFX */
+/* Ryuki v119: stable main(47) drag + jiechu synced to shatter start */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "118";
+const PWA_BUILD = "119";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -179,32 +179,32 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=118",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=118",
-  charu: "./assets/audio/charu.mp3?av=118",
-  mocha: "./assets/audio/mocha.mp3?av=118",
-  chouka: "./assets/audio/chouka.mp3?av=118",
-  chaka: "./assets/audio/chaka.mp3?av=118",
-  huagai1: "./assets/audio/huagai1.mp3?av=118",
-  huagai2: "./assets/audio/huagai2.mp3?av=118",
-  guo: "./assets/audio/guo.mp3?av=118",
-  boxing: "./assets/audio/boxing.mp3?av=118",
-  jianji: "./assets/audio/jianji.mp3?av=118",
-  jiechu: "./assets/audio/jiechu.mp3?av=118",
+  kh1: "./assets/audio/kh1.mp3?av=119",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=119",
+  charu: "./assets/audio/charu.mp3?av=119",
+  mocha: "./assets/audio/mocha.mp3?av=119",
+  chouka: "./assets/audio/chouka.mp3?av=119",
+  chaka: "./assets/audio/chaka.mp3?av=119",
+  huagai1: "./assets/audio/huagai1.mp3?av=119",
+  huagai2: "./assets/audio/huagai2.mp3?av=119",
+  guo: "./assets/audio/guo.mp3?av=119",
+  boxing: "./assets/audio/boxing.mp3?av=119",
+  jianji: "./assets/audio/jianji.mp3?av=119",
+  jiechu: "./assets/audio/jiechu.mp3?av=119",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=118",
-    2: "./assets/audio/q.mp3?av=118",
-    3: "./assets/audio/d.mp3?av=118",
-    4: "./assets/audio/l.mp3?av=118",
-    5: "./assets/audio/f.mp3?av=118",
-    6: "./assets/audio/hc.mp3?av=118",
+    1: "./assets/audio/j.mp3?av=119",
+    2: "./assets/audio/q.mp3?av=119",
+    3: "./assets/audio/d.mp3?av=119",
+    4: "./assets/audio/l.mp3?av=119",
+    5: "./assets/audio/f.mp3?av=119",
+    6: "./assets/audio/hc.mp3?av=119",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=118",
-    2: "./assets/audio/longquanjianglin.mp3?av=118",
-    4: "./assets/audio/longjiao.mp3?av=118",
-    5: "./assets/audio/bsj.mp3?av=118",
+    1: "./assets/audio/jianjianglin.mp3?av=119",
+    2: "./assets/audio/longquanjianglin.mp3?av=119",
+    4: "./assets/audio/longjiao.mp3?av=119",
+    5: "./assets/audio/bsj.mp3?av=119",
   },
 };
 
@@ -1161,6 +1161,17 @@ function startMirrorShatter() {
   const durationMs = ANIMATION_CONFIG.shatter.duration * 1000;
   scene.classList.add("is-shattering");
   shatterCanvas.classList.add("is-active");
+
+  // jiechu 只与“破碎动画真正启动”绑定。卡盒拖出本身不再触发该音效。
+  // 此时 is-shattering 已提交，声音和第一帧破碎使用同一个业务节点。
+  startAutomaticSfx(
+    "jiechu",
+    () => flowStarted && scene.classList.contains("is-shattering"),
+  ).then((started) => {
+    if (!started && scene.classList.contains("is-shattering")) {
+      console.warn("jiechu 破碎同步音效未能启动");
+    }
+  });
 
   function drawFrame(elapsed) {
     const overall = Math.min(1, Math.max(0, elapsed / durationMs));
@@ -2717,7 +2728,8 @@ function handleExtractPointerDown(event) {
   cardBox.classList.add("is-extracting");
   syncCenterActionButtons();
   playMochaOnCardBoxPress();
-  // 抽卡盒的 pointerdown 是真实用户手势；提前确保抽出完成时 jiechu 能直接 BufferSource.start()。
+  // 这里只利用真实 pointerdown 提前解锁/解码 jiechu，不播放。
+  // 真正的播放入口只有 startMirrorShatter() 的 is-shattering 启动节点。
   prepareCriticalSfxFromGesture(["jiechu"]).catch(() => undefined);
   cardBox.setPointerCapture?.(event.pointerId);
 }
@@ -2736,16 +2748,6 @@ function handleExtractPointerMove(event) {
 
 function completeCardExtraction(pointerId) {
   setFlowPhase(FLOW_PHASE.DETACHED);
-  // 整个卡盒真正达到抽出阈值时只触发一次 jiechu；未抽够距离不会触发。
-  // 它发生在拖动流程中，因此使用已解锁的 Web Audio，不再临时请求 HTMLAudio 播放权限。
-  startAutomaticSfx(
-    "jiechu",
-    () => isFlowPhase(FLOW_PHASE.DETACHED),
-  ).then((started) => {
-    if (!started && isFlowPhase(FLOW_PHASE.DETACHED)) {
-      console.warn("jiechu 自动音效未能启动");
-    }
-  });
   extractReady = false;
   isExtracting = false;
   cardWasExtracted = true;
