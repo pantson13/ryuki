@@ -1,11 +1,11 @@
-/* Ryuki v124: stable main(47) drag + full audio resync */
+/* Ryuki v125: stable main(47) drag + full audio resync */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "124";
+const PWA_BUILD = "125";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -68,19 +68,20 @@ const ANIMATION_CONFIG = {
     duration: 0.45,
   },
   sideButtons: {
-    // 左下角常驻 4 个圆形按钮：x / y 为第一颗按钮中心相对场景中心的位置。
-    x: -520,
-    y: 420,
-    size: 84,
-    gap: 20,
+    // 原左下角 4 个按钮移到中间第二排。x / y 为整排左上角相对场景中心的位置。
+    // 157 对应 an5-an8 图片原始尺寸；80 的 gap 让四列中心间距约为 237。
+    x: -454,
+    y: -34,
+    size: 157,
+    gap: 80,
   },
   centerButtons: {
-    // bg4 完整结束后出现的两颗圆形按钮。group x / y 为整体相对场景中心的位置。
-    // button1 / button2 的 x / y / size 都可单独调整，方便后续替换图标。
+    // 第一排按设计图左对齐到前两列：an1 / an2。
+    // 图标按原始 157 × 157 尺寸参与 SOURCE_SCENE 缩放，不额外放大或缩小。
     x: 0,
-    y: 40,
-    button1: { x: -90, y: 0, size: 110 },
-    button2: { x: 90, y: 0, size: 110 },
+    y: -200,
+    button1: { x: -375, y: 0, size: 157 },
+    button2: { x: -138, y: 0, size: 157 },
   },
   auxDevice: {
     // BS 按钮。x / y / width 可自行调整。
@@ -179,35 +180,35 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=124",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=124",
-  charu: "./assets/audio/charu.mp3?av=124",
-  mocha: "./assets/audio/mocha.mp3?av=124",
-  chouka: "./assets/audio/chouka.mp3?av=124",
-  chaka: "./assets/audio/chaka.mp3?av=124",
-  huagai1: "./assets/audio/huagai1.mp3?av=124",
-  huagai2: "./assets/audio/huagai2.mp3?av=124",
-  guo: "./assets/audio/guo.mp3?av=124",
-  huhuan: "./assets/audio/huhuan.mp3?av=124",
-  jingshijie: "./assets/audio/jingshijie.mp3?av=124",
-  timeout: "./assets/audio/timeout.mp3?av=124",
-  boxing: "./assets/audio/boxing.mp3?av=124",
-  jianji: "./assets/audio/jianji.mp3?av=124",
-  jiechu: "./assets/audio/jiechu.mp3?av=124",
+  kh1: "./assets/audio/kh1.mp3?av=125",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=125",
+  charu: "./assets/audio/charu.mp3?av=125",
+  mocha: "./assets/audio/mocha.mp3?av=125",
+  chouka: "./assets/audio/chouka.mp3?av=125",
+  chaka: "./assets/audio/chaka.mp3?av=125",
+  huagai1: "./assets/audio/huagai1.mp3?av=125",
+  huagai2: "./assets/audio/huagai2.mp3?av=125",
+  guo: "./assets/audio/guo.mp3?av=125",
+  huhuan: "./assets/audio/huhuan.mp3?av=125",
+  jingshijie: "./assets/audio/jingshijie.mp3?av=125",
+  timeout: "./assets/audio/timeout.mp3?av=125",
+  boxing: "./assets/audio/boxing.mp3?av=125",
+  jianji: "./assets/audio/jianji.mp3?av=125",
+  jiechu: "./assets/audio/jiechu.mp3?av=125",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=124",
-    2: "./assets/audio/q.mp3?av=124",
-    3: "./assets/audio/d.mp3?av=124",
-    4: "./assets/audio/l.mp3?av=124",
-    5: "./assets/audio/f.mp3?av=124",
-    6: "./assets/audio/hc.mp3?av=124",
+    1: "./assets/audio/j.mp3?av=125",
+    2: "./assets/audio/q.mp3?av=125",
+    3: "./assets/audio/d.mp3?av=125",
+    4: "./assets/audio/l.mp3?av=125",
+    5: "./assets/audio/f.mp3?av=125",
+    6: "./assets/audio/hc.mp3?av=125",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=124",
-    2: "./assets/audio/longquanjianglin.mp3?av=124",
-    4: "./assets/audio/longjiao.mp3?av=124",
-    5: "./assets/audio/bsj.mp3?av=124",
+    1: "./assets/audio/jianjianglin.mp3?av=125",
+    2: "./assets/audio/longquanjianglin.mp3?av=125",
+    4: "./assets/audio/longjiao.mp3?av=125",
+    5: "./assets/audio/bsj.mp3?av=125",
   },
 };
 
@@ -1490,7 +1491,7 @@ function resetAuxDevice(options = {}) {
   hideInsertedCardInSlot();
   lzjButton?.classList.remove("is-result-ready");
   auxCardCoverMask?.classList.remove("is-visible");
-  if (auxTransferCardImage) auxTransferCardImage.src = "./assets/images/kpc.png?iv=124";
+  if (auxTransferCardImage) auxTransferCardImage.src = "./assets/images/kpc.png?iv=125";
   lyfgImage?.classList.remove("is-active");
   if (auxTransferCard) {
     auxTransferCard.style.removeProperty("--aux-card-x");
@@ -1676,7 +1677,7 @@ function handoffAuxKpcToFloatingCard(event) {
   const top = cardRect.top - auxDragLayerViewportOrigin.top;
 
   const selectedSrc = getSelectedLqImageSrc();
-  if (auxTransferCardImage) auxTransferCardImage.src = selectedSrc || "./assets/images/kpc.png?iv=124";
+  if (auxTransferCardImage) auxTransferCardImage.src = selectedSrc || "./assets/images/kpc.png?iv=125";
   auxTransferCard.classList.remove("is-consumed", "is-inserted");
   lzjButton?.classList.remove("is-result-ready");
 
@@ -1968,7 +1969,7 @@ function hideInsertedCardInSlot() {
   lzjCardSlotMask?.classList.remove("is-active");
   if (lzjInsertedCard) {
     lzjInsertedCard.classList.remove("is-auto-intake");
-    lzjInsertedCard.src = "./assets/images/kpc.png?iv=124";
+    lzjInsertedCard.src = "./assets/images/kpc.png?iv=125";
     lzjInsertedCard.style.removeProperty("width");
     lzjInsertedCard.style.removeProperty("transform");
   }
