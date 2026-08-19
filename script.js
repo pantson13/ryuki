@@ -1,11 +1,11 @@
-/* Ryuki v120: stable main(47) drag + jiechu synced to shatter start */
+/* Ryuki v121: stable main(47) drag + jiechu synced to shatter start */
 
 /*
  * iPhone 16 Pro Max 参数区
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "120";
+const PWA_BUILD = "121";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -179,32 +179,32 @@ const ANIMATION_CONFIG = {
 
 // 音效文件放在仓库 assets/audio/ 下；如文件格式不同，只改这里即可。
 const AUDIO_CONFIG = {
-  kh1: "./assets/audio/kh1.mp3?av=120",
-  ydmusic: "./assets/audio/ydmusic.mp3?av=120",
-  charu: "./assets/audio/charu.mp3?av=120",
-  mocha: "./assets/audio/mocha.mp3?av=120",
-  chouka: "./assets/audio/chouka.mp3?av=120",
-  chaka: "./assets/audio/chaka.mp3?av=120",
-  huagai1: "./assets/audio/huagai1.mp3?av=120",
-  huagai2: "./assets/audio/huagai2.mp3?av=120",
-  guo: "./assets/audio/guo.mp3?av=120",
-  boxing: "./assets/audio/boxing.mp3?av=120",
-  jianji: "./assets/audio/jianji.mp3?av=120",
-  jiechu: "./assets/audio/jiechu.mp3?av=120",
+  kh1: "./assets/audio/kh1.mp3?av=121",
+  ydmusic: "./assets/audio/ydmusic.mp3?av=121",
+  charu: "./assets/audio/charu.mp3?av=121",
+  mocha: "./assets/audio/mocha.mp3?av=121",
+  chouka: "./assets/audio/chouka.mp3?av=121",
+  chaka: "./assets/audio/chaka.mp3?av=121",
+  huagai1: "./assets/audio/huagai1.mp3?av=121",
+  huagai2: "./assets/audio/huagai2.mp3?av=121",
+  guo: "./assets/audio/guo.mp3?av=121",
+  boxing: "./assets/audio/boxing.mp3?av=121",
+  jianji: "./assets/audio/jianji.mp3?av=121",
+  jiechu: "./assets/audio/jiechu.mp3?av=121",
   cardVoices: {
-    1: "./assets/audio/j.mp3?av=120",
-    2: "./assets/audio/q.mp3?av=120",
-    3: "./assets/audio/d.mp3?av=120",
-    4: "./assets/audio/l.mp3?av=120",
-    5: "./assets/audio/f.mp3?av=120",
-    6: "./assets/audio/hc.mp3?av=120",
+    1: "./assets/audio/j.mp3?av=121",
+    2: "./assets/audio/q.mp3?av=121",
+    3: "./assets/audio/d.mp3?av=121",
+    4: "./assets/audio/l.mp3?av=121",
+    5: "./assets/audio/f.mp3?av=121",
+    6: "./assets/audio/hc.mp3?av=121",
   },
   // 读卡追加音效：必须等对应基础卡片音效真正 ended 后再播放。
   cardVoiceFollowUps: {
-    1: "./assets/audio/jianjianglin.mp3?av=120",
-    2: "./assets/audio/longquanjianglin.mp3?av=120",
-    4: "./assets/audio/longjiao.mp3?av=120",
-    5: "./assets/audio/bsj.mp3?av=120",
+    1: "./assets/audio/jianjianglin.mp3?av=121",
+    2: "./assets/audio/longquanjianglin.mp3?av=121",
+    4: "./assets/audio/longjiao.mp3?av=121",
+    5: "./assets/audio/bsj.mp3?av=121",
   },
 };
 
@@ -1544,14 +1544,8 @@ function runLzjReturnedActions(hadInsertedCard, token) {
 
   cancelLzjReturnWait();
 
-  // lzj 音效只由“龙召机内是否有卡”决定：空载始终 huagai1；有卡才 huagai2。
-  const returnAudio = hadInsertedCard ? huagai2Audio : huagai1Audio;
-  const returnAudioName = hadInsertedCard ? "huagai2" : "huagai1";
-  playAudio(returnAudio).catch((error) => {
-    console.warn(`${returnAudioName} 音效播放失败：`, error);
-  });
-
-  // 只有有卡时才保持 huagai2 -> 读卡音效 的原顺序，且都等 lzj 真正复位完成后执行。
+  // huagai1 / huagai2 已在真实的 lzj 点击手势中立即播放。
+  // 回位完成后这里只负责有卡时继续执行对应读卡结果，避免 PWA 再依赖 transitionend 才决定盖音效。
   if (hadInsertedCard && selectedLq) {
     auxResultPlayed = true;
     scene.classList.add("is-aux-playing");
@@ -1599,7 +1593,15 @@ function handleLzjClick(event) {
   if (!flowStarted || !auxOpen || auxReturning) return;
   prepareChakaSfxFromGesture().catch(() => undefined);
 
-  // 龙召机允许空载开合：没插卡时每次点击都只触发 huagai1；插卡后复位完成才触发 huagai2。
+  // v121：音效完全由“点击这一刻龙召机里有没有卡”决定，并在真实点击手势内立即播放。
+  // 空载无论第几次点击都是 huagai1；只有卡片已经真正插入龙召机时才是 huagai2。
+  const hadInsertedCard = Boolean(auxCardInserted);
+  const clickAudio = hadInsertedCard ? huagai2Audio : huagai1Audio;
+  const clickAudioName = hadInsertedCard ? "huagai2" : "huagai1";
+  playAudio(clickAudio).catch((error) => {
+    console.warn(`${clickAudioName} 音效播放失败：`, error);
+  });
+
   if (!auxArmed) {
     auxArmed = true;
     auxResultPlayed = false;
@@ -1607,13 +1609,9 @@ function handleLzjClick(event) {
     auxDock?.classList.remove("is-playing");
     scene.classList.add("is-aux-armed");
     auxDock?.classList.add("is-armed");
-    playAudio(huagai1Audio).catch((error) => {
-      console.warn("huagai1 音效播放失败：", error);
-    });
     return;
   }
 
-  const hadInsertedCard = auxCardInserted;
   if (hadInsertedCard && selectedLq) {
     const followUpKey = CARD_FOLLOW_UP_SFX_KEYS[String(selectedLq)] || null;
     if (followUpKey) {
@@ -1627,7 +1625,7 @@ function handleLzjClick(event) {
   auxDock?.classList.remove("is-armed", "is-card-inserted");
   lzjButton?.classList.remove("is-result-ready");
 
-  // 清掉 class 的这一刻开始回位。最终音效等 transform 真正复位完成后，再按“有卡=huagai2 / 无卡=huagai1”决定。
+  // 清掉 class 的这一刻开始回位。huagai1 / huagai2 已在本次点击中播放；回位完成后仅继续有卡时的读卡结果。
   waitForLzjReturn(hadInsertedCard);
 }
 
