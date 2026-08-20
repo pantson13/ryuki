@@ -5,7 +5,7 @@
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "133";
+const PWA_BUILD = "134";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -71,7 +71,7 @@ const ANIMATION_CONFIG = {
     // 原左下角 4 个按钮移到中间第二排。x / y 为整排左上角相对场景中心的位置。
     // 157 对应 an5-an8 图片原始尺寸；80 的 gap 让四列中心间距约为 237。
     x: -454,
-    y: 800,
+    y: 1200,
     size: 157,
     gap: 80,
   },
