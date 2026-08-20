@@ -1,26 +1,45 @@
 /* Ryuki iOS PWA background-only fullscreen fix.
- * 只处理 bg.png / bg2.png 的背景层。
- * 不修改 .scene、腰带、卡盒、按钮、龙召机或任何前景元素的尺寸/坐标。
+ * bg.png / bg2.png 独立画在 body 的全屏 fixed 层，彻底脱离 .scene 的 overflow:hidden 裁切。
+ * 不修改 .scene 的尺寸，也不放大腰带、卡盒、按钮、龙召机或其他前景元素。
  */
 @media (display-mode: standalone) {
-  .scene-backgrounds {
+  body::before,
+  body::after {
+    content: "";
     position: fixed;
     top: 0;
     left: 0;
-    right: auto;
-    bottom: auto;
     width: 100vw;
-    height: calc(100vh + env(safe-area-inset-bottom));
-    overflow: hidden;
+    height: 100vh;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
     pointer-events: none;
+    z-index: 0;
   }
 
-  .scene-background {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center;
+  body::before {
+    background-image: url("./assets/images/bg2.png");
+  }
+
+  body::after {
+    background-image: url("./assets/images/bg.png");
+    opacity: 0;
+    transition: opacity 0.55s linear;
+  }
+
+  body:has(.scene.show-final-background)::after {
+    opacity: 1;
+  }
+
+  /* 原场景继续保持原尺寸和原坐标，只把自身黑底设为透明，露出独立全屏背景。 */
+  .scene {
+    background: transparent;
+    z-index: 1;
+  }
+
+  /* PWA 下不再使用会被 .scene 裁切的内层 bg/bg2，避免双层背景缩放比例不同产生接缝。 */
+  .scene > .scene-backgrounds {
+    visibility: hidden;
   }
 }
