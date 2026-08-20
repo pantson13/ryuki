@@ -1,7 +1,7 @@
 // Ryuki v126: atomic core update + full current-audio resync.
-const BUILD = "126";
+const BUILD = "127";
 const CACHE_PREFIX = "ryuki-pwa-";
-const CACHE_NAME = "ryuki-pwa-v126-stable";
+const CACHE_NAME = "ryuki-pwa-v127-stable";
 const INSTALL_CACHE_NAME = `${CACHE_NAME}-install`;
 const INDEX_FALLBACK = `./index.html?appv=${BUILD}`;
 
