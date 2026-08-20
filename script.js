@@ -5,7 +5,7 @@
  * 目标画布：440 × 956 CSS px（竖屏）。
  * 坐标仍以 1179 × 2556 原始背景像素为单位，方便直接微调。
  */
-const PWA_BUILD = "136";
+const PWA_BUILD = "137";
 window.__RYUKI_BUILD__ = `v${PWA_BUILD}`;
 document.documentElement.dataset.ryukiBuild = `v${PWA_BUILD}`;
 // 每次真正启动 App 都使用不同会话标识。关键媒体在同一 build 下也不会复用上一次 PWA 进程里的媒体响应。
@@ -59,8 +59,8 @@ const ANIMATION_CONFIG = {
   },
   lq: {
     // 六张 lq 在 charu 结束后从界面左侧进入；上排 1/2/3，下排 4/5/6。
-    x: -530,
-    y: 100,
+    x: -510,
+    y: -150,
     cardWidth: 280,
     gapX: 85,
     gapY: 25,
@@ -71,7 +71,7 @@ const ANIMATION_CONFIG = {
     // 原左下角 4 个按钮移到中间第二排。x / y 为整排左上角相对场景中心的位置。
     // 157 对应 an5-an8 图片原始尺寸；80 的 gap 让四列中心间距约为 237。
     x: -454,
-    y: 1400,
+    y: 1070,
     size: 157,
     gap: 80,
   },
@@ -79,7 +79,7 @@ const ANIMATION_CONFIG = {
     // 第一排按设计图左对齐到前两列：an1 / an2。
     // 图标按原始 157 × 157 尺寸参与 SOURCE_SCENE 缩放，不额外放大或缩小。
     x: 0,
-    y: -200,
+    y: 930,
     button1: { x: -375, y: 0, size: 157 },
     button2: { x: -138, y: 0, size: 157 },
   },
