@@ -1,7 +1,7 @@
-// Ryuki v125: atomic core update + full current-audio resync.
-const BUILD = "125";
+// Ryuki v126: atomic core update + full current-audio resync.
+const BUILD = "126";
 const CACHE_PREFIX = "ryuki-pwa-";
-const CACHE_NAME = "ryuki-pwa-v125-stable";
+const CACHE_NAME = "ryuki-pwa-v126-stable";
 const INSTALL_CACHE_NAME = `${CACHE_NAME}-install`;
 const INDEX_FALLBACK = `./index.html?appv=${BUILD}`;
 
@@ -34,8 +34,8 @@ const CURRENT_AUDIO_ASSETS = [
   `./assets/audio/jiechu.mp3?av=${BUILD}`,
 ];
 
-// v125 做一次全音频原子同步：当前仓库已有的 MP3 必须全部拉到同一 build。
-// 任意一个失败，v125 不接管，避免 PWA 出现新代码 + 旧音频混用。
+// v126 做一次全音频原子同步：当前仓库已有的 MP3 必须全部拉到同一 build。
+// 任意一个失败，v126 不接管，避免 PWA 出现新代码 + 旧音频混用。
 const REQUIRED_ASSETS = [
   INDEX_FALLBACK,
   `./manifest.webmanifest?v=${BUILD}`,
@@ -180,7 +180,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // 带 ?av=BUILD 的音频属于不可变 build 资源：Cache First。
-  // 这样同一次 v125 绝不会一会播放安装时的 charu、一会又被网络上的另一份覆盖。
+  // 这样同一次 v126 绝不会一会播放安装时的 charu、一会又被网络上的另一份覆盖。
   if (requestUrl.pathname.includes("/assets/audio/") && requestUrl.searchParams.get("av") === BUILD) {
     const cacheKey = canonicalRequest(request);
     event.respondWith((async () => {

@@ -1,4 +1,4 @@
-/* Ryuki v125: stable drag + shatter-synced jiechu */
+/* Ryuki v126: stable drag + shatter-synced jiechu */
 
 :root {
   color-scheme: dark;
@@ -19,8 +19,6 @@ body {
 }
 
 body {
-  min-height: 100vh;
-  min-height: 100dvh;
   background: #080808;
   display: grid;
   place-items: center;
@@ -106,11 +104,10 @@ body {
   --khzd-x: 0px;
   --khzd-y: 0px;
   --khzd-width: 485px;
+  /* v126：PWA 全屏以 fixed + inset:0 为唯一尺寸来源。
+   * 不再叠加 100vh / 100dvh，避免 iOS standalone 动态视口偏小后露出底部 body 黑区。 */
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
   overflow: hidden;
   isolation: isolate;
   background: #080808;
