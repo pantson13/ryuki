@@ -1,4 +1,4 @@
-// Ryuki v126: atomic core update + full current-audio resync.
+// Ryuki v137: atomic core update + Safari stale-PWA escape.
 const BUILD = "137";
 const CACHE_PREFIX = "ryuki-pwa-";
 const CACHE_NAME = "ryuki-pwa-v137-stable";
@@ -34,8 +34,6 @@ const CURRENT_AUDIO_ASSETS = [
   `./assets/audio/jiechu.mp3?av=${BUILD}`,
 ];
 
-// v126 做一次全音频原子同步：当前仓库已有的 MP3 必须全部拉到同一 build。
-// 任意一个失败，v126 不接管，避免 PWA 出现新代码 + 旧音频混用。
 const REQUIRED_ASSETS = [
   INDEX_FALLBACK,
   `./manifest.webmanifest?v=${BUILD}`,
@@ -122,6 +120,10 @@ self.addEventListener("install", (event) => {
         await finalCache.put(request, response);
       }
       await caches.delete(INSTALL_CACHE_NAME);
+
+      // 只有完整 v137 缓存准备完毕后才立即激活。
+      // 这一步专门解决 iOS Safari 普通模式长期被旧 v135 waiting/active SW 锁住的问题。
+      await self.skipWaiting();
     } catch (error) {
       await Promise.all([
         caches.delete(INSTALL_CACHE_NAME),
@@ -129,13 +131,10 @@ self.addEventListener("install", (event) => {
       ]);
       throw error;
     }
-
-    // 不主动 skipWaiting。旧页面在新 build 完整安装前后都不会被半途换零件。
   })());
 });
 
 self.addEventListener("message", (event) => {
-  // 只允许同 build 页面请求激活。旧版本页面不能强行把新 SW 接管到当前运行中的 App。
   if (event.data?.type === "SKIP_WAITING" && String(event.data?.build) === BUILD) {
     self.skipWaiting();
   }
@@ -150,8 +149,9 @@ self.addEventListener("activate", (event) => {
         .filter((name) => name.startsWith(CACHE_PREFIX) && name !== CACHE_NAME)
         .map((name) => caches.delete(name)),
     );
-    // 激活只发生在旧页面已自然释放后；claim 用于让下一次打开的页面立即受当前完整 build 控制。
-    await self.clients.claim();
+
+    // 不 claim 当前已经打开的旧页面，避免用户正在操作时被新 SW 半途换控制器。
+    // 下一次刷新/重新打开时自然进入当前完整 build。
   })());
 });
 
@@ -169,18 +169,25 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(request.url);
   if (requestUrl.origin !== self.location.origin) return;
 
-  // 当前激活 build 的首页固定从其原子缓存返回。新 build 完整安装并接管后才整体换页。
+  // 页面导航改为 Network First。
+  // 在线时永远先取 GitHub Pages 当前 index，避免旧 CacheStorage 永久把 Safari 锁在 appv=135；
+  // 离线或网络失败时才回退到当前 build 已验证过的原子缓存。
   if (request.mode === "navigate") {
     event.respondWith((async () => {
+      try {
+        const fresh = await fetch(request, { cache: "no-store" });
+        if (fresh.ok) return fresh;
+      } catch {}
+
       const cachedIndex = await caches.match(scopedUrl(INDEX_FALLBACK));
       if (cachedIndex) return cachedIndex;
+
       return fetch(request, { cache: "no-store" });
     })());
     return;
   }
 
   // 带 ?av=BUILD 的音频属于不可变 build 资源：Cache First。
-  // 这样同一次 v126 绝不会一会播放安装时的 charu、一会又被网络上的另一份覆盖。
   if (requestUrl.pathname.includes("/assets/audio/") && requestUrl.searchParams.get("av") === BUILD) {
     const cacheKey = canonicalRequest(request);
     event.respondWith((async () => {
@@ -196,7 +203,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 其余静态资源同样优先当前 build 缓存，未命中才请求网络并补入当前缓存。
+  // 其余静态资源继续 Cache First，保持 PWA 离线和音效/图片稳定性。
   event.respondWith((async () => {
     const cached = await caches.match(request);
     if (cached) return cached;
