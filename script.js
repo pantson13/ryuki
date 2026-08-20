@@ -59,7 +59,7 @@ const ANIMATION_CONFIG = {
   },
   lq: {
     // 六张 lq 在 charu 结束后从界面左侧进入；上排 1/2/3，下排 4/5/6。
-    x: -500,
+    x: -700,
     y: 220,
     cardWidth: 280,
     gapX: 45,
