@@ -1,30 +1,26 @@
-/* Ryuki iOS PWA fullscreen background fix.
- * 仅针对已添加到主屏幕的 standalone 模式。
- * iOS WebKit 某些版本会让 fixed + inset:0 少掉底部安全区，露出 body 黑底。
- * 这里不改前景坐标，只让最外层场景向底部安全区额外延伸。 */
+/* Ryuki iOS PWA background-only fullscreen fix.
+ * 只处理 bg.png / bg2.png 的背景层。
+ * 不修改 .scene、腰带、卡盒、按钮、龙召机或任何前景元素的尺寸/坐标。
+ */
 @media (display-mode: standalone) {
-  html,
-  body {
-    width: 100vw;
-    height: 100vh;
-    min-height: 100vh;
-    margin: 0;
-    overflow: hidden;
-  }
-
-  .scene {
+  .scene-backgrounds {
+    position: fixed;
     top: 0;
     left: 0;
     right: auto;
     bottom: auto;
     width: 100vw;
     height: calc(100vh + env(safe-area-inset-bottom));
-    min-height: 100vh;
+    overflow: hidden;
+    pointer-events: none;
   }
 
-  .scene-backgrounds,
   .scene-background {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
+    object-fit: cover;
+    object-position: center;
   }
 }
