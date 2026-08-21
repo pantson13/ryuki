@@ -1,14 +1,19 @@
 /*
- * Ryuki 独立缩放参数
+ * Ryuki 缩放参数
  *
+ * global = 总缩放倍率
  * 1.0 = 当前尺寸
  * 0.9 = 当前尺寸的 90%
  * 1.1 = 当前尺寸的 110%
  *
- * 只改下面这 6 个数字即可。
- * 默认全部 1.0，所以上传后不会改变你现在已经调好的大小与位置。
+ * 最终实际倍率 = global × 单项倍率
+ *
+ * 平时如果只是想全部一起缩放，只改 global 即可。
+ * 单项倍率默认保持 1.0，需要单独微调某一项时再改对应参数。
  */
 const RYUKI_SCALE_CONFIG = {
+  global: 0.9,     // 总缩放：一次控制下面所有项目
+
   belt: 1.0,       // 腰带整体视觉：ydbg / ydup / yddown / ydfg
   cardBox: 1.0,    // 卡盒：初始卡盒 + 插入腰带后的卡盒
   bg3: 1.0,        // 最终 bg3
@@ -31,6 +36,8 @@ function applyRyukiScaleConfig(nextConfig = null) {
   const scene = document.getElementById("scene");
   if (!scene) return;
 
+  const globalScale = clampScale(RYUKI_SCALE_CONFIG.global);
+
   const mapping = {
     belt: "--ryuki-belt-scale",
     cardBox: "--ryuki-card-box-scale",
@@ -41,14 +48,20 @@ function applyRyukiScaleConfig(nextConfig = null) {
   };
 
   for (const [key, cssVariable] of Object.entries(mapping)) {
-    scene.style.setProperty(cssVariable, String(clampScale(RYUKI_SCALE_CONFIG[key])));
+    const itemScale = clampScale(RYUKI_SCALE_CONFIG[key]);
+    const finalScale = globalScale * itemScale;
+    scene.style.setProperty(cssVariable, String(finalScale));
   }
 }
 
 /*
- * 保留一个全局入口，方便临时在 Safari/Chrome 控制台调尺寸：
+ * 临时调试示例：
  *
- * applyRyukiScaleConfig({ belt: 0.9, bg4: 1.08 });
+ * 全部一起缩到 90%：
+ * applyRyukiScaleConfig({ global: 0.9 });
+ *
+ * 全部 90%，但 bg4 再放大 10%：
+ * applyRyukiScaleConfig({ global: 0.9, bg4: 1.1 });
  *
  * 刷新页面后仍以文件顶部的 RYUKI_SCALE_CONFIG 为准。
  */
