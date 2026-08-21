@@ -42,6 +42,7 @@
     <link rel="preload" href="./assets/images/bg5.png" as="image" type="image/png" />
     <link rel="stylesheet" href="./style.css?v=137" />
     <link rel="stylesheet" href="./pwa-fullscreen-fix.css?v=141" />
+    <link rel="stylesheet" href="./scale-control.css?v=1" />
   </head>
   <body>
     <svg class="effect-definitions" aria-hidden="true" width="0" height="0">
@@ -94,7 +95,13 @@
         <div class="belt" id="belt">
           <span class="belt-effect" id="beltEffect">
             <span class="belt-art" id="beltArt">
-              <img class="belt-base" src="./assets/images/ydbg.png" alt="" />
+              <!--
+                缩放层只包腰带视觉素材，不包卡盒。
+                这样腰带缩放不会改变卡盒已经调好的插入、拖动和命中坐标。
+              -->
+              <span class="belt-scale-layer belt-scale-base" aria-hidden="true">
+                <img class="belt-base" src="./assets/images/ydbg.png" alt="" />
+              </span>
 
               <button class="card-unit card-box" id="cardBox" type="button" aria-label="卡盒插入腰带">
                 <img class="card-layer card-bottom" src="./assets/images/khdc.png" alt="" />
@@ -103,9 +110,12 @@
                 <img class="card-layer card-cover" src="./assets/images/khzd.png" alt="" />
               </button>
 
-              <img class="belt-layer belt-layer-up" src="./assets/images/ydup.png" alt="" />
-              <img class="belt-layer belt-layer-down" src="./assets/images/yddown.png" alt="" />
-              <img class="belt-glow" src="./assets/images/ydfg.png" alt="" />
+              <!-- 上下腰带与发光层保持原来的 z 轴顺序，整体按同一倍率缩放。 -->
+              <span class="belt-scale-layer belt-scale-overlay" aria-hidden="true">
+                <img class="belt-layer belt-layer-up" src="./assets/images/ydup.png" alt="" />
+                <img class="belt-layer belt-layer-down" src="./assets/images/yddown.png" alt="" />
+                <img class="belt-glow" src="./assets/images/ydfg.png" alt="" />
+              </span>
             </span>
           </span>
         </div>
@@ -148,17 +158,23 @@
       </div>
 
       <div class="aux-dock" id="auxDock" aria-label="右侧龙召机">
-        <img class="lzj-cover" id="lzj3Image" src="./assets/images/lzj3.png" alt="" />
-        <div class="lzj-card-slot-debug" id="lzjCardSlotDebug" aria-hidden="true"></div>
-        <div class="lzj-card-slot-mask" id="lzjCardSlotMask" aria-hidden="true">
-          <img class="lzj-inserted-card" id="lzjInsertedCard" src="./assets/images/kpc.png?iv=126" alt="" />
+        <!--
+          龙召机/蛇杖缩放层。
+          auxDock 自己仍负责现在的定位和滑出动画，内部视觉与命中区一起缩放。
+        -->
+        <div class="aux-device-scale">
+          <img class="lzj-cover" id="lzj3Image" src="./assets/images/lzj3.png" alt="" />
+          <div class="lzj-card-slot-debug" id="lzjCardSlotDebug" aria-hidden="true"></div>
+          <div class="lzj-card-slot-mask" id="lzjCardSlotMask" aria-hidden="true">
+            <img class="lzj-inserted-card" id="lzjInsertedCard" src="./assets/images/kpc.png?iv=126" alt="" />
+          </div>
+          <img class="lzj-image lzj-image-active" id="lzj2Image" src="./assets/images/lzj2.png" alt="" />
+          <img class="lzj-image lzj-image-default" id="lzjImage" src="./assets/images/lzj.png" alt="" />
+          <img class="aux-card-cover-mask" id="auxCardCoverMask" src="./assets/images/khzd.png" alt="" aria-hidden="true" />
+          <img class="aux-lyfg" id="lyfgImage" src="./assets/images/lyfg.png" alt="" aria-hidden="true" />
+          <button class="lzj-button" id="lzjButton" type="button" aria-label="操作龙召机"></button>
+          <button class="bs-button" id="bsButton" type="button" aria-label="打开龙召机"><img src="./assets/images/bs.png" alt="" /></button>
         </div>
-        <img class="lzj-image lzj-image-active" id="lzj2Image" src="./assets/images/lzj2.png" alt="" />
-        <img class="lzj-image lzj-image-default" id="lzjImage" src="./assets/images/lzj.png" alt="" />
-        <img class="aux-card-cover-mask" id="auxCardCoverMask" src="./assets/images/khzd.png" alt="" aria-hidden="true" />
-        <img class="aux-lyfg" id="lyfgImage" src="./assets/images/lyfg.png" alt="" aria-hidden="true" />
-        <button class="lzj-button" id="lzjButton" type="button" aria-label="操作龙召机"></button>
-        <button class="bs-button" id="bsButton" type="button" aria-label="打开龙召机"><img src="./assets/images/bs.png" alt="" /></button>
       </div>
 
       <!-- PWA：独立全屏拖卡层。正面卡从抽出到插入龙召机前始终只在这个固定容器内活动。 -->
@@ -177,5 +193,6 @@
     </main>
 
     <script src="./script.js?v=137"></script>
+    <script src="./scale-control.js?v=1"></script>
   </body>
 </html>

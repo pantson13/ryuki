@@ -1,0 +1,106 @@
+/*
+ * Ryuki 独立缩放控制
+ *
+ * 原则：
+ * 1. 当前所有值 1.0 时，视觉尺寸与现有版本完全一致。
+ * 2. 不修改原来的 x / y、阶段二上移距离、bg4 轨迹、卡盒插入坐标。
+ * 3. 腰带缩放只作用在腰带视觉素材，不把卡盒一起缩掉。
+ * 4. 卡盒本体直接缩放，浏览器的真实触摸/命中区域会跟随视觉尺寸。
+ * 5. 龙召机/蛇杖在自己的内部缩放层中整体缩放，auxDock 原定位逻辑不动。
+ */
+
+.scene {
+  --ryuki-belt-scale: 1;
+  --ryuki-card-box-scale: 1;
+  --ryuki-bg3-scale: 1;
+  --ryuki-bg4-scale: 1;
+  --ryuki-bg5-scale: 1;
+  --ryuki-aux-device-scale: 1;
+}
+
+/* ---------- 腰带 ---------- */
+
+/*
+ * 两个 scale layer 都保持原始 belt-art 的坐标系统。
+ * base 层负责撑起原来的高度，overlay 层绝对覆盖。
+ * 因为两个层以同一个中心缩放，所以 ydbg / ydup / yddown / ydfg 的精准叠放关系不变。
+ */
+.belt-scale-layer {
+  width: 100%;
+  transform-origin: 50% 50%;
+  scale: var(--ryuki-belt-scale);
+  pointer-events: none;
+}
+
+.belt-scale-base {
+  position: relative;
+  display: block;
+  z-index: 1;
+}
+
+.belt-scale-overlay {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: block;
+  height: 100%;
+  overflow: visible;
+}
+
+/* 阶段二的能量遮罩与腰带视觉保持同倍率。 */
+.belt-effect::before,
+.belt-effect::after {
+  transform-origin: 50% 50%;
+  scale: var(--ryuki-belt-scale);
+}
+
+/* ---------- 卡盒 ---------- */
+
+/*
+ * 卡盒不放进 belt scale layer。
+ * scale 是独立 transform 属性，不覆盖原来 transform 中已经调好的 translate3d 坐标。
+ * 因此 card-trigger / card-box 的当前中心位置保持原逻辑。
+ */
+.card-box,
+.card-trigger {
+  scale: var(--ryuki-card-box-scale);
+}
+
+/* ---------- bg3 / bg4 / bg5 ---------- */
+
+/*
+ * 动画仍然跑在 character-merge / flash / reveal 容器上。
+ * 只缩里面的完整图片，因此：
+ * - bg4 四张的 entryDistance / spread / 3D 轨迹不改
+ * - bg3 / bg5 的 x / y 不改
+ * - 各自可以独立缩放
+ */
+.character-merge-image {
+  transform-origin: 50% 0;
+  scale: var(--ryuki-bg4-scale);
+}
+
+.character-flash-image {
+  transform-origin: 50% 0;
+  scale: var(--ryuki-bg5-scale);
+}
+
+.character-reveal > .character-image {
+  transform-origin: 50% 0;
+  scale: var(--ryuki-bg3-scale);
+}
+
+/* ---------- 龙召机 / 蛇杖 ---------- */
+
+/*
+ * auxDock 继续负责原来的绝对位置和弹出轨迹。
+ * 这一层只负责内部整体尺寸，所以 lzj3/lzj2/lzj/lyfg、按钮、卡槽会同比缩放。
+ * 原点保持在 auxDock 的 0,0，不去重算原布局。
+ */
+.aux-device-scale {
+  position: relative;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+  scale: var(--ryuki-aux-device-scale);
+}
