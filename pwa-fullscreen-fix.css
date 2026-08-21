@@ -1,44 +1,30 @@
 /* Ryuki iOS PWA background-only fullscreen fix.
- * bg.png / bg2.png 独立画在 body 的全屏 fixed 层，彻底脱离 .scene 的 overflow:hidden 裁切。
- * 不修改 .scene 的尺寸，也不放大腰带、卡盒、按钮、龙召机或其他前景元素。
+ * 关键点：iOS standalone 下 100vh/fixed 仍可能只覆盖 layout viewport，
+ * 底部安全区实际由根画布 canvas 绘制，所以 bg/bg2 直接挂到 html 根背景。
+ * 不修改 .scene、腰带、卡盒、按钮、龙召机或其他前景元素的尺寸/坐标。
  */
 @media (display-mode: standalone) {
-  body::before,
-  body::after {
-    content: "";
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: cover;
-    pointer-events: none;
-    z-index: 0;
+  html {
+    background-color: #080808 !important;
+    background-image: url("./assets/images/bg2.png") !important;
+    background-repeat: no-repeat !important;
+    background-position: center center !important;
+    background-size: cover !important;
+    background-attachment: fixed !important;
   }
 
-  body::before {
-    background-image: url("./assets/images/bg2.png");
+  /* 插入卡盒后沿用原 show-final-background 状态切换到 bg.png。 */
+  html:has(.scene.show-final-background) {
+    background-image: url("./assets/images/bg.png") !important;
   }
 
-  body::after {
-    background-image: url("./assets/images/bg.png");
-    opacity: 0;
-    transition: opacity 0.55s linear;
-  }
-
-  body:has(.scene.show-final-background)::after {
-    opacity: 1;
-  }
-
-  /* 原场景继续保持原尺寸和原坐标，只把自身黑底设为透明，露出独立全屏背景。 */
+  /* body / scene 不再提供黑底，避免根背景在底部安全区被盖住。 */
+  body,
   .scene {
-    background: transparent;
-    z-index: 1;
+    background: transparent !important;
   }
 
-  /* PWA 下不再使用会被 .scene 裁切的内层 bg/bg2，避免双层背景缩放比例不同产生接缝。 */
+  /* PWA 下隐藏原先受 .scene 尺寸限制的 bg/bg2，只保留根画布背景。 */
   .scene > .scene-backgrounds {
     visibility: hidden;
   }
