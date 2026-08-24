@@ -12,7 +12,7 @@
  * 单项倍率默认保持 1.0，需要单独微调某一项时再改对应参数。
  */
 const RYUKI_SCALE_CONFIG = {
-  global: 0.95,     // 总缩放：一次控制下面所有项目
+  global: 1.0,     // 总缩放：一次控制下面所有项目
 
   belt: 1.0,       // 腰带整体视觉：ydbg / ydup / yddown / ydfg
   cardBox: 1.0,    // 卡盒：初始卡盒 + 插入腰带后的卡盒
