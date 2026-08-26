@@ -173,3 +173,124 @@ an2Button?.addEventListener("click", (event) => {
   suppressNextJianjiClick = false;
   jianji2LongPressTriggered = false;
 }, true);
+
+/*
+ * AN5：短按仍由原 script.js 播放 guo。
+ * 长按满 1 秒时不生硬切断，而是把当前 guo 音效在 0.9 秒内渐隐到 0，再暂停并复位。
+ * 长按后的松手 click 会被拦截，不会误触发一次新的 guo。
+ */
+const an5Button = document.querySelector(".side-control-button");
+const AN5_LONG_PRESS_MS = 1000;
+const AN5_MOVE_CANCEL_PX = 12;
+const GUO_FADE_OUT_MS = 900;
+let an5LongPressTimer = 0;
+let an5PressPointerId = null;
+let an5PressStart = null;
+let an5LongPressTriggered = false;
+let suppressNextGuoClick = false;
+let guoFadeGeneration = 0;
+
+function clearAn5LongPressTimer() {
+  clearTimeout(an5LongPressTimer);
+  an5LongPressTimer = 0;
+}
+
+function cancelGuoFadeAndRestoreVolume() {
+  guoFadeGeneration += 1;
+  if (typeof guoAudio !== "undefined") guoAudio.volume = 1;
+}
+
+function fadeOutAndStopGuo() {
+  if (typeof guoAudio === "undefined") return;
+
+  const generation = ++guoFadeGeneration;
+  const startVolume = Number.isFinite(guoAudio.volume) ? guoAudio.volume : 1;
+  const startTime = performance.now();
+
+  const step = (now) => {
+    if (generation !== guoFadeGeneration) return;
+
+    const progress = Math.min(1, (now - startTime) / GUO_FADE_OUT_MS);
+    guoAudio.volume = Math.max(0, startVolume * (1 - progress));
+
+    if (progress < 1 && !guoAudio.paused) {
+      requestAnimationFrame(step);
+      return;
+    }
+
+    guoAudio.pause();
+    try {
+      guoAudio.currentTime = 0;
+    } catch {}
+    guoAudio.volume = 1;
+  };
+
+  requestAnimationFrame(step);
+}
+
+an5Button?.addEventListener("pointerdown", (event) => {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+
+  clearAn5LongPressTimer();
+  an5PressPointerId = event.pointerId;
+  an5PressStart = { x: event.clientX, y: event.clientY };
+  an5LongPressTriggered = false;
+
+  an5Button?.setPointerCapture?.(event.pointerId);
+
+  an5LongPressTimer = window.setTimeout(() => {
+    if (an5PressPointerId !== event.pointerId) return;
+
+    an5LongPressTriggered = true;
+    suppressNextGuoClick = true;
+    fadeOutAndStopGuo();
+  }, AN5_LONG_PRESS_MS);
+});
+
+an5Button?.addEventListener("pointermove", (event) => {
+  if (
+    event.pointerId !== an5PressPointerId ||
+    !an5PressStart ||
+    an5LongPressTriggered
+  ) return;
+
+  const dx = event.clientX - an5PressStart.x;
+  const dy = event.clientY - an5PressStart.y;
+  if (Math.hypot(dx, dy) > AN5_MOVE_CANCEL_PX) {
+    clearAn5LongPressTimer();
+  }
+});
+
+an5Button?.addEventListener("pointerup", (event) => {
+  if (event.pointerId !== an5PressPointerId) return;
+
+  clearAn5LongPressTimer();
+  an5PressPointerId = null;
+  an5PressStart = null;
+});
+
+an5Button?.addEventListener("pointercancel", (event) => {
+  if (event.pointerId !== an5PressPointerId) return;
+
+  clearAn5LongPressTimer();
+  an5PressPointerId = null;
+  an5PressStart = null;
+  an5LongPressTriggered = false;
+});
+
+an5Button?.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+});
+
+// capture 阶段先处理长按抑制；普通短按则先恢复音量，再交给原 script.js 播放 guo。
+an5Button?.addEventListener("click", (event) => {
+  if (suppressNextGuoClick) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    suppressNextGuoClick = false;
+    an5LongPressTriggered = false;
+    return;
+  }
+
+  cancelGuoFadeAndRestoreVolume();
+}, true);
