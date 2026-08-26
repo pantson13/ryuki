@@ -9,6 +9,22 @@
  * 5. 龙召机/蛇杖在自己的内部缩放层中整体缩放，auxDock 原定位逻辑不动。
  */
 
+/*
+ * 直接复用 OUJA 的 iOS/PWA 长按保护：
+ * 整个交互场景禁止文本选择、图片长按菜单和系统拷贝/翻译/分享浮层。
+ */
+.scene,
+.scene * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.scene img {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
 .scene {
   --ryuki-belt-scale: 1;
   --ryuki-card-box-scale: 1;
