@@ -173,125 +173,202 @@ an2Button?.addEventListener("click", (event) => {
 }, true);
 
 /*
- * AN5：短按仍由原 script.js 播放 guo。
- * 长按满 1 秒后通过 Web Audio GainNode 做真正的音量包络淡出。
+ * AN5：完全改为独立 Web Audio Buffer 播放。
  *
- * 不能继续使用 HTMLAudioElement.volume 做淡出：iPhone Safari/PWA 对媒体元素的
- * 程序化 volume 调节并不可靠，会出现“前面音量没变，最后 pause 时突然硬切”的现象。
- * 因此这里把 guoAudio 接入 MediaElementSource -> GainNode -> destination，
- * 用 AudioParam 的指数斜坡在 1.2 秒内把增益平滑降到接近 0，之后才 pause + 复位。
+ * 旧实现把 script.js 的 HTMLAudio guoAudio 接到 MediaElementSource + GainNode。
+ * iPhone Safari/PWA 在媒体元素 seek/pause 与 GainNode 恢复增益交界处会出现瞬时回弹、
+ * 单采样卡住或第一次播放前的短促杂音。
+ *
+ * 现在 AN5 的 click 在 capture 阶段直接拦截原 script.js 的 guoAudio click，
+ * 短按和长按都只操作同一套 AudioBufferSourceNode + GainNode：
+ * - 短按：从头正常播放 guo。
+ * - 长按满 1 秒：当前 GainNode 在 1.2 秒内线性降到 0.0001，然后 stop 当前 source。
+ * - 淡出节点结束后直接销毁，不恢复旧节点增益，因此不会在结尾突然回响或卡一个音。
  */
 const an5Button = document.querySelector(".side-control-button");
 const AN5_LONG_PRESS_MS = 1000;
 const AN5_MOVE_CANCEL_PX = 12;
 const GUO_FADE_OUT_MS = 1200;
-const GUO_FADE_MIN_GAIN = 0.001;
+const GUO_FADE_MIN_GAIN = 0.0001;
+const GUO_AUDIO_URL = "./assets/audio/guo.mp3";
+
 let an5LongPressTimer = 0;
 let an5PressPointerId = null;
 let an5PressStart = null;
 let an5LongPressTriggered = false;
 let suppressNextGuoClick = false;
-let guoFadeStopTimer = 0;
-let guoFadeContext = null;
-let guoFadeSource = null;
-let guoFadeGain = null;
+
+let guoWebAudioContext = null;
+let guoWebAudioBuffer = null;
+let guoWebAudioDecodePromise = null;
+let guoWebAudioSource = null;
+let guoWebAudioGain = null;
+let guoWebAudioStopTimer = 0;
+let guoPlaybackToken = 0;
 
 function clearAn5LongPressTimer() {
   clearTimeout(an5LongPressTimer);
   an5LongPressTimer = 0;
 }
 
-function ensureGuoFadeGraph() {
-  if (typeof guoAudio === "undefined") return null;
-  if (guoFadeContext && guoFadeGain) return guoFadeContext;
-
+function getGuoWebAudioContext() {
+  if (guoWebAudioContext) return guoWebAudioContext;
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextCtor) return null;
 
   try {
-    guoFadeContext = new AudioContextCtor();
-    guoFadeSource = guoFadeContext.createMediaElementSource(guoAudio);
-    guoFadeGain = guoFadeContext.createGain();
-    guoFadeGain.gain.value = 1;
-    guoFadeSource.connect(guoFadeGain);
-    guoFadeGain.connect(guoFadeContext.destination);
-    return guoFadeContext;
+    guoWebAudioContext = new AudioContextCtor();
   } catch (error) {
-    console.warn("guo Web Audio 淡出通道创建失败：", error);
-    guoFadeContext = null;
-    guoFadeSource = null;
-    guoFadeGain = null;
-    return null;
+    console.warn("guo AudioContext 创建失败：", error);
+    guoWebAudioContext = null;
+  }
+  return guoWebAudioContext;
+}
+
+function decodeGuoWebAudio() {
+  if (guoWebAudioBuffer) return Promise.resolve(guoWebAudioBuffer);
+  if (guoWebAudioDecodePromise) return guoWebAudioDecodePromise;
+
+  const context = getGuoWebAudioContext();
+  if (!context) return Promise.resolve(null);
+
+  guoWebAudioDecodePromise = fetch(GUO_AUDIO_URL, { cache: "no-store" })
+    .then((response) => {
+      if (!response.ok) throw new Error(`guo fetch ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .then((bytes) => new Promise((resolve, reject) => {
+      context.decodeAudioData(bytes.slice(0), resolve, reject);
+    }))
+    .then((buffer) => {
+      guoWebAudioBuffer = buffer;
+      return buffer;
+    })
+    .catch((error) => {
+      console.warn("guo Web Audio 解码失败：", error);
+      guoWebAudioDecodePromise = null;
+      return null;
+    });
+
+  return guoWebAudioDecodePromise;
+}
+
+async function prepareGuoWebAudioFromGesture() {
+  const context = getGuoWebAudioContext();
+  if (!context) return false;
+
+  try {
+    if (context.state === "suspended") await context.resume();
+  } catch (error) {
+    console.warn("guo AudioContext resume 失败：", error);
+    return false;
+  }
+
+  await decodeGuoWebAudio();
+  return Boolean(guoWebAudioBuffer && context.state === "running");
+}
+
+function disposeCurrentGuoSource({ stop = true } = {}) {
+  clearTimeout(guoWebAudioStopTimer);
+  guoWebAudioStopTimer = 0;
+
+  const source = guoWebAudioSource;
+  const gain = guoWebAudioGain;
+  guoWebAudioSource = null;
+  guoWebAudioGain = null;
+
+  if (source) {
+    source.onended = null;
+    if (stop) {
+      try { source.stop(); } catch {}
+    }
+    try { source.disconnect(); } catch {}
+  }
+  if (gain) {
+    try { gain.disconnect(); } catch {}
   }
 }
 
-async function resumeGuoFadeGraphFromGesture() {
-  const context = ensureGuoFadeGraph();
-  if (!context) return false;
+async function playGuoWebAudio() {
+  const token = ++guoPlaybackToken;
+  const ready = await prepareGuoWebAudioFromGesture();
+  if (!ready || token !== guoPlaybackToken) return false;
+
+  const context = guoWebAudioContext;
+  const buffer = guoWebAudioBuffer;
+  if (!context || !buffer || context.state !== "running") return false;
+
+  disposeCurrentGuoSource();
+
   try {
-    if (context.state === "suspended") await context.resume();
-    return context.state === "running";
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    source.buffer = buffer;
+    gain.gain.setValueAtTime(1, context.currentTime);
+    source.connect(gain);
+    gain.connect(context.destination);
+
+    source.onended = () => {
+      if (guoWebAudioSource !== source) return;
+      guoWebAudioSource = null;
+      guoWebAudioGain = null;
+      try { source.disconnect(); } catch {}
+      try { gain.disconnect(); } catch {}
+    };
+
+    guoWebAudioSource = source;
+    guoWebAudioGain = gain;
+    source.start(0);
+    return true;
   } catch (error) {
-    console.warn("guo 淡出 AudioContext resume 失败：", error);
+    console.warn("guo Web Audio 播放失败：", error);
+    disposeCurrentGuoSource();
     return false;
   }
 }
 
-function cancelGuoFadeAndRestoreGain() {
-  clearTimeout(guoFadeStopTimer);
-  guoFadeStopTimer = 0;
+function fadeOutAndStopGuoWebAudio() {
+  const context = guoWebAudioContext;
+  const source = guoWebAudioSource;
+  const gain = guoWebAudioGain;
+  if (!context || !source || !gain || context.state !== "running") return false;
 
-  if (!guoFadeGain || !guoFadeContext) return;
-  const now = guoFadeContext.currentTime;
-  try {
-    guoFadeGain.gain.cancelScheduledValues(now);
-    guoFadeGain.gain.setValueAtTime(1, now);
-  } catch {
-    guoFadeGain.gain.value = 1;
-  }
-}
-
-function fadeOutAndStopGuo() {
-  if (typeof guoAudio === "undefined" || guoAudio.paused) return;
-
-  const context = ensureGuoFadeGraph();
-  if (!context || !guoFadeGain || context.state !== "running") {
-    // 理论上 pointerdown 已经解锁 Web Audio。若环境不支持，宁可暂时保留播放，
-    // 也不再用 HTMLMediaElement.pause() 制造生硬切断。
-    console.warn("guo 淡出通道未就绪，本次不执行硬停止");
-    return;
-  }
-
-  clearTimeout(guoFadeStopTimer);
+  clearTimeout(guoWebAudioStopTimer);
   const now = context.currentTime;
   const endTime = now + GUO_FADE_OUT_MS / 1000;
-  const currentGain = Math.max(GUO_FADE_MIN_GAIN, guoFadeGain.gain.value || 1);
 
   try {
-    guoFadeGain.gain.cancelScheduledValues(now);
-    guoFadeGain.gain.setValueAtTime(currentGain, now);
-    guoFadeGain.gain.exponentialRampToValueAtTime(GUO_FADE_MIN_GAIN, endTime);
+    gain.gain.cancelScheduledValues(now);
+    const currentGain = Math.max(GUO_FADE_MIN_GAIN, Number(gain.gain.value) || 1);
+    gain.gain.setValueAtTime(currentGain, now);
+    gain.gain.linearRampToValueAtTime(GUO_FADE_MIN_GAIN, endTime);
   } catch (error) {
-    console.warn("guo GainNode 淡出调度失败：", error);
-    return;
+    console.warn("guo 淡出调度失败：", error);
+    return false;
   }
 
-  guoFadeStopTimer = window.setTimeout(() => {
-    guoFadeStopTimer = 0;
-    guoAudio.pause();
-    try {
-      guoAudio.currentTime = 0;
-    } catch {}
+  const fadingSource = source;
+  const fadingGain = gain;
 
-    const resetTime = guoFadeContext?.currentTime || 0;
-    try {
-      guoFadeGain.gain.cancelScheduledValues(resetTime);
-      guoFadeGain.gain.setValueAtTime(1, resetTime);
-    } catch {
-      guoFadeGain.gain.value = 1;
+  guoWebAudioStopTimer = window.setTimeout(() => {
+    guoWebAudioStopTimer = 0;
+
+    if (guoWebAudioSource === fadingSource) {
+      guoWebAudioSource = null;
+      guoWebAudioGain = null;
     }
-  }, GUO_FADE_OUT_MS + 40);
+
+    fadingSource.onended = null;
+    try { fadingSource.stop(); } catch {}
+    try { fadingSource.disconnect(); } catch {}
+    try { fadingGain.disconnect(); } catch {}
+  }, GUO_FADE_OUT_MS + 60);
+
+  return true;
 }
+
+// 页面打开后先后台读取/解码；AudioContext 即使仍 suspended 也不影响准备 buffer。
+decodeGuoWebAudio().catch(() => undefined);
 
 an5Button?.addEventListener("pointerdown", (event) => {
   if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -301,9 +378,8 @@ an5Button?.addEventListener("pointerdown", (event) => {
   an5PressStart = { x: event.clientX, y: event.clientY };
   an5LongPressTriggered = false;
 
-  // 必须在真实手势里创建/恢复 AudioContext。这样普通短按开始播放 guo 时，
-  // 声音已经经过 GainNode；稍后 1 秒定时器才有资格平滑控制音量。
-  resumeGuoFadeGraphFromGesture().catch(() => undefined);
+  // iPhone/PWA 要在真实手势里恢复 AudioContext。
+  prepareGuoWebAudioFromGesture().catch(() => undefined);
 
   an5Button?.setPointerCapture?.(event.pointerId);
 
@@ -312,7 +388,7 @@ an5Button?.addEventListener("pointerdown", (event) => {
 
     an5LongPressTriggered = true;
     suppressNextGuoClick = true;
-    fadeOutAndStopGuo();
+    fadeOutAndStopGuoWebAudio();
   }, AN5_LONG_PRESS_MS);
 });
 
@@ -351,15 +427,18 @@ an5Button?.addEventListener("contextmenu", (event) => {
   event.preventDefault();
 });
 
-// capture 阶段先处理长按抑制；普通短按则在原 script.js click 播放前恢复 GainNode。
+// AN5 由这里完全接管，必须在 capture 阶段阻止 script.js 原来的 HTMLAudio guo click。
 an5Button?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
   if (suppressNextGuoClick) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
     suppressNextGuoClick = false;
     an5LongPressTriggered = false;
     return;
   }
 
-  cancelGuoFadeAndRestoreGain();
+  playGuoWebAudio().catch((error) => {
+    console.warn("guo 短按播放失败：", error);
+  });
 }, true);
