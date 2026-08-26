@@ -102,7 +102,6 @@ an2Button?.addEventListener("pointerdown", (event) => {
   jianji2PressStart = { x: event.clientX, y: event.clientY };
   jianji2LongPressTriggered = false;
 
-  // 和 OUJA 一样，在真实用户手势里先静音解锁，保证 1 秒定时器结束后 iPhone/PWA 能稳定播放。
   if (typeof primeAudio === "function") {
     primeAudio(jianji2Audio, () => false).catch(() => undefined);
   }
@@ -164,7 +163,6 @@ an2Button?.addEventListener("contextmenu", (event) => {
   event.preventDefault();
 });
 
-// 必须使用 capture，在原 script.js 的 click 监听器之前拦截长按产生的 click。
 an2Button?.addEventListener("click", (event) => {
   if (!suppressNextJianjiClick) return;
 
@@ -176,56 +174,123 @@ an2Button?.addEventListener("click", (event) => {
 
 /*
  * AN5：短按仍由原 script.js 播放 guo。
- * 长按满 1 秒时不生硬切断，而是把当前 guo 音效在 0.9 秒内渐隐到 0，再暂停并复位。
- * 长按后的松手 click 会被拦截，不会误触发一次新的 guo。
+ * 长按满 1 秒后通过 Web Audio GainNode 做真正的音量包络淡出。
+ *
+ * 不能继续使用 HTMLAudioElement.volume 做淡出：iPhone Safari/PWA 对媒体元素的
+ * 程序化 volume 调节并不可靠，会出现“前面音量没变，最后 pause 时突然硬切”的现象。
+ * 因此这里把 guoAudio 接入 MediaElementSource -> GainNode -> destination，
+ * 用 AudioParam 的指数斜坡在 1.2 秒内把增益平滑降到接近 0，之后才 pause + 复位。
  */
 const an5Button = document.querySelector(".side-control-button");
 const AN5_LONG_PRESS_MS = 1000;
 const AN5_MOVE_CANCEL_PX = 12;
-const GUO_FADE_OUT_MS = 900;
+const GUO_FADE_OUT_MS = 1200;
+const GUO_FADE_MIN_GAIN = 0.001;
 let an5LongPressTimer = 0;
 let an5PressPointerId = null;
 let an5PressStart = null;
 let an5LongPressTriggered = false;
 let suppressNextGuoClick = false;
-let guoFadeGeneration = 0;
+let guoFadeStopTimer = 0;
+let guoFadeContext = null;
+let guoFadeSource = null;
+let guoFadeGain = null;
 
 function clearAn5LongPressTimer() {
   clearTimeout(an5LongPressTimer);
   an5LongPressTimer = 0;
 }
 
-function cancelGuoFadeAndRestoreVolume() {
-  guoFadeGeneration += 1;
-  if (typeof guoAudio !== "undefined") guoAudio.volume = 1;
+function ensureGuoFadeGraph() {
+  if (typeof guoAudio === "undefined") return null;
+  if (guoFadeContext && guoFadeGain) return guoFadeContext;
+
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextCtor) return null;
+
+  try {
+    guoFadeContext = new AudioContextCtor();
+    guoFadeSource = guoFadeContext.createMediaElementSource(guoAudio);
+    guoFadeGain = guoFadeContext.createGain();
+    guoFadeGain.gain.value = 1;
+    guoFadeSource.connect(guoFadeGain);
+    guoFadeGain.connect(guoFadeContext.destination);
+    return guoFadeContext;
+  } catch (error) {
+    console.warn("guo Web Audio 淡出通道创建失败：", error);
+    guoFadeContext = null;
+    guoFadeSource = null;
+    guoFadeGain = null;
+    return null;
+  }
+}
+
+async function resumeGuoFadeGraphFromGesture() {
+  const context = ensureGuoFadeGraph();
+  if (!context) return false;
+  try {
+    if (context.state === "suspended") await context.resume();
+    return context.state === "running";
+  } catch (error) {
+    console.warn("guo 淡出 AudioContext resume 失败：", error);
+    return false;
+  }
+}
+
+function cancelGuoFadeAndRestoreGain() {
+  clearTimeout(guoFadeStopTimer);
+  guoFadeStopTimer = 0;
+
+  if (!guoFadeGain || !guoFadeContext) return;
+  const now = guoFadeContext.currentTime;
+  try {
+    guoFadeGain.gain.cancelScheduledValues(now);
+    guoFadeGain.gain.setValueAtTime(1, now);
+  } catch {
+    guoFadeGain.gain.value = 1;
+  }
 }
 
 function fadeOutAndStopGuo() {
-  if (typeof guoAudio === "undefined") return;
+  if (typeof guoAudio === "undefined" || guoAudio.paused) return;
 
-  const generation = ++guoFadeGeneration;
-  const startVolume = Number.isFinite(guoAudio.volume) ? guoAudio.volume : 1;
-  const startTime = performance.now();
+  const context = ensureGuoFadeGraph();
+  if (!context || !guoFadeGain || context.state !== "running") {
+    // 理论上 pointerdown 已经解锁 Web Audio。若环境不支持，宁可暂时保留播放，
+    // 也不再用 HTMLMediaElement.pause() 制造生硬切断。
+    console.warn("guo 淡出通道未就绪，本次不执行硬停止");
+    return;
+  }
 
-  const step = (now) => {
-    if (generation !== guoFadeGeneration) return;
+  clearTimeout(guoFadeStopTimer);
+  const now = context.currentTime;
+  const endTime = now + GUO_FADE_OUT_MS / 1000;
+  const currentGain = Math.max(GUO_FADE_MIN_GAIN, guoFadeGain.gain.value || 1);
 
-    const progress = Math.min(1, (now - startTime) / GUO_FADE_OUT_MS);
-    guoAudio.volume = Math.max(0, startVolume * (1 - progress));
+  try {
+    guoFadeGain.gain.cancelScheduledValues(now);
+    guoFadeGain.gain.setValueAtTime(currentGain, now);
+    guoFadeGain.gain.exponentialRampToValueAtTime(GUO_FADE_MIN_GAIN, endTime);
+  } catch (error) {
+    console.warn("guo GainNode 淡出调度失败：", error);
+    return;
+  }
 
-    if (progress < 1 && !guoAudio.paused) {
-      requestAnimationFrame(step);
-      return;
-    }
-
+  guoFadeStopTimer = window.setTimeout(() => {
+    guoFadeStopTimer = 0;
     guoAudio.pause();
     try {
       guoAudio.currentTime = 0;
     } catch {}
-    guoAudio.volume = 1;
-  };
 
-  requestAnimationFrame(step);
+    const resetTime = guoFadeContext?.currentTime || 0;
+    try {
+      guoFadeGain.gain.cancelScheduledValues(resetTime);
+      guoFadeGain.gain.setValueAtTime(1, resetTime);
+    } catch {
+      guoFadeGain.gain.value = 1;
+    }
+  }, GUO_FADE_OUT_MS + 40);
 }
 
 an5Button?.addEventListener("pointerdown", (event) => {
@@ -235,6 +300,10 @@ an5Button?.addEventListener("pointerdown", (event) => {
   an5PressPointerId = event.pointerId;
   an5PressStart = { x: event.clientX, y: event.clientY };
   an5LongPressTriggered = false;
+
+  // 必须在真实手势里创建/恢复 AudioContext。这样普通短按开始播放 guo 时，
+  // 声音已经经过 GainNode；稍后 1 秒定时器才有资格平滑控制音量。
+  resumeGuoFadeGraphFromGesture().catch(() => undefined);
 
   an5Button?.setPointerCapture?.(event.pointerId);
 
@@ -282,7 +351,7 @@ an5Button?.addEventListener("contextmenu", (event) => {
   event.preventDefault();
 });
 
-// capture 阶段先处理长按抑制；普通短按则先恢复音量，再交给原 script.js 播放 guo。
+// capture 阶段先处理长按抑制；普通短按则在原 script.js click 播放前恢复 GainNode。
 an5Button?.addEventListener("click", (event) => {
   if (suppressNextGuoClick) {
     event.preventDefault();
@@ -292,5 +361,5 @@ an5Button?.addEventListener("click", (event) => {
     return;
   }
 
-  cancelGuoFadeAndRestoreVolume();
+  cancelGuoFadeAndRestoreGain();
 }, true);
