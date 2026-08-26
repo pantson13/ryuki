@@ -69,3 +69,107 @@ window.RYUKI_SCALE_CONFIG = RYUKI_SCALE_CONFIG;
 window.applyRyukiScaleConfig = applyRyukiScaleConfig;
 
 applyRyukiScaleConfig();
+
+/*
+ * AN2：复用 OUJA 的短按 / 长按判定。
+ * - 短按：继续交给原 script.js 的 click 逻辑播放 jianji。
+ * - 长按满 1 秒：播放 jianji2，并拦截松手后的 click，避免同时播放 jianji。
+ * - 移动超过 12px 取消长按，避免拖动手势误触。
+ */
+const an2Button = document.getElementById("centerActionButton2");
+const jianji2Audio = new Audio("./assets/audio/jianji2.mp3");
+jianji2Audio.preload = "auto";
+jianji2Audio.load();
+
+const JIANJI2_LONG_PRESS_MS = 1000;
+const JIANJI2_MOVE_CANCEL_PX = 12;
+let jianji2LongPressTimer = 0;
+let jianji2PressPointerId = null;
+let jianji2PressStart = null;
+let jianji2LongPressTriggered = false;
+let suppressNextJianjiClick = false;
+
+function clearJianji2LongPressTimer() {
+  clearTimeout(jianji2LongPressTimer);
+  jianji2LongPressTimer = 0;
+}
+
+an2Button?.addEventListener("pointerdown", (event) => {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+
+  clearJianji2LongPressTimer();
+  jianji2PressPointerId = event.pointerId;
+  jianji2PressStart = { x: event.clientX, y: event.clientY };
+  jianji2LongPressTriggered = false;
+
+  // 和 OUJA 一样，在真实用户手势里先静音解锁，保证 1 秒定时器结束后 iPhone/PWA 能稳定播放。
+  if (typeof primeAudio === "function") {
+    primeAudio(jianji2Audio, () => false).catch(() => undefined);
+  }
+
+  an2Button?.setPointerCapture?.(event.pointerId);
+
+  jianji2LongPressTimer = window.setTimeout(() => {
+    if (jianji2PressPointerId !== event.pointerId) return;
+
+    jianji2LongPressTriggered = true;
+    suppressNextJianjiClick = true;
+    jianji2Audio.muted = false;
+
+    if (typeof playAudio === "function") {
+      playAudio(jianji2Audio).catch((error) => {
+        console.warn("jianji2 长按音效播放失败：", error);
+      });
+    } else {
+      jianji2Audio.currentTime = 0;
+      jianji2Audio.play().catch((error) => {
+        console.warn("jianji2 长按音效播放失败：", error);
+      });
+    }
+  }, JIANJI2_LONG_PRESS_MS);
+});
+
+an2Button?.addEventListener("pointermove", (event) => {
+  if (
+    event.pointerId !== jianji2PressPointerId ||
+    !jianji2PressStart ||
+    jianji2LongPressTriggered
+  ) return;
+
+  const dx = event.clientX - jianji2PressStart.x;
+  const dy = event.clientY - jianji2PressStart.y;
+  if (Math.hypot(dx, dy) > JIANJI2_MOVE_CANCEL_PX) {
+    clearJianji2LongPressTimer();
+  }
+});
+
+an2Button?.addEventListener("pointerup", (event) => {
+  if (event.pointerId !== jianji2PressPointerId) return;
+
+  clearJianji2LongPressTimer();
+  jianji2PressPointerId = null;
+  jianji2PressStart = null;
+});
+
+an2Button?.addEventListener("pointercancel", (event) => {
+  if (event.pointerId !== jianji2PressPointerId) return;
+
+  clearJianji2LongPressTimer();
+  jianji2PressPointerId = null;
+  jianji2PressStart = null;
+  jianji2LongPressTriggered = false;
+});
+
+an2Button?.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+});
+
+// 必须使用 capture，在原 script.js 的 click 监听器之前拦截长按产生的 click。
+an2Button?.addEventListener("click", (event) => {
+  if (!suppressNextJianjiClick) return;
+
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  suppressNextJianjiClick = false;
+  jianji2LongPressTriggered = false;
+}, true);
